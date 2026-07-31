@@ -55,11 +55,16 @@ const saveRole = async (req, res) => {
       return apiResponse(res, 400, 'Role name is required');
     }
 
+    let cleanPermissions = sanitizePermissions(permissions);
+    const isSuperAdmin = req.user?.committee_role === 'President' || req.user?.role === 'superadmin';
+    if (!isSuperAdmin) {
+      cleanPermissions = cleanPermissions.filter(p => !p.startsWith('committee.') && !p.startsWith('roles.'));
+    }
+
     const payload = {
       name: String(name).trim(),
-      permissions: sanitizePermissions(permissions),
-      status: status === undefined ? 1 : Number(status),
-    
+      permissions: cleanPermissions,
+      status: status !== undefined ? Number(status) : 1
     };
 
     let role;

@@ -17,6 +17,20 @@ const committeeMemberSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    sparse: true
+  },
+  password: {
+    type: String,
+    select: false
+  },
+  role_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Role'
+  },
   image: {
     type: String
   },

@@ -53,6 +53,15 @@ router.get('/', protect, userController.getUsers);
 
 router.get('/family/:family_head_id', protect, userController.getFamilyMembers);
 
+router.get('/family-by-number/:number', protect, userController.getFamilyMembersByNumber);
+
+router.put('/bulk-update', protect, (req, res, next) => {
+    if (isAdminCall(req)) {
+        return requirePermission('members.edit')(req, res, () => userController.bulkUpdateUsers(req, res, next));
+    }
+    return userController.bulkUpdateUsers(req, res, next);
+});
+
 router.get('/:id', protect, (req, res, next) => {
     return userController.getUserById(req, res, next);
 });

@@ -37,20 +37,27 @@ const getTokenFromRequest = (req) => {
   return isInvalidTokenValue(token) ? null : token;
 };
 
+const CommitteeMember = require('../models/committeeMemberModel');
+
 const findUserFromToken = async (decoded) => {
   const userId = decoded.id || decoded._id || decoded.userId;
 
   if (userId && mongoose.isValidObjectId(userId)) {
     const user = await User.findById(userId).select('-password').populate('role_id');
-
     if (user) {
       return user;
+    }
+
+    const committeeMember = await CommitteeMember.findById(userId).select('-password').populate('role_id');
+    if (committeeMember) {
+      const cmObj = committeeMember.toObject ? committeeMember.toObject() : { ...committeeMember };
+      cmObj.is_committee = true;
+      return cmObj;
     }
   }
 
   if (userId) {
     const user = await User.findOne({ member_id: String(userId) }).select('-password').populate('role_id');
-
     if (user) {
       return user;
     }
@@ -58,14 +65,20 @@ const findUserFromToken = async (decoded) => {
 
   if (decoded.member_id) {
     const user = await User.findOne({ member_id: String(decoded.member_id) }).select('-password').populate('role_id');
-
     if (user) {
       return user;
     }
   }
 
   if (decoded.number) {
-    return User.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
+    const user = await User.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
+    if (user) return user;
+    const committeeMember = await CommitteeMember.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
+    if (committeeMember) {
+      const cmObj = committeeMember.toObject ? committeeMember.toObject() : { ...committeeMember };
+      cmObj.is_committee = true;
+      return cmObj;
+    }
   }
 
   return null;
@@ -130,14 +143,14 @@ const protect = async (req, res, next) => {
 };
 
 const getRolePermissions = (user = {}) => {
-  if (user.committee_role === 'President' || user.role_id) {
+  if (user.committee_role === 'President') {
     return ALL_PERMISSION_KEYS;
   }
 
   const assignedRole = user.role_id;
 
-  if (assignedRole && Number(assignedRole.status ?? 1) === 1) {
-    return assignedRole.permissions || [];
+  if (assignedRole && typeof assignedRole === 'object' && Number(assignedRole.status ?? 1) === 1) {
+    return Array.isArray(assignedRole.permissions) ? assignedRole.permissions : [];
   }
 
   return [];

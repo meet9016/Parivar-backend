@@ -152,9 +152,10 @@ const createAdmin = async (req, res) => {
   }
 };
 
-// Admin login (email + password, checks is_committee)
-//tested
+const CommitteeMember = require('../models/committeeMemberModel');
+const bcrypt = require('bcryptjs');
 
+// Admin login (email + password, checks is_committee & CommitteeMember)
 const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -163,46 +164,81 @@ const loginAdmin = async (req, res) => {
       return apiResponse(res, 400, 'Email and password are required');
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).populate('role_id');
-    if (!user) {
-      return apiResponse(res, 401, 'Invalid email or password');
+    const emailQuery = email.trim().toLowerCase();
+
+    // 1. Check CommitteeMember collection first for Committee Member Login
+    const committeeMember = await CommitteeMember.findOne({ email: emailQuery }).select('+password').populate('role_id');
+
+    if (committeeMember && committeeMember.password) {
+      const isMatch = await bcrypt.compare(password, committeeMember.password);
+      if (isMatch) {
+        const permissions = getRolePermissions(committeeMember);
+
+        const token = jwt.sign(
+          { id: committeeMember._id },
+          JWT_SECRET,
+          { expiresIn: '1d' }
+        );
+
+        const userData = {
+          id: String(committeeMember._id),
+          name: `${committeeMember.first_name} ${committeeMember.last_name || ''}`.trim(),
+          email: committeeMember.email,
+          role: 'admin',
+          is_committee: true,
+          committee_role: committeeMember.designation || 'Committee Member',
+          role_id: committeeMember.role_id?._id ? String(committeeMember.role_id._id) : (committeeMember.role_id || ''),
+          role_name: committeeMember.role_id?.name || '',
+          permissions,
+          is_super_admin: false
+        };
+
+        return apiResponse(res, 200, 'Login successful', {
+          token,
+          user: userData
+        });
+      }
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return apiResponse(res, 401, 'Invalid email or password');
+    // 2. Fallback to User collection for legacy/main Admin login
+    const user = await User.findOne({ email: emailQuery }).populate('role_id');
+
+    if (user) {
+      const isMatch = await user.comparePassword(password);
+      if (isMatch) {
+        const permissions = getRolePermissions(user);
+
+        if (!user.is_committee && user.committee_role !== 'Self' && permissions.length === 0) {
+          return apiResponse(res, 403, 'Access denied: Insufficient permissions');
+        }
+
+        const token = jwt.sign(
+          { id: user._id },
+          JWT_SECRET,
+          { expiresIn: '1d' }
+        );
+
+        const userData = {
+          id: user.id || String(user._id),
+          name: fullName(user),
+          email: user.email,
+          role: user.is_committee ? 'admin' : 'user',
+          is_committee: user.is_committee,
+          committee_role: user.committee_role,
+          role_id: user.role_id?._id ? String(user.role_id._id) : '',
+          role_name: user.role_id?.name || '',
+          permissions,
+          is_super_admin: user.is_committee || user.relation === 'Self'
+        };
+
+        return apiResponse(res, 200, 'Login successful', {
+          token,
+          user: userData
+        });
+      }
     }
 
-    const permissions = getRolePermissions(user);
-
-    // Restrict access to committee members, legacy self admins, or users with an assigned role.
-    if (!user.is_committee && user.committee_role !== 'Self' && permissions.length === 0) {
-      return apiResponse(res, 403, 'Access denied: Insufficient permissions');
-    }
-
-    const token = jwt.sign(
-      { id: user._id },
-      JWT_SECRET,
-      { expiresIn: '1d' }
-    );
-
-    const userData = {
-      id: user.id || String(user._id),
-      name: fullName(user),
-      email: user.email,
-      role: user.is_committee ? 'admin' : 'user',
-      is_committee: user.is_committee,
-      committee_role: user.committee_role,
-      role_id: user.role_id?._id ? String(user.role_id._id) : '',
-      role_name: user.role_id?.name || '',
-      permissions,
-      is_super_admin: user.is_committee || user.relation === 'Self'
-    };
-
-    return apiResponse(res, 200, 'Login successful', {
-      token,
-      user: userData
-    });
+    return apiResponse(res, 401, 'Invalid email or password');
   } catch (error) {
     return apiResponse(res, 500, 'Error in login', { error: error.message });
   }

@@ -322,6 +322,51 @@ const getFamilyMembers = async (req, res) => {
   return getUsers(req, res);
 };
 
+const getFamilyMembersByNumber = async (req, res) => {
+  try {
+    const { number } = req.params;
+    if (!number) return apiResponse(res, 400, 'Number is required');
+
+    const head = await User.findOne({ number, relation: 'Self' });
+    let users = [];
+
+    if (head) {
+      users = await User.find({
+        $or: [
+          { 'family_head.id': head._id },
+          { 'family_head.id': String(head._id) },
+          { _id: head._id }
+        ]
+      }).populate('role_id');
+    } else {
+      users = await User.find({ number }).populate('role_id');
+    }
+    
+    const formatted = users.map(u => ({
+      id: u.id || String(u._id),
+      _id: u._id,
+      first_name: u.first_name,
+      middle_name: u.middle_name || '',
+      last_name: u.last_name || '',
+      name: fullName(u),
+      email: u.email || '',
+      number: u.number,
+      gender: u.gender || '',
+      dob: u.dob || null,
+      relation: u.relation || 'Self',
+      is_committee: u.is_committee || false,
+      role_name: u.role_id?.name || '',
+      status: Number(u.status ?? 1),
+      familyHead: u.familyHead || false,
+      image: publicUrl(req, u.image || u.profile_image || '')
+    }));
+
+    return apiResponse(res, 200, 'Family members retrieved successfully', formatted);
+  } catch (error) {
+    return apiResponse(res, 500, 'Error retrieving family members', { error: error.message });
+  }
+};
+
 
 // Get single user by id
 const getUserById = async (req, res) => {
@@ -504,6 +549,24 @@ const deleteUser = async (req, res) => {
   }
 };
 
+const bulkUpdateUsers = async (req, res) => {
+  try {
+    const { userIds, status } = req.body;
+    if (!userIds || !Array.isArray(userIds)) {
+      return apiResponse(res, 400, 'userIds array is required');
+    }
+    
+    await User.updateMany(
+      { _id: { $in: userIds } },
+      { $set: { status: Number(status) } }
+    );
+    
+    return apiResponse(res, 200, 'Users updated successfully');
+  } catch (error) {
+    return apiResponse(res, 500, 'Error updating users', { error: error.message });
+  }
+};
+
 module.exports = {
   register,
   // login,
@@ -512,5 +575,7 @@ module.exports = {
   getUserById,
   updateUser,
   deleteUser,
-  getFamilyMembers
+  getFamilyMembers,
+  getFamilyMembersByNumber,
+  bulkUpdateUsers
 };

@@ -19,7 +19,7 @@ const isAdminCall = (req) => {
 
 router.get('/', protect, (req, res, next) => {
     if (isAdminCall(req)) {
-        return requirePermission('posts.list')(req, res, () => getPosts(req, res, next));
+        return requirePermission(['posts.list', 'posts.view', 'posts.manage', 'dashboard.view'])(req, res, () => getPosts(req, res, next));
     }
     return getPosts(req, res, next);
 });
