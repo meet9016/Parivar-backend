@@ -49,7 +49,12 @@ router.post('/fcm-token', protect, async (req, res) => {
     }
 });
 
-router.get('/', protect, userController.getUsers);
+router.get('/', (req, res, next) => {
+    if (req.query.familyHead === 'true') {
+        return next();
+    }
+    return protect(req, res, next);
+}, userController.getUsers);
 
 router.get('/family/:family_head_id', protect, userController.getFamilyMembers);
 
