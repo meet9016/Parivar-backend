@@ -109,8 +109,13 @@ const register = async (req, res) => {
       family_head: familyData.family_head,
       familyHead: familyHead === true || familyHead === 'true',
       status: familyData.status,
-
     });
+
+    const Role = require('../models/roleModel');
+    const defaultRole = await Role.findOne({ name: 'UserRole' });
+    if (defaultRole) {
+      newUser.role_id = defaultRole._id;
+    }
 
     await newUser.save();
 
