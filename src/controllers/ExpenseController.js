@@ -79,10 +79,10 @@ const adminSaveExpense = async (req, res) => {
       image
     } = requestData(req);
 
-    if (!existing && (!date || amount === undefined || amount === null || String(amount).trim() === '')) {
+    if (!existing && (!date || amount === undefined || amount === null || String(amount).trim() === '' || (!req.file && !image))) {
       return res.status(400).json({
         status: 400,
-        message: 'Date and Amount fields are mandatory',
+        message: 'Date, Amount, and Proof / Receipt are required',
         data: []
       });
     }
@@ -118,6 +118,12 @@ const adminSaveExpense = async (req, res) => {
       }
     });
   } catch (error) {
+    try {
+      require('fs').writeFileSync(
+        require('path').join(__dirname, '../../backend_error.log'),
+        `Error: ${error.message}\nStack: ${error.stack}\nBody: ${JSON.stringify(req.body)}\n`
+      );
+    } catch (e) {}
     return res.status(500).json({
       status: 500,
       message: 'Error saving expense',

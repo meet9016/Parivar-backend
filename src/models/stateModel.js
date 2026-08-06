@@ -4,7 +4,8 @@ const stateSchema = new mongoose.Schema({
 
   country_id: {
     type: String,
-    required: true,
+    required: false,
+    default: '',
     index: true
   },
   name: {
