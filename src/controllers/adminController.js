@@ -49,7 +49,7 @@ const createAdmin = async (req, res) => {
       status,
       image,
       family_head_id,
-
+      familyHead
     } = req.body;
 
 
@@ -75,7 +75,8 @@ const createAdmin = async (req, res) => {
     const familyData = await familyUtil.prepareFamilyFields({
       relation,
       family_head_id: req.body.family_head_id,
-      status
+      status,
+      familyHead
     }, {});
 
     const assignedRoleId = role_id && mongoose.isValidObjectId(role_id) ? role_id : null;

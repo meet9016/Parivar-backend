@@ -78,9 +78,13 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
     status: existing.status !== undefined ? Number(existing.status) : undefined
   };
 
-  if (isSelf) {
+  const isHead = payload.familyHead !== undefined 
+    ? (payload.familyHead === true || payload.familyHead === 'true') 
+    : (existing.familyHead === true || isSelf);
+
+  if (isHead) {
     if (payload.family_head_id) {
-      throw new Error('Self relation cannot have a family head reference');
+      throw new Error('Family head cannot have a family head reference');
     }
 
     result.family_head = null;

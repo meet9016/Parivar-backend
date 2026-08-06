@@ -75,7 +75,8 @@ const register = async (req, res) => {
     const familyData = await prepareFamilyFields({
       relation,
       family_head_id: req.body.family_head_id,
-      status: req.body.status
+      status: req.body.status,
+      familyHead
     });
 
     const users = await User.find({ member_id: /^\d+$/ }).select('member_id');
@@ -469,7 +470,8 @@ const updateUser = async (req, res) => {
     const familyData = await familyUtil.prepareFamilyFields({
       relation,
       family_head_id: req.body.family_head_id,
-      status
+      status,
+      familyHead
     }, user);
 
     if ((is_committee === true || is_committee === 'true' || user.is_committee) && req.file?.size > 1024 * 1024) {
