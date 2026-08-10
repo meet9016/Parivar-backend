@@ -88,6 +88,9 @@ const adminSaveExpense = async (req, res) => {
     }
 
     const expense = existing || new Expense({});
+    if (!expense._id) {
+      expense._id = new mongoose.Types.ObjectId();
+    }
 
     const updateFields = {};
     if (date !== undefined) updateFields.date = date;
@@ -98,9 +101,21 @@ const adminSaveExpense = async (req, res) => {
     if (amount !== undefined) updateFields.amount = Number(amount);
     if (description !== undefined) updateFields.description = description;
     if (image !== undefined) updateFields.image = image;
+    updateFields.id = String(expense._id);
 
     expense.set(updateFields);
-    await expense.save();
+    try {
+      await expense.save();
+    } catch (saveError) {
+      if (saveError.code === 11000) {
+        try {
+          await Expense.collection.dropIndex('id_1');
+        } catch (dropErr) {}
+        await expense.save();
+      } else {
+        throw saveError;
+      }
+    }
 
     return res.status(existing ? 200 : 201).json({
       status: existing ? 200 : 201,

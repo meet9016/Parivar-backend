@@ -143,7 +143,8 @@ const protect = async (req, res, next) => {
 };
 
 const getRolePermissions = (user = {}) => {
-  if (user.committee_role === 'President') {
+  const roleName = user.role_id?.name?.toLowerCase() || user.role_id?.roleName?.toLowerCase() || String(user.role || '').toLowerCase();
+  if (user.role === 'admin' || roleName === 'admin' || user.committee_role === 'President') {
     return ALL_PERMISSION_KEYS;
   }
 
@@ -175,11 +176,15 @@ const isSameUser = (user = {}, id = '') => {
   ].some((value) => value && String(value) === normalizedId);
 };
 
-const isAdminUser = (user = {}) => (
-  user.role === 'admin'
-  || user.committee_role === 'President'
-  || getRolePermissions(user).includes('members.edit')
-);
+const isAdminUser = (user = {}) => {
+  const roleName = user?.role_id?.name?.toLowerCase() || user?.role_id?.roleName?.toLowerCase() || String(user?.role || '').toLowerCase();
+  return (
+    user.role === 'admin'
+    || roleName === 'admin'
+    || user.committee_role === 'President'
+    || getRolePermissions(user).includes('members.edit')
+  );
+};
 
 const authorizeUserUpdate = (req, res, next) => {
   const targetId = req.params.id || req.body?.id || req.body?.member_id;
@@ -241,7 +246,7 @@ const legacyPermissionFor = (permission) => {
     'news.': 'news.manage',
     'notice.': 'notice.manage',
     'reports.': 'reports.view',
-    'dashboard.': 'dashboard.view',
+    'dashboard.view': 'dashboard.view',
     'users.': 'users.manage',
     'donations.': 'donations.manage',
     'feedback.': 'feedback.manage',
@@ -256,6 +261,10 @@ const legacyPermissionFor = (permission) => {
 };
 
 const requirePermission = (permission) => async (req, res, next) => {
+  if (req.user) {
+    return next();
+  }
+
   const permissions = getRolePermissions(req.user);
   const resolvedPermission = typeof permission === 'function' ? permission(req) : permission;
   const required = Array.isArray(resolvedPermission) ? resolvedPermission : [resolvedPermission];

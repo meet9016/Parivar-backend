@@ -175,13 +175,16 @@ const masterConfig = {
   'expense-category': { Model: Master, type: 'expense-category' }
 };
 
-const formatMaster = (type, item, config) => {
+const formatMaster = (type, item, config, parentMap = {}) => {
   const name = config.nameKeys?.map((key) => item[key]).find(Boolean) || item.name || '';
+  const parentVal = String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '');
+  const parentName = parentMap[parentVal] || (typeof parentVal === 'object' ? parentVal.name : '') || '';
   return {
     id: String(item._id),
     type,
     name,
-    parent_id: config.parentKey ? item[config.parentKey] || '' : item.parent_id || '',
+    parent_id: parentVal,
+    parent_name: parentName,
     status: Number(item.status ?? 1),
     image: item.image || ''
   };
@@ -200,7 +203,36 @@ const getMasters = async (req, res) => {
       searchFields: [...(config.nameKeys || ['name']), 'name'],
       filterFields: ['status']
     });
-    return apiResponse(res, 200, 'Master data retrieved successfully', data.map((row) => formatMaster(type, row, config)), pagination);
+
+    const rawParentIds = data.map((item) => String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '')).filter(Boolean);
+    const parentIds = Array.from(new Set(rawParentIds));
+    const parentMap = {};
+    if (parentIds.length > 0) {
+      const validObjIds = parentIds.filter(id => mongoose.isValidObjectId(id));
+      const queryCond = {
+        $or: [
+          ...(validObjIds.length > 0 ? [{ _id: { $in: validObjIds } }] : []),
+          { id: { $in: parentIds } }
+        ]
+      };
+      
+      const [masterDocs, countryDocs, stateDocs, cityDocs] = await Promise.all([
+        Master.find(queryCond).lean(),
+        Country.find(queryCond).lean(),
+        State.find(queryCond).lean(),
+        City.find(queryCond).lean()
+      ]);
+
+      [...masterDocs, ...countryDocs, ...stateDocs, ...cityDocs].forEach((p) => {
+        const pName = p.name || p.country || p.state || p.city || p.district || p.taluka || p.village || '';
+        if (pName) {
+          if (p._id) parentMap[String(p._id)] = pName;
+          if (p.id) parentMap[String(p.id)] = pName;
+        }
+      });
+    }
+
+    return apiResponse(res, 200, 'Master data retrieved successfully', data.map((row) => formatMaster(type, row, config, parentMap)), pagination);
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving master data', { error: error.message });
   }

@@ -19,6 +19,13 @@ async function test() {
       image: 'test.jpg'
     });
 
+    try {
+      await Expense.collection.dropIndex('id_1');
+      console.log('Successfully dropped id_1 index from expenses collection!');
+    } catch (e) {
+      console.log('Index drop result:', e.message);
+    }
+
     const saved = await expense.save();
     console.log('Save SUCCESS! Saved document:', saved);
   } catch (error) {

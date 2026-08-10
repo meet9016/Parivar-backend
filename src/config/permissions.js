@@ -29,6 +29,7 @@ const PERMISSION_MODULES = [
   { key: 'banners', label: 'Banner' },
   { key: 'donations', label: 'Donations' },
   { key: 'bank-details', label: 'Bank Details', masterType: 'bank-details' },
+  { key: 'expense-category', label: 'Expense Category', masterType: 'expense-category' },
   { key: 'expenses', label: 'Expenses' }
 ];
 
