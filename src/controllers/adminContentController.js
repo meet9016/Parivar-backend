@@ -97,7 +97,7 @@ const saveContent = (Model, payloadBuilder, formatter, label, prefix) => async (
         const galleryDocPayload = { ...payload, image };
         delete galleryDocPayload.images;
         doc.set(galleryDocPayload);
-        doc.status = req.body.status !== undefined ? Number(req.body.status) : 1;
+        doc.set('status', req.body.status !== undefined ? Number(req.body.status) : 1);
         await doc.save();
         return formatter(req, doc.toObject());
       }));
@@ -108,9 +108,9 @@ const saveContent = (Model, payloadBuilder, formatter, label, prefix) => async (
     delete payload.images;
     doc.set(payload);
     if (!existing) {
-      doc.status = req.body.status !== undefined ? Number(req.body.status) : 1;
+      doc.set('status', req.body.status !== undefined ? Number(req.body.status) : 1);
     } else if (req.body.status !== undefined) {
-      doc.status = Number(req.body.status);
+      doc.set('status', Number(req.body.status));
     }
     await doc.save();
     return apiResponse(res, existing ? 200 : 201, `${label} saved successfully`, formatter(req, doc.toObject()));
@@ -149,9 +149,9 @@ const saveInquiry = async (req, res) => {
     if (!existing) doc.id = await nextPublicId(ContactInquiry, 'INQ');
     doc.set(req.body);
     if (!existing) {
-      doc.status = req.body.status !== undefined ? Number(req.body.status) : 1;
+      doc.set('status', req.body.status !== undefined ? Number(req.body.status) : 1);
     } else if (req.body.status !== undefined) {
-      doc.status = Number(req.body.status);
+      doc.set('status', Number(req.body.status));
     }
     await doc.save();
     return apiResponse(res, existing ? 200 : 201, 'Contact inquiry saved successfully', formatInquiry(req, doc.toObject()));
@@ -276,9 +276,9 @@ const saveMaster = async (req, res) => {
       doc.image = req.body.remove_image ? '' : image;
     }
     if (!existing) {
-      doc.status = req.body.status !== undefined ? Number(req.body.status) : 1;
+      doc.set('status', req.body.status !== undefined ? Number(req.body.status) : 1);
     } else if (req.body.status !== undefined) {
-      doc.status = Number(req.body.status);
+      doc.set('status', Number(req.body.status));
     }
     await doc.save();
     return apiResponse(res, existing ? 200 : 201, 'Master data saved successfully', formatMaster(type, doc.toObject(), config));
