@@ -12,9 +12,12 @@ const imageFromRequest = (req, fallback = '') => {
 
 const isObjectId = (id) => require('mongoose').isValidObjectId(id);
 
-const findNews = (req, id) => News.findOne(
-    isObjectId(id) ? { _id: id } : null
-);
+const findNews = (req, id) => News.findOne({
+    $or: [
+        { id: String(id) },
+        ...(isObjectId(id) ? [{ _id: id }] : [])
+    ]
+});
 
 const formatNews = (req, item = {}) => {
     const image = item.image || item.image_url || '';
@@ -49,6 +52,7 @@ const newsPayload = (req, existing = {}) => {
         reporter_name: req.body.reporter_name || existing.reporter_name || fullName(req.user) || req.user?.email || 'Admin',
         location: req.body.location || existing.location || 'Admin',
         category: req.body.category || existing.category || '',
+        status: req.body.status !== undefined ? Number(req.body.status) : (existing.status !== undefined ? Number(existing.status) : 1),
         image: imageFromRequest(req, existing.image || (typeof existing.image === 'string' ? existing.image : '')),
         cdate: existing.cdate || new Date().toISOString().slice(0, 10)
     };

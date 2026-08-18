@@ -21,6 +21,10 @@ const feedbackSchema = new mongoose.Schema({
     member_id: {
         type: String,
         required: true
+    },
+    status: {
+        type: Number,
+        default: 1
     }
 }, {
     timestamps: true

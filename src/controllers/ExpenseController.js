@@ -76,7 +76,8 @@ const adminSaveExpense = async (req, res) => {
       committee_member_name,
       amount,
       description,
-      image
+      image,
+      remove_image
     } = requestData(req);
 
     if (!existing && (!date || amount === undefined || amount === null || String(amount).trim() === '' || (!req.file && !image))) {
@@ -100,7 +101,12 @@ const adminSaveExpense = async (req, res) => {
     if (committee_member_name !== undefined) updateFields.committee_member_name = committee_member_name;
     if (amount !== undefined) updateFields.amount = Number(amount);
     if (description !== undefined) updateFields.description = description;
-    if (image !== undefined) updateFields.image = image;
+    
+    if (image !== undefined) {
+      updateFields.image = image;
+    } else if (remove_image === 'true' || remove_image === true) {
+      updateFields.image = '';
+    }
     updateFields.id = String(expense._id);
 
     expense.set(updateFields);

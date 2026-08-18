@@ -33,9 +33,11 @@ const getFestivals = async (req, res) => {
     });
     const data = festivals.map((festival) => ({
       id: festival.id || String(festival._id),
+      title: festival.title || festival.festival_name || '',
       festival_name: festival.festival_name || festival.title || '',
       festival_date: festival.festival_date || festival.date || '',
       description: festival.description ||  '',
+      status: Number(festival.status ?? 1),
       image: publicUrl(req, festival.image || '')
     }));
 

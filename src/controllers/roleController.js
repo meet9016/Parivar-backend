@@ -51,20 +51,26 @@ const saveRole = async (req, res) => {
     const { id } = req.params;
     const { name,  permissions, status } = req.body;
 
-    if (!name || !String(name).trim()) {
+    const existing = id && mongoose.isValidObjectId(id) ? await Role.findById(id) : null;
+    if (id && !existing) {
+      return apiResponse(res, 404, 'Role not found');
+    }
+
+    const roleName = name ? String(name).trim() : (existing ? existing.name : '');
+    if (!roleName) {
       return apiResponse(res, 400, 'Role name is required');
     }
 
-    let cleanPermissions = sanitizePermissions(permissions);
+    let cleanPermissions = permissions !== undefined ? sanitizePermissions(permissions) : (existing ? existing.permissions : []);
     const isSuperAdmin = req.user?.committee_role === 'President' || req.user?.role === 'superadmin';
     if (!isSuperAdmin) {
       cleanPermissions = cleanPermissions.filter(p => !p.startsWith('committee.') && !p.startsWith('roles.'));
     }
 
     const payload = {
-      name: String(name).trim(),
+      name: roleName,
       permissions: cleanPermissions,
-      status: status !== undefined ? Number(status) : 1
+      status: status !== undefined ? Number(status) : (existing ? existing.status : 1)
     };
 
     let role;

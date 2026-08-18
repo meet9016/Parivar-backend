@@ -90,10 +90,6 @@ const savePost = async (req, res) => {
     const { title, description } = req.body;
     const status = req.body.status;
 
-    if (!title || !description) {
-      return apiResponse(res, 400, 'Post title and description are required');
-    }
-
     const existing = id
       ? await Post.findOne({
         $or: [{ id: String(id) }, { _id: mongoose.isValidObjectId(id) ? id : undefined }]
@@ -101,6 +97,11 @@ const savePost = async (req, res) => {
       : null;
 
     if (id && !existing) return apiResponse(res, 404, 'Post not found or unauthorized');
+
+    // If it's a new post (not existing), title & description are strictly required
+    if (!existing && (!title || !description)) {
+      return apiResponse(res, 400, 'Post title and description are required');
+    }
 
     const isCommitteeOrAdmin = req.user && (req.user.is_committee || req.user.role === 'admin' || req.user.relation === 'Self');
 
@@ -114,9 +115,8 @@ const savePost = async (req, res) => {
       cdate: new Date().toISOString().slice(0, 10)
     });
 
-    post.title = title;
-    post.description = description;
-
+    if (title) post.title = title;
+    if (description) post.description = description;
 
     if (!existing) {
       post.created_by = createdBy(req);

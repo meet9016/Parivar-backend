@@ -255,10 +255,10 @@ const saveMaster = async (req, res) => {
   try {
     const type = req.params.type;
     const config = masterConfig[type];
-    if (!config) return apiResponse(res, 404, 'Master type not found');
-    const name = req.body.name || req.body[type] || req.body.business || req.body.country || req.body.state || req.body.city;
-    if (!name) return apiResponse(res, 400, 'Name is required');
     const existing = req.params.id ? await findById(config.Model, req.params.id) : null;
+    const name = req.body.name || req.body[type] || req.body.business || req.body.country || req.body.state || req.body.city || (existing ? (existing.name || existing.country || existing.state || existing.city || existing.category || existing.business || (config.nameKeys?.map(k => existing[k]).find(Boolean))) : '');
+    
+    if (!existing && !name) return apiResponse(res, 400, 'Name is required');
     const doc = existing || new config.Model();
     if (!existing && !config.skipCustomId) doc.id = await nextPublicId(config.Model, `${type.toUpperCase()}_`);
     if (config.type) {

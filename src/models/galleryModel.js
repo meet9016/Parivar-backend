@@ -19,7 +19,10 @@ const gallerySchema = new mongoose.Schema({
     default: '',
     trim: true
   },
-
+  status: {
+    type: Number,
+    default: 1
+  }
 }, {
   timestamps: true,
   strict: false

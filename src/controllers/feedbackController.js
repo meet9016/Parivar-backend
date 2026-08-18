@@ -15,6 +15,7 @@ const formatFeedback = (f) => ({
     name: f.name || '',
     email: f.email || '',
     message: f.message || '',
+    status: f.status !== undefined ? Number(f.status) : 1,
     createdAt: f.createdAt || '',
 });
 
@@ -27,7 +28,7 @@ const getAllFeedback = async (req, res) => {
         const { data: feedbacks, pagination } = await queryHelper(Feedback, req.query, {
             baseQuery: query,
             searchFields: ['name', 'email', 'message'],
-            filterFields: ['member_id']
+            filterFields: ['member_id', 'status']
         });
 
         return apiResponse(res, 200, 'Feedbacks retrieved successfully', feedbacks.map(formatFeedback), pagination);
@@ -56,7 +57,21 @@ const getFeedbackById = async (req, res) => {
 const addFeedback = async (req, res) => {
 
     try {
-        const { name, email, message } = req.body;
+        const { name, email, message, status } = req.body;
+
+        // If this is a direct update by id (e.g. status toggle)
+        if (req.params.id) {
+            const feedback = await findFeedbackByRequestId(req.params.id);
+            if (!feedback) return apiResponse(res, 404, 'Feedback not found');
+
+            if (status !== undefined) feedback.status = Number(status);
+            if (name) feedback.name = name;
+            if (email) feedback.email = email;
+            if (message) feedback.message = message;
+
+            await feedback.save();
+            return apiResponse(res, 200, 'Feedback updated successfully', formatFeedback(feedback));
+        }
 
         if (!name || !email || !message) {
             return apiResponse(res, 400, 'Name, email, and message are required');
@@ -68,7 +83,7 @@ const addFeedback = async (req, res) => {
         const existing = await Feedback.findOne({ member_id: String(currentMemberId) });
 
         if (existing) {
-            existing.set({ name, email, message });
+            existing.set({ name, email, message, status: status !== undefined ? Number(status) : existing.status });
             await existing.save();
             return apiResponse(res, 200, 'Feedback updated successfully', formatFeedback(existing));
         }
@@ -77,7 +92,7 @@ const addFeedback = async (req, res) => {
             id: `FBK${Date.now()}`,
             member_id: currentMemberId,
             name, email, message,
-
+            status: status !== undefined ? Number(status) : 1
         });
         return apiResponse(res, 201, 'Feedback submitted successfully', formatFeedback(doc));
     } catch (error) {

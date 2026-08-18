@@ -40,6 +40,10 @@ const newsSchema = new mongoose.Schema({
   location: {
     type: String,
     required: true
+  },
+  status: {
+    type: Number,
+    default: 1
   }
 }, {
   timestamps: true,

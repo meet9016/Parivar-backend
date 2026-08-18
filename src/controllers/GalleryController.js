@@ -50,7 +50,8 @@ const galleryPayload = (req, existing = {}) => {
     ...req.body,
     images,
     year: req.body.year || existing.year || '',
-    gallery_category_id: String(req.body.gallery_category_id || existing.gallery_category_id || '')
+    gallery_category_id: String(req.body.gallery_category_id || existing.gallery_category_id || ''),
+    status: req.body.status !== undefined ? Number(req.body.status) : (existing.status !== undefined ? Number(existing.status) : 1)
   };
 };
 
@@ -59,7 +60,8 @@ const formatGallery = (req, item) => ({
   images: Array.isArray(item.images) ? item.images.map(img => publicUrl(req, img)) : [],
   year: item.year || '',
   category: item.category || 'General',
-  gallery_category_id: String(item.gallery_category_id || '')
+  gallery_category_id: String(item.gallery_category_id || ''),
+  status: item.status !== undefined ? Number(item.status) : 1
 });
 
 const getGallery = async (req, res) => {
