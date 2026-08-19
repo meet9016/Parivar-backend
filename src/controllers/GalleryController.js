@@ -32,6 +32,20 @@ const storedImagePath = (value = '') => {
   return text;
 };
 
+const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const formatMonthName = (val) => {
+  if (!val) return '';
+  const text = String(val).trim();
+  const num = parseInt(text, 10);
+  if (!isNaN(num) && num >= 1 && num <= 12) {
+    return MONTH_NAMES[num];
+  }
+  const match = MONTH_NAMES.find(m => m && m.toLowerCase() === text.toLowerCase());
+  if (match) return match;
+  return text;
+};
+
 const galleryPayload = (req, existing = {}) => {
 
   const hasImageFields = Object.prototype.hasOwnProperty.call(req.body, 'existing_images')
@@ -46,30 +60,60 @@ const galleryPayload = (req, existing = {}) => {
     ? [...existingImages, ...uploadedImages]
     : normalizeArrayField(existing.images).map(storedImagePath);
 
+  let year = req.body.year !== undefined ? String(req.body.year) : (existing.year || '');
+  let month = req.body.month !== undefined ? String(req.body.month) : (existing.month || '');
+
+  if (year && year.includes('-') && !req.body.month) {
+    const parts = year.split('-');
+    if (parts.length === 2) {
+      year = parts[0];
+      month = parts[1];
+    }
+  }
+
+  month = formatMonthName(month);
+
   return {
     ...req.body,
     images,
-    year: req.body.year || existing.year || '',
+    year,
+    month,
     gallery_category_id: String(req.body.gallery_category_id || existing.gallery_category_id || ''),
     status: req.body.status !== undefined ? Number(req.body.status) : (existing.status !== undefined ? Number(existing.status) : 1)
   };
 };
 
-const formatGallery = (req, item) => ({
-  id: item.id || String(item._id),
-  images: Array.isArray(item.images) ? item.images.map(img => publicUrl(req, img)) : [],
-  year: item.year || '',
-  category: item.category || 'General',
-  gallery_category_id: String(item.gallery_category_id || ''),
-  status: item.status !== undefined ? Number(item.status) : 1
-});
+const formatGallery = (req, item) => {
+  let year = item.year || '';
+  let month = item.month || '';
+  if ((!year || !month) && item.createdAt) {
+    const d = new Date(item.createdAt);
+    if (!isNaN(d.getTime())) {
+      if (!year) year = String(d.getFullYear());
+      if (!month) month = String(d.getMonth() + 1).padStart(2, '0');
+    }
+  }
+
+  const formattedMonth = formatMonthName(month);
+
+  return {
+    id: item.id || String(item._id),
+    _id: item._id,
+    images: Array.isArray(item.images) ? item.images.map(img => publicUrl(req, img)) : [],
+    year: String(year || ''),
+    month: formattedMonth,
+    category: item.category || 'General',
+    gallery_category_id: String(item.gallery_category_id || ''),
+    status: item.status !== undefined ? Number(item.status) : 1
+  };
+};
 
 const getGallery = async (req, res) => {
 
   try {
     const { data, pagination } = await queryHelper(Gallery, req.query, {
-      searchFields: ['category', 'year'],
-      filterFields: ['category', 'year', 'gallery_category_id']
+      searchFields: ['category', 'year', 'month'],
+      filterFields: ['category', 'year', 'month', 'gallery_category_id']
     });
     return apiResponse(res, 200, 'Gallery retrieved successfully', data.map((row) => formatGallery(req, row)), pagination);
   } catch (error) {

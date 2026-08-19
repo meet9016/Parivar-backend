@@ -52,6 +52,8 @@ const register = async (req, res) => {
       country_id,
       state_id,
       city_id,
+      village,
+      village_id,
       address,
       image,
       family_head_id,
@@ -105,6 +107,8 @@ const register = async (req, res) => {
       country_id,
       state_id,
       city_id,
+      village: village || village_id || '',
+      village_id: village_id || '',
       address,
       image: image || '',
       family_head: familyData.family_head,
@@ -198,11 +202,13 @@ const getProfile = async (req, res) => {
 };
 
 const mongooseQueryForUser = (id) => {
-  if (id.match(/^[0-9a-fA-F]{24}$/)) {
+  if (!id || id === 'undefined' || id === 'null') {
+    return { _id: null };
+  }
+  if (mongoose.isValidObjectId(id)) {
     return { _id: id };
   }
-
-  return { _id: id };
+  return { id: String(id) };
 };
 
 const getUsers = async (req, res) => {
@@ -256,18 +262,23 @@ const getUsers = async (req, res) => {
 
     const { data: users, pagination } = await queryHelper(User, req.query, {
       baseQuery: query,
-      searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'family_head.name'],
+      searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'],
       filterFields: ['gender', 'blood_group', 'is_committee', 'committee_role', 'role_id', 'status', 'familyHead'],
-      select: birthday ? 'first_name middle_name last_name number dob anniversary' : '-password',
-      populate: birthday ? '' : 'role_id',
+      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : '-password',
+      populate: (birthday || anniversary) ? '' : 'role_id',
       defaultSort: { createdAt: -1 },
       lean: false
     });
 
     if (birthday) {
       const formatted = users.map(u => ({
+        id: u.id || String(u._id),
+        _id: u._id,
+        first_name: u.first_name || '',
+        middle_name: u.middle_name || '',
+        last_name: u.last_name || '',
         name: fullName(u),
-        number: u.number,
+        number: u.number || '',
         dob: u.dob || null,
         anniversary: u.anniversary || null
       }));
@@ -276,8 +287,13 @@ const getUsers = async (req, res) => {
 
     if (anniversary) {
       const formatted = users.map(u => ({
+        id: u.id || String(u._id),
+        _id: u._id,
+        first_name: u.first_name || '',
+        middle_name: u.middle_name || '',
+        last_name: u.last_name || '',
         name: fullName(u),
-        number: u.number,
+        number: u.number || '',
         anniversary: u.anniversary || null
       }));
       return apiResponse(res, 200, 'Users birthday list retrieved successfully', formatted, pagination);
@@ -303,6 +319,8 @@ const getUsers = async (req, res) => {
       country_id: u.country_id || '',
       state_id: u.state_id || '',
       city_id: u.city_id || '',
+      village: u.village || u.village_id || '',
+      village_id: u.village_id || '',
       family_head: u.family_head ? {
         id: u.family_head.id ? String(u.family_head.id) : '',
         name: u.family_head.name || ''
@@ -378,9 +396,10 @@ const getFamilyMembersByNumber = async (req, res) => {
 const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!id) return apiResponse(res, 400, 'User id is required');
+    if (!id || id === 'undefined' || id === 'null') return apiResponse(res, 400, 'User id is required');
 
-    const user = await User.findById(id).populate('role_id');
+    const query = mongooseQueryForUser(id);
+    const user = await User.findOne(query).populate('role_id');
     if (!user) return apiResponse(res, 404, 'User not found');
 
     const formatted = {
@@ -403,6 +422,8 @@ const getUserById = async (req, res) => {
       country_id: user.country_id || '',
       state_id: user.state_id || '',
       city_id: user.city_id || '',
+      village: user.village || user.village_id || '',
+      village_id: user.village_id || '',
       role_id: user.role_id?._id ? String(user.role_id._id) : '',
       role_name: user.role_id?.name || '',
       permissions: getRolePermissions(user),
@@ -453,6 +474,11 @@ const updateUser = async (req, res) => {
       is_committee,
       committee_role,
       role_id,
+      country_id,
+      state_id,
+      city_id,
+      village,
+      village_id,
       address,
       designation,
       image,
@@ -462,7 +488,8 @@ const updateUser = async (req, res) => {
     } = req.body;
 
 
-    const user = await User.findOne({ _id: id });
+    const query = mongooseQueryForUser(id);
+    const user = await User.findOne(query);
     if (!user) {
       return apiResponse(res, 404, 'User not found');
     }
@@ -491,6 +518,11 @@ const updateUser = async (req, res) => {
     if (is_committee !== undefined) user.is_committee = is_committee === true || is_committee === 'true';
     if (committee_role !== undefined) user.committee_role = committee_role;
     if (role_id !== undefined) user.role_id = role_id && mongoose.isValidObjectId(role_id) ? role_id : null;
+    if (country_id !== undefined) user.country_id = country_id;
+    if (state_id !== undefined) user.state_id = state_id;
+    if (city_id !== undefined) user.city_id = city_id;
+    if (village !== undefined) user.village = village;
+    if (village_id !== undefined) user.village_id = village_id;
     if (address !== undefined) user.address = address;
     if (designation !== undefined) user.designation = designation;
     if (status !== undefined) user.status = Number(status);
@@ -523,6 +555,10 @@ const updateUser = async (req, res) => {
       is_committee: user.is_committee || false,
       committee_role: user.committee_role || '',
       role_id: user.role_id ? String(user.role_id) : '',
+      country_id: user.country_id || '',
+      state_id: user.state_id || '',
+      city_id: user.city_id || '',
+      village: user.village || user.village_id || '',
       address: user.address || '',
       designation: user.designation || '',
       status: Number(user.status ?? 1),

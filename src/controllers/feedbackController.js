@@ -76,24 +76,27 @@ const addFeedback = async (req, res) => {
         if (!name || !email || !message) {
             return apiResponse(res, 400, 'Name, email, and message are required');
         }
-        
+
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const existingEmailFeedback = await Feedback.findOne({
+            email: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+        });
+
+        if (existingEmailFeedback) {
+            return apiResponse(res, 400, 'Feedback with this email has already been submitted');
+        }
 
         const currentMemberId = memberPublicId(req.user || {});
-        // find existing feedback by member_id
-        const existing = await Feedback.findOne({ member_id: String(currentMemberId) });
-
-        if (existing) {
-            existing.set({ name, email, message, status: status !== undefined ? Number(status) : existing.status });
-            await existing.save();
-            return apiResponse(res, 200, 'Feedback updated successfully', formatFeedback(existing));
-        }
 
         const doc = await Feedback.create({
             id: `FBK${Date.now()}`,
-            member_id: currentMemberId,
-            name, email, message,
+            member_id: currentMemberId || '',
+            name,
+            email,
+            message,
             status: status !== undefined ? Number(status) : 1
         });
+
         return apiResponse(res, 201, 'Feedback submitted successfully', formatFeedback(doc));
     } catch (error) {
         return apiResponse(res, 500, 'Error saving feedback', { error: error.message });

@@ -16,34 +16,32 @@ const matrimonySchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  middle_name: {
+    type: String,
+    trim: true
+  },
   gender: {
     type: String,
-    required: true,
     trim: true
   },
   birthdate: {
     type: String,
-    required: true,
     trim: true
   },
   marital_status: {
     type: String,
-    required: true,
     trim: true
   },
   height: {
     type: String,
-    required: true,
     trim: true
   },
   weight: {
     type: String,
-    required: true,
     trim: true
   },
   complexion: {
     type: String,
-    required: true,
     trim: true
   },
   education: {
@@ -68,17 +66,14 @@ const matrimonySchema = new mongoose.Schema({
   },
   gotra: {
     type: String,
-    required: true,
     trim: true
   },
   family_type: {
     type: String,
-    required: true,
     trim: true
   },
   mobile_number: {
     type: String,
-    required: true,
     trim: true
   },
   city: {

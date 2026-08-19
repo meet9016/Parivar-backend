@@ -22,8 +22,8 @@ const getHome = async (req, res) => {
 const getGallery = async (req, res) => {
   try {
     const { data: images, pagination } = await queryHelper(Gallery, req.query, {
-      searchFields: ['category', 'year'],
-      filterFields: ['category', 'year', 'gallery_category_id']
+      searchFields: ['category', 'year', 'month'],
+      filterFields: ['category', 'year', 'month', 'gallery_category_id']
     });
     const byYear = new Map();
 

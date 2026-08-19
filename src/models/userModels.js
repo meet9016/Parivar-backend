@@ -131,6 +131,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  village: {
+    type: String,
+    default: '',
+    trim: true
+  },
   image: {
     type: String,
     default: ''
