@@ -35,6 +35,7 @@ router.use('/feedback', require('./feedbackRoutes'));
 router.use('/job-vacancy', require('./jobVacancyRoutes'));
 router.use('/committee-members', require('./committeeMemberRoutes'));
 router.use('/event-registrations', require('./eventRegistrationRoutes'));
+router.use('/event_registrations', require('./eventRegistrationRoutes'));
 router.use('/get_app_theme', require('./configRoutes'));
 router.use('/update_app_theme', require('./configRoutes'));
 

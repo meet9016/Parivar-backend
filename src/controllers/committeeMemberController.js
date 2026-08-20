@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { apiResponse, publicUrl } = require("../utils/apiResponse");
 const CommitteeMember = require('../models/committeeMemberModel');
 const queryHelper = require("../utils/queryHelper");
@@ -33,31 +34,46 @@ const getcommitteeMembers = async (req, res) => {
 
 const createcommitteeMember = async (req, res) => {
   try {
-    const { first_name, middle_name, last_name, number, email, password, role_id, designation, image, status } = req.body;
+    const { first_name, middle_name, last_name, number, email, password, role_id, designation, status } = req.body;
 
     let hashedPassword = undefined;
     if (password && password.trim()) {
       hashedPassword = await bcrypt.hash(password.trim(), 10);
     }
 
-    const committeeMember = new CommitteeMember({
-      first_name,
-      middle_name,
-      last_name,
-      number,
-      email: email ? email.trim().toLowerCase() : undefined,
-      password: hashedPassword,
-      role_id: role_id || undefined,
-      designation,
-      image,
-      status: status !== undefined ? Number(status) : 1,
-    });
+    const image = req.file ? `/uploads/${req.file.filename}` : (req.body.image || '');
 
+    const memberData = {
+      first_name: (first_name || '').trim(),
+      middle_name: (middle_name || '').trim(),
+      last_name: (last_name || '').trim(),
+      number: (number || '').trim(),
+      designation: (designation || '').trim(),
+      image,
+      status: status !== undefined ? Number(status) : 1
+    };
+
+    if (email && email.trim()) {
+      memberData.email = email.trim().toLowerCase();
+    }
+    if (hashedPassword) {
+      memberData.password = hashedPassword;
+    }
+    if (role_id && role_id.trim() && mongoose.isValidObjectId(role_id.trim())) {
+      memberData.role_id = role_id.trim();
+    }
+
+    const committeeMember = new CommitteeMember(memberData);
     await committeeMember.save();
 
     return apiResponse(res, 201, 'Committee member created successfully', committeeMember);
   } catch (error) {
-    return apiResponse(res, 500, 'Error creating committee member', { error: error.message });
+    console.error('Error creating committee member:', error);
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || 'number';
+      return apiResponse(res, 400, `A committee member with this ${field} already exists.`);
+    }
+    return apiResponse(res, 500, error.message || 'Error creating committee member', { error: error.message });
   }
 };
 
@@ -66,7 +82,9 @@ const updatecommitteeMember = async (req, res) => {
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    if (req.body.remove_image === 'true') {
+    if (req.file) {
+      updateData.image = `/uploads/${req.file.filename}`;
+    } else if (req.body.remove_image === 'true') {
       updateData.image = '';
     }
 
@@ -78,6 +96,10 @@ const updatecommitteeMember = async (req, res) => {
 
     if (updateData.email) {
       updateData.email = updateData.email.trim().toLowerCase();
+    }
+
+    if (!updateData.role_id) {
+      delete updateData.role_id;
     }
 
     if (!updateData.role_id) {
