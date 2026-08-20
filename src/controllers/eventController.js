@@ -88,13 +88,58 @@ const eventPayload = (req, existing = {}) => {
   };
 };
 
+const EventRegistration = require('../models/eventRegistration');
+
 const getEventsList = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(Event, req.query, {
       searchFields: ['title', 'description', 'event_category_name', 'event_name', 'event_location', 'entry_type'],
       filterFields: ['event_category_id', 'event_category_name', 'entry_type']
     });
-    return apiResponse(res, 200, 'Events retrieved successfully', data.map((item) => formatEvent(req, item)), pagination);
+
+    const mongoose = require('mongoose');
+    const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
+    const stringIds = eventIds.map(id => String(id));
+
+    // Aggregate attendees count per event
+    const registrationStats = await EventRegistration.aggregate([
+      { 
+        $match: { 
+          event_id: { $in: [...objectIds, ...stringIds] },
+          status: { $ne: 'cancelled' }
+        } 
+      },
+      {
+        $group: {
+          _id: { $toString: '$event_id' },
+          total_registrations: { $sum: 1 },
+          total_attendees: { $sum: { $ifNull: ['$total_attendee', 1] } }
+        }
+      }
+    ]);
+
+    const statsMap = {};
+    registrationStats.forEach(stat => {
+      statsMap[String(stat._id)] = {
+        total_registrations: stat.total_registrations || 0,
+        total_attendees: stat.total_attendees || 0
+      };
+    });
+
+    const formatted = data.map((item) => {
+      const idStr = String(item._id || item.id);
+      const stats = statsMap[idStr] || { total_registrations: 0, total_attendees: 0 };
+      const formattedItem = formatEvent(req, item);
+      const attendeeCount = Number(stats.total_attendees || stats.total_registrations || 0);
+      return {
+        ...formattedItem,
+        total_registrations: attendeeCount,
+        total_attendees: attendeeCount,
+        registration_count: Number(stats.total_registrations || 0)
+      };
+    });
+
+    return apiResponse(res, 200, 'Events retrieved successfully', formatted, pagination);
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving events', { error: error.message });
   }
