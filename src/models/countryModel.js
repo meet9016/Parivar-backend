@@ -10,6 +10,11 @@ const countrySchema = new mongoose.Schema({
   country: {
     type: String,
     default: ''
+  },
+  status: {
+    type: Number,
+    default: 1,
+    index: true
   }
 }, {
   timestamps: true,

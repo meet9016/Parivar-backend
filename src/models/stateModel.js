@@ -16,6 +16,11 @@ const stateSchema = new mongoose.Schema({
   state: {
     type: String,
     default: ''
+  },
+  status: {
+    type: Number,
+    default: 1,
+    index: true
   }
 }, {
   timestamps: true,

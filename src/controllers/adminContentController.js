@@ -198,10 +198,14 @@ const getMasters = async (req, res) => {
     const query = { ...(config.type ? { type: config.type } : {}) };
     if (req.query.parent_id && config.parentKey) query[config.parentKey] = String(req.query.parent_id);
     if (req.query.parent_id && config.type) query.parent_id = String(req.query.parent_id);
+    if (req.query.status !== undefined && req.query.status !== null && req.query.status !== '') {
+      const statusNum = Number(req.query.status);
+      query.$or = [{ status: statusNum }, { status: String(statusNum) }];
+    }
+
     const { data, pagination } = await queryHelper(config.Model, req.query, {
       baseQuery: query,
-      searchFields: [...(config.nameKeys || ['name']), 'name'],
-      filterFields: ['status']
+      searchFields: [...(config.nameKeys || ['name']), 'name']
     });
 
     const rawParentIds = data.map((item) => String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '')).filter(Boolean);

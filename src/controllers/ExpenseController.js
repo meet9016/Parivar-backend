@@ -10,17 +10,22 @@ const requestData = (req) => ({
 
 const getExpenses = async (req, res) => {
   try {
+    let baseQuery = {};
+    if (req.query.category) {
+      baseQuery.expense_category_id = req.query.category;
+    }
+    if (req.query.month) {
+      baseQuery.date = { $regex: `^${req.query.month}` };
+    }
+
     const { data: expenses, pagination } = await queryHelper(Expense, requestData(req), {
+      baseQuery,
       searchFields: ['expense_category_name', 'committee_member_name', 'description'],
-      filterFields: ['date', 'expense_category_id', 'committee_member_id']
+      filterFields: ['date', 'expense_category_id', 'committee_member_id'],
+      defaultSort: { date: -1, createdAt: -1 }
     });
 
-    // Optionally handle monthwise filtering here if passed as 'month' (e.g. '2023-10')
     let filteredExpenses = expenses;
-    const { month } = req.query;
-    if (month) {
-      filteredExpenses = filteredExpenses.filter(e => e.date && e.date.startsWith(month));
-    }
 
     return res.status(200).json({
       status: 200,

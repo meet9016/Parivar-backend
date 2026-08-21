@@ -19,6 +19,11 @@ const citySchema = new mongoose.Schema({
   city: {
     type: String,
     default: ''
+  },
+  status: {
+    type: Number,
+    default: 1,
+    index: true
   }
 }, {
   timestamps: true,

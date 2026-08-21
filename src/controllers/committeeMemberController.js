@@ -6,8 +6,19 @@ const bcrypt = require('bcryptjs');
 
 const getcommitteeMembers = async (req, res) => {
   try {
+    let baseQuery = {};
+    if (req.query.role) {
+      const Role = require('../models/roleModel');
+      const roleDoc = await Role.findOne({ name: req.query.role }).lean();
+      if (roleDoc) {
+        baseQuery.role_id = roleDoc._id;
+      }
+    }
+
     const { data: committee, pagination } = await queryHelper(CommitteeMember, req.query, {
+      baseQuery,
       searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'designation'],
+      filterFields: ['status', 'role_id'],
       defaultSort: { createdAt: -1 },
       populate: ['role_id']
     });
