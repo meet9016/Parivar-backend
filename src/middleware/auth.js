@@ -144,7 +144,7 @@ const protect = async (req, res, next) => {
 
 const getRolePermissions = (user = {}) => {
   const roleName = user.role_id?.name?.toLowerCase() || user.role_id?.roleName?.toLowerCase() || String(user.role || '').toLowerCase();
-  if (user.role === 'admin' || roleName === 'admin' || user.committee_role === 'President') {
+  if (roleName === 'admin' || roleName === 'super admin' || user.role === 'superadmin' || user.committee_role === 'President' || user.is_super_admin === true) {
     return ALL_PERMISSION_KEYS;
   }
 

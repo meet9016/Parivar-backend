@@ -23,9 +23,13 @@ const findBusinessByRequestId = (req, id) => {
   });
 };
 
-const formatBusiness = (req, b, categoryName = 'Community Enterprise') => ({
+const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {}) => ({
   id: String(b._id),
   member_id: b.member_id || '',
+  owner_name: extra.owner_name || '',
+  owner_phone: extra.owner_phone || '',
+  owner_email: extra.owner_email || '',
+  owner_image: extra.owner_image || '',
   business_name: b.business_name || '',
   business_category_id: b.business_category_id || '',
   business_category_name: categoryName,
@@ -34,8 +38,11 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise') => ({
   GST_number: b.GST_number || '',
   email: b.email || '',
   country_id: b.country_id || '',
+  country_name: extra.country_name || '',
   state_id: b.state_id || '',
+  state_name: extra.state_name || '',
   city_id: b.city_id || '',
+  city_name: extra.city_name || '',
   address: b.address || '',
   location_link: b.location_link || '',
   about_us: b.about_us || '',
@@ -44,10 +51,12 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise') => ({
   pinterest: b.pinterest || '',
   youtube: b.youtube || '',
   website: b.website || '',
-image: publicUrl(req, b.image || b.image || ''),
+  image: publicUrl(req, b.image || b.image || ''),
   gallery_images: (b.gallery_images || []).map(img => publicUrl(req, img)),
   is_own: req.user ? (String(b.member_id) === String(req.user.member_id || req.user._id)) : false,
   status: b.status !== undefined ? Number(b.status) : 1,
+  createdAt: b.createdAt || '',
+  updatedAt: b.updatedAt || ''
 });
 
 const getBusinesses = async (req, res) => {
@@ -57,14 +66,37 @@ const getBusinesses = async (req, res) => {
     if (is_own === 'true' && req.user) {
       baseQuery.member_id = req.user.member_id || String(req.user._id);
     }
-    const [{ data: businesses, pagination }, categories] = await Promise.all([
+    const [{ data: businesses, pagination }, categories, countries, states, cities] = await Promise.all([
       queryHelper(Business, req.query, {
         baseQuery,
         searchFields: ['business_name', 'number', 'whatsapp_number', 'GST_number', 'email', 'address', 'about_us', 'website'],
         filterFields: ['member_id', 'business_category_id', 'country_id', 'state_id', 'city_id', 'status']
       }),
-      BusinessCategory.find({}).lean()
+      BusinessCategory.find({}).lean(),
+      Country.find({}).lean(),
+      State.find({}).lean(),
+      City.find({}).lean()
     ]);
+
+    const memberIds = [...new Set(businesses.map(b => b.member_id).filter(Boolean))];
+    const owners = memberIds.length > 0 ? await User.find({
+      $or: [
+        { id: { $in: memberIds } },
+        { _id: { $in: memberIds.filter(id => require('mongoose').isValidObjectId(id)) } }
+      ]
+    }).lean() : [];
+
+    const ownerMap = new Map();
+    owners.forEach(u => {
+      const data = {
+        name: [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ') || u.name || '',
+        phone: u.number || u.phone || '',
+        email: u.email || '',
+        image: publicUrl(req, u.image || '')
+      };
+      if (u._id) ownerMap.set(String(u._id), data);
+      if (u.id) ownerMap.set(String(u.id), data);
+    });
 
     const categoryMap = new Map();
     categories.forEach(c => {
@@ -72,9 +104,37 @@ const getBusinesses = async (req, res) => {
       if (c.id) categoryMap.set(String(c.id), c.business || c.name || '');
     });
 
+    const countryMap = new Map();
+    countries.forEach(c => {
+      if (c._id) countryMap.set(String(c._id), c.name || c.title || '');
+      if (c.id) countryMap.set(String(c.id), c.name || c.title || '');
+    });
+
+    const stateMap = new Map();
+    states.forEach(s => {
+      if (s._id) stateMap.set(String(s._id), s.name || s.title || '');
+      if (s.id) stateMap.set(String(s.id), s.name || s.title || '');
+    });
+
+    const cityMap = new Map();
+    cities.forEach(c => {
+      if (c._id) cityMap.set(String(c._id), c.name || c.title || '');
+      if (c.id) cityMap.set(String(c.id), c.name || c.title || '');
+    });
+
     return apiResponse(res, 200, 'Businesses retrieved successfully', businesses.map(b => {
       const categoryName = categoryMap.get(String(b.business_category_id)) || 'Community Enterprise';
-      return formatBusiness(req, b, categoryName);
+      const owner = ownerMap.get(String(b.member_id)) || {};
+      const extra = {
+        owner_name: owner.name || '',
+        owner_phone: owner.phone || '',
+        owner_email: owner.email || '',
+        owner_image: owner.image || '',
+        country_name: countryMap.get(String(b.country_id)) || '',
+        state_name: stateMap.get(String(b.state_id)) || '',
+        city_name: cityMap.get(String(b.city_id)) || ''
+      };
+      return formatBusiness(req, b, categoryName, extra);
     }), pagination);
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving businesses', { error: error.message });
@@ -91,15 +151,51 @@ const getBusinessById = async (req, res) => {
       return apiResponse(res, 404, 'Business not found');
     }
 
-    const category = await BusinessCategory.findOne({
-      $or: [
-        { id: String(business.business_category_id) },
-        ...(require('mongoose').isValidObjectId(business.business_category_id) ? [{ _id: business.business_category_id }] : [])
-      ]
-    }).lean();
+    const [category, country, state, city, owner] = await Promise.all([
+      BusinessCategory.findOne({
+        $or: [
+          { id: String(business.business_category_id) },
+          ...(require('mongoose').isValidObjectId(business.business_category_id) ? [{ _id: business.business_category_id }] : [])
+        ]
+      }).lean(),
+      Country.findOne({
+        $or: [
+          { id: String(business.country_id) },
+          ...(require('mongoose').isValidObjectId(business.country_id) ? [{ _id: business.country_id }] : [])
+        ]
+      }).lean(),
+      State.findOne({
+        $or: [
+          { id: String(business.state_id) },
+          ...(require('mongoose').isValidObjectId(business.state_id) ? [{ _id: business.state_id }] : [])
+        ]
+      }).lean(),
+      City.findOne({
+        $or: [
+          { id: String(business.city_id) },
+          ...(require('mongoose').isValidObjectId(business.city_id) ? [{ _id: business.city_id }] : [])
+        ]
+      }).lean(),
+      User.findOne({
+        $or: [
+          { id: String(business.member_id) },
+          ...(require('mongoose').isValidObjectId(business.member_id) ? [{ _id: business.member_id }] : [])
+        ]
+      }).lean()
+    ]);
 
     const categoryName = category ? (category.business || category.name || '') : 'Community Enterprise';
-    return apiResponse(res, 200, 'Business retrieved successfully', formatBusiness(req, business, categoryName));
+    const extra = {
+      owner_name: owner ? ([owner.first_name, owner.middle_name, owner.last_name].filter(Boolean).join(' ') || owner.name || '') : '',
+      owner_phone: owner ? (owner.number || owner.phone || '') : '',
+      owner_email: owner ? (owner.email || '') : '',
+      owner_image: owner ? publicUrl(req, owner.image || '') : '',
+      country_name: country ? (country.name || country.title || '') : '',
+      state_name: state ? (state.name || state.title || '') : '',
+      city_name: city ? (city.name || city.title || '') : ''
+    };
+
+    return apiResponse(res, 200, 'Business retrieved successfully', formatBusiness(req, business, categoryName, extra));
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving business', { error: error.message });
   }

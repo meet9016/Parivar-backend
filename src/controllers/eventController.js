@@ -98,6 +98,7 @@ const getEventsList = async (req, res) => {
     });
 
     const mongoose = require('mongoose');
+    const eventIds = data.map(item => item._id || item.id);
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
 
@@ -195,10 +196,53 @@ const getEventById = async (req, res) => {
   }
 };
 
+const bulkUpdateEventStatus = async (req, res) => {
+  try {
+    const { eventIds, status } = req.body;
+    if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
+      return apiResponse(res, 400, 'eventIds not found');
+    }
+
+    const mongoose = require('mongoose');
+    const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
+    const stringIds = eventIds.map(id => String(id));
+
+    await Event.updateMany(
+      { $or: [{ _id: { $in: objectIds } }, { id: { $in: stringIds } }] },
+      { $set: { status: Number(status) } }
+    );
+    return apiResponse(res, 200, 'Events status updated successfully');
+  } catch (error) {
+    return apiResponse(res, 500, 'Error updating events', { error: error.message });
+  }
+};
+
+const bulkDeleteEvents = async (req, res) => {
+  try {
+    const eventIds = req.body.eventIds || req.body.ids;
+    if (!eventIds || !Array.isArray(eventIds) || eventIds.length === 0) {
+      return apiResponse(res, 400, 'eventIds not found');
+    }
+
+    const mongoose = require('mongoose');
+    const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
+    const stringIds = eventIds.map(id => String(id));
+
+    await Event.deleteMany(
+      { $or: [{ _id: { $in: objectIds } }, { id: { $in: stringIds } }] }
+    );
+    return apiResponse(res, 200, 'Events deleted successfully');
+  } catch (error) {
+    return apiResponse(res, 500, 'Error deleting events', { error: error.message });
+  }
+};
+
 module.exports = {
   getEventsList,
   getEventById,
   addEvent,
   updateEvent,
-  deleteEvent
+  deleteEvent,
+  bulkUpdateEventStatus,
+  bulkDeleteEvents
 };
