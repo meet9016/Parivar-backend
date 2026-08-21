@@ -86,12 +86,24 @@ const getJobVacancyById = async (req, res) => {
 const postJobVacancy = async (req, res) => {
   try {
     const { id } = req.params;
-    const jobVacancyData = extractVacancyData(requestData(req));
+    const body = requestData(req);
 
     if (id) {
       const existing = await JobVacancy.findOne(buildIdQuery(id));
       if (!existing) return apiResponse(res, 404, "Job Vacancy not found");
-      existing.set({ ...jobVacancyData, image: imageFromRequest(req, existing.image) });
+
+      // Merge only provided fields for update (allows single field updates like status)
+      const allowedFields = ['title', 'description', 'qualifications', 'company_name', 'location', 'job_type', 'salary', 'contact_email', 'contact_number', 'status'];
+      allowedFields.forEach((field) => {
+        if (body[field] !== undefined && body[field] !== null) {
+          existing.set(field, body[field]);
+        }
+      });
+
+      if (req.file || body.image || body.remove_image === 'true') {
+        existing.set('image', imageFromRequest(req, existing.image));
+      }
+
       await existing.save();
       return apiResponse(res, 200, "Job Vacancy updated successfully", {
         ...existing.toObject(),
@@ -100,6 +112,7 @@ const postJobVacancy = async (req, res) => {
       });
     }
 
+    const jobVacancyData = extractVacancyData(body);
     const jobVacancy = await JobVacancy.create({
       ...jobVacancyData,
       image: imageFromRequest(req),

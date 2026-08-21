@@ -40,7 +40,7 @@ const getCategories = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(GalleryCategory, req.query, {
       searchFields: ['category'],
-      filterFields: ['category'],
+      filterFields: ['category', 'status'],
       defaultSort: { category: 1 }
     });
     return apiResponse(res, 200, 'Gallery categories retrieved successfully', data.map(formatCategory), pagination);

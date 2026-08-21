@@ -35,6 +35,17 @@ const queryHelper = async (Model, query = {}, options = {}) => {
 
   filterFields.forEach((field) => {
     if (hasValue(query[field])) {
+      if (field === 'status') {
+        const sVal = Number(query[field]);
+        if (!isNaN(sVal)) {
+          if (sVal === 1) {
+            extraQuery.$or = [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }];
+          } else {
+            extraQuery.$or = [{ status: 0 }, { status: '0' }];
+          }
+          return;
+        }
+      }
       extraQuery[field] = castValue(query[field]);
     }
   });

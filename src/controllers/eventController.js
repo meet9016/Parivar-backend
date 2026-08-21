@@ -94,7 +94,7 @@ const getEventsList = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(Event, req.query, {
       searchFields: ['title', 'description', 'event_category_name', 'event_name', 'event_location', 'entry_type'],
-      filterFields: ['event_category_id', 'event_category_name', 'entry_type']
+      filterFields: ['event_category_id', 'event_category_name', 'entry_type', 'status']
     });
 
     const mongoose = require('mongoose');

@@ -113,7 +113,7 @@ const getGallery = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(Gallery, req.query, {
       searchFields: ['category', 'year', 'month'],
-      filterFields: ['category', 'year', 'month', 'gallery_category_id']
+      filterFields: ['category', 'year', 'month', 'gallery_category_id', 'status']
     });
     return apiResponse(res, 200, 'Gallery retrieved successfully', data.map((row) => formatGallery(req, row)), pagination);
   } catch (error) {
