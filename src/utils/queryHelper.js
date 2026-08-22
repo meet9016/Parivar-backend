@@ -19,7 +19,7 @@ const queryHelper = async (Model, query = {}, options = {}) => {
     baseQuery = {},
     filterFields = [],
     searchFields = [],
-    defaultLimit = 10,
+    defaultLimit = 15,
     defaultSort = { _id: -1 },
     select,
     populate,
