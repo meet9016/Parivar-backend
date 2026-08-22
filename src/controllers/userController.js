@@ -213,6 +213,7 @@ const mongooseQueryForUser = (id) => {
 
 const getUsers = async (req, res) => {
   try {
+    console.log("getUsers Query params:", req.query);
     const birthday = 'birthday' in req.query;
     const anniversary = 'anniversary' in req.query;
 
@@ -241,9 +242,15 @@ const getUsers = async (req, res) => {
     if (req.query.family_head_id) {
       const headId = mongooseQueryForUser(req.query.family_head_id)._id;
       if (mongoose.isValidObjectId(headId)) {
-        query['family_head.id'] = new mongoose.Types.ObjectId(headId);
+        query.$or = [
+          { 'family_head.id': new mongoose.Types.ObjectId(headId) },
+          { _id: new mongoose.Types.ObjectId(headId) }
+        ];
       } else {
-        query['family_head.id'] = headId;
+        query.$or = [
+          { 'family_head.id': headId },
+          { _id: headId }
+        ];
       }
     }
 
@@ -252,12 +259,39 @@ const getUsers = async (req, res) => {
     }
 
     if (birthday) {
-      query.dob = { $exists: true };
+      query.dob = { $exists: true, $ne: null };
+      
+      const conditions = [];
+      if (req.query.dob_month) {
+        conditions.push({
+          $and: [
+            { $eq: [{ $type: "$dob" }, "date"] },
+            { $eq: [{ $month: "$dob" }, Number(req.query.dob_month)] }
+          ]
+        });
+      }
+      if (req.query.dob_year) {
+        conditions.push({
+          $and: [
+            { $eq: [{ $type: "$dob" }, "date"] },
+            { $eq: [{ $year: "$dob" }, Number(req.query.dob_year)] }
+          ]
+        });
+      }
+      if (conditions.length > 0) {
+        query.$expr = conditions.length === 1 ? conditions[0] : { $and: conditions };
+      }
+
+      if (req.query.dob_start || req.query.dob_end) {
+        const range = {};
+        if (req.query.dob_start) range.$gte = new Date(req.query.dob_start);
+        if (req.query.dob_end) range.$lte = new Date(req.query.dob_end);
+        query.dob = { ...query.dob, ...range };
+      }
     }
 
     if (anniversary) {
-      query.anniversary = { $exists: true };
-
+      query.anniversary = { $exists: true, $ne: null };
     }
 
     const { data: users, pagination } = await queryHelper(User, req.query, {

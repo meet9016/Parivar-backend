@@ -33,24 +33,17 @@ const getFamilyHeadFromParent = async (parentUser) => {
 
 const resolveFamilyHead = async ({ relation, family_head_id }) => {
   if (relation === 'Self') {
-
     return { family_head: null, head: null };
   }
 
-  let head = null;
-
-
-  head = await findUserByIdOrMemberId(family_head_id);
-
-  if (family_head_id) {
-    if (!head) {
-
-      throw new Error('Invalid family_head_id');
-    }
+  const cleanId = String(family_head_id || '').trim();
+  if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+    throw new Error('Family head information is required for non-self members');
   }
 
+  const head = await findUserByIdOrMemberId(cleanId);
   if (!head) {
-    throw new Error('Family head information is required for non-self members');
+    throw new Error('Invalid family_head_id');
   }
 
   return {

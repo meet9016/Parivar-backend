@@ -115,6 +115,14 @@ const protect = async (req, res, next) => {
       });
     }
 
+    if (req.user.role_id && req.user.role_id.status === 0) {
+      return res.status(401).json({
+        status: 401,
+        message: 'Unauthorized: Your role has been deactivated. Please contact support.',
+        data: []
+      });
+    }
+
     return next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {

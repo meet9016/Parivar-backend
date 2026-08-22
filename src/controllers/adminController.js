@@ -173,6 +173,10 @@ const loginAdmin = async (req, res) => {
     if (committeeMember && committeeMember.password) {
       const isMatch = await bcrypt.compare(password, committeeMember.password);
       if (isMatch) {
+        if (committeeMember.role_id && committeeMember.role_id.status === 0) {
+          return apiResponse(res, 403, 'Access denied: Your assigned role is inactive.');
+        }
+
         const permissions = getRolePermissions(committeeMember);
 
         const token = jwt.sign(
@@ -207,6 +211,10 @@ const loginAdmin = async (req, res) => {
     if (user) {
       const isMatch = await user.comparePassword(password);
       if (isMatch) {
+        if (user.role_id && user.role_id.status === 0) {
+          return apiResponse(res, 403, 'Access denied: Your assigned role is inactive.');
+        }
+
         const permissions = getRolePermissions(user);
 
         if (!user.is_committee && user.committee_role !== 'Self' && permissions.length === 0) {

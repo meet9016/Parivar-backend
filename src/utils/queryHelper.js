@@ -57,6 +57,7 @@ const queryHelper = async (Model, query = {}, options = {}) => {
   const sortDirection = String(query.sort_order || '').toLowerCase() === 'asc' ? 1 : -1;
   const sort = query.sort_by ? { [sortField]: sortDirection } : defaultSort;
   const finalQuery = mergeQuery(baseQuery, extraQuery);
+  console.log("queryHelper finalQuery:", JSON.stringify(finalQuery, null, 2));
   const total = await Model.countDocuments(finalQuery);
   const totalPages = Math.max(Math.ceil(total / limit), 1);
   const page = Math.min(requestedPage, totalPages);
