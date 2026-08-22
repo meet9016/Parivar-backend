@@ -346,19 +346,250 @@ const updateAdminRecovery = async (req, res) => {
 // Aggregated Dashboard stats
 const getStats = async (req, res) => {
   try {
-    const [userCount, businessCount, postCount, committeeCount] = await Promise.all([
+    const { membersRange = 'last_6_months', activityRange = 'last_6_months', businessRange = 'last_6_months' } = req.query;
+    const Event = require('../models/eventModel');
+    
+    const today = new Date();
+    const startOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+
+    const [
+      userCount, businessCount, postCount, eventCount, committeeCount,
+      lastMonthUsers, lastMonthBusinesses, lastMonthPosts, lastMonthEvents,
+      thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
+      recentMembers, recentEvents, recentPosts
+    ] = await Promise.all([
       User.countDocuments({}),
       Business.countDocuments({}),
       Post.countDocuments({}),
-      User.countDocuments({ is_committee: true })
+      Event.countDocuments({}),
+      User.countDocuments({ is_committee: true }),
+      User.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      Business.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      Post.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      Event.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      User.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      Business.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      Post.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      Event.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      User.find({}).sort({ createdAt: -1 }).limit(5).select('first_name last_name email status image createdAt'),
+      Event.find({}).sort({ createdAt: -1 }).limit(5).select('title start_time entry_type status image createdAt'),
+      Post.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt')
     ]);
+
+    // Calculate percentage changes (This Month vs Last Month)
+    const calcGrowth = (current, last) => {
+      if (last === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - last) / last) * 100);
+    };
+    
+    const usersGrowth = calcGrowth(thisMonthUsers, lastMonthUsers);
+    const businessGrowth = calcGrowth(thisMonthBusinesses, lastMonthBusinesses);
+    const postsGrowth = calcGrowth(thisMonthPosts, lastMonthPosts);
+    const eventsGrowth = calcGrowth(thisMonthEvents, lastMonthEvents);
+
+    const getStartDate = (range) => {
+      const d = new Date();
+      if (range === 'last_1_month') return new Date(d.getFullYear(), d.getMonth() - 1, d.getDate());
+      if (range === 'last_3_months') return new Date(d.getFullYear(), d.getMonth() - 3, d.getDate());
+      if (range === 'last_6_months') return new Date(d.getFullYear(), d.getMonth() - 6, d.getDate());
+      if (range === 'this_year') return new Date(d.getFullYear(), 0, 1);
+      return new Date(d.getFullYear(), d.getMonth(), 1);
+    };
+
+    const bizStartDate = getStartDate(businessRange);
+
+    // Business Categories Dynamic Aggregation with Lookup
+    const businessCategoryCounts = await Business.aggregate([
+      { $match: { createdAt: { $gte: bizStartDate } } },
+      { 
+        $addFields: { 
+          convertedCategoryId: { $toObjectId: "$business_category_id" } 
+        } 
+      },
+      {
+        $lookup: {
+          from: 'businesscategories',
+          localField: 'convertedCategoryId',
+          foreignField: '_id',
+          as: 'categoryDetails'
+        }
+      },
+      {
+        $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true }
+      },
+      { 
+        $group: { 
+          _id: "$business_category_id", 
+          name: { $first: "$categoryDetails.name" },
+          count: { $sum: 1 } 
+        } 
+      },
+      { $sort: { count: -1 } },
+      { $sort: { count: -1 } }
+    ]);
+
+    const COLORS = ['#8b5cf6', '#f59e0b', '#10b981', '#3b82f6'];
+    const businessCategoriesChart = businessCategoryCounts.map((item, index) => ({
+      name: item.name || 'Other',
+      value: item.count,
+      color: COLORS[index % COLORS.length]
+    }));
+
+    // Dynamic Chart Buckets Generator
+    const getBuckets = (range) => {
+      const buckets = [];
+      const now = new Date();
+      if (range === 'last_1_month') {
+        for (let i = 3; i >= 0; i--) {
+          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (i * 7));
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((i + 1) * 7));
+          buckets.push({ name: `W${4 - i}`, start, end });
+        }
+      } else if (range === 'last_3_months') {
+        for (let i = 2; i >= 0; i--) {
+          const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+          buckets.push({ name: start.toLocaleString('default', { month: 'short' }), start, end });
+        }
+      } else if (range === 'this_year') {
+        const currentMonth = now.getMonth();
+        for (let i = 0; i <= currentMonth; i++) {
+          const start = new Date(now.getFullYear(), i, 1);
+          const end = new Date(now.getFullYear(), i + 1, 1);
+          buckets.push({ name: start.toLocaleString('default', { month: 'short' }), start, end });
+        }
+      } else { // default 'last_6_months'
+        for (let i = 5; i >= 0; i--) {
+          const start = new Date(now.getFullYear(), now.getMonth() - i, 1);
+          const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+          buckets.push({ name: start.toLocaleString('default', { month: 'short' }), start, end });
+        }
+      }
+      return buckets;
+    };
+
+    const getMonthCount = async (Model, start, end) => {
+      return await Model.countDocuments({ createdAt: { $gte: start, $lt: end } });
+    };
+
+    // Build Members Overview Chart
+    const membersBuckets = getBuckets(membersRange);
+    const membersChart = [];
+    const membersQueries = membersBuckets.map(b => getMonthCount(User, b.start, b.end));
+    const membersResults = await Promise.all(membersQueries);
+    membersBuckets.forEach((b, index) => {
+      membersChart.push({ name: b.name, members: membersResults[index] });
+    });
+
+    // Build Activity Summary Chart
+    const activityBuckets = getBuckets(activityRange);
+    const activityChart = [];
+    const activityQueries = [];
+    activityBuckets.forEach(b => {
+      activityQueries.push(Promise.all([
+        getMonthCount(User, b.start, b.end),
+        getMonthCount(Business, b.start, b.end),
+        getMonthCount(Post, b.start, b.end),
+        getMonthCount(Event, b.start, b.end)
+      ]));
+    });
+    
+    const activityResults = await Promise.all(activityQueries);
+    let totalActivityPosts = 0;
+    let totalActivityMembers = 0;
+    let totalActivityBusinesses = 0;
+    let totalActivityEvents = 0;
+
+    activityBuckets.forEach((b, index) => {
+      const [uCount, bCount, pCount, eCount] = activityResults[index];
+      activityChart.push({
+        name: b.name,
+        posts: pCount,
+        events: eCount, 
+        members: uCount,
+        businesses: bCount
+      });
+      totalActivityPosts += pCount;
+      totalActivityMembers += uCount;
+      totalActivityBusinesses += bCount;
+      totalActivityEvents += eCount;
+    });
+
+    // Build Recent Activity Feed (Using Recent Events instead of Recent Businesses per instruction)
+    const combinedActivity = [
+      ...recentMembers.map(m => ({
+        id: m._id,
+        title: `${m.first_name} ${m.last_name || ''} joined the family directory`,
+        time: m.createdAt,
+        type: 'member',
+        icon: 'user'
+      })),
+      ...recentEvents.map(e => ({
+        id: e._id,
+        title: `Event "${e.title}" was created`,
+        time: e.createdAt,
+        type: 'business', // keeping same color style
+        icon: 'calendar'
+      })),
+      ...recentPosts.map(p => ({
+        id: p._id,
+        title: `${p.title} published on community board`,
+        time: p.createdAt,
+        type: 'post',
+        icon: 'file-text'
+      }))
+    ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 8);
+    
     return apiResponse(res, 200, 'Dashboard statistics fetched successfully', {
-      users: userCount,
-      businesses: businessCount,
-      posts: postCount,
-      committee: committeeCount,
-      orders: postCount * 4,
-      revenue: businessCount * 1500
+      kpis: {
+        users: { total: userCount, growth: usersGrowth },
+        businesses: { total: businessCount, growth: businessGrowth },
+        posts: { total: postCount, growth: postsGrowth },
+        events: { total: eventCount, growth: eventsGrowth } 
+      },
+      charts: {
+        members: membersChart,
+        businessCategories: businessCategoriesChart,
+        activity: activityChart
+      },
+      activitySummaryTotals: {
+         posts: { total: totalActivityPosts, growth: postsGrowth },
+         events: { total: totalActivityEvents, growth: eventsGrowth },
+         members: { total: totalActivityMembers, growth: usersGrowth },
+         businesses: { total: totalActivityBusinesses, growth: businessGrowth }
+      },
+      tables: {
+        recentMembers: recentMembers.map(m => ({
+          _id: m._id,
+          name: `${m.first_name} ${m.last_name || ''}`,
+          email: m.email,
+          status: m.status === 1 ? 'Approved' : 'Pending',
+          image: m.image
+        })),
+        recentEvents: recentEvents.map(e => ({
+          _id: e._id,
+          title: e.title,
+          date: e.start_time,
+          type: e.entry_type || 'Free',
+          status: e.status === 1 ? 'Active' : 'Inactive',
+          image: e.image
+        })),
+        recentPosts: recentPosts.map(p => ({
+          _id: p._id,
+          title: p.title,
+          date: p.createdAt,
+          status: p.status === 1 ? 'Published' : 'Draft',
+          image: p.image
+        }))
+      },
+      recentActivity: combinedActivity,
+      atAGlance: {
+        activeMembers: userCount,
+        activeBusinesses: businessCount,
+        postsThisMonth: thisMonthPosts, 
+        upcomingEvents: 0
+      }
     });
   } catch (error) {
     return apiResponse(res, 500, 'Error in getting stats', { error: error.message });
