@@ -5,7 +5,7 @@ const { parseForm } = require('../middleware/upload');
 
 const router = express.Router();
 
-const masterPermission = (action) => (req) => `${req.params.type === 'business' ? 'businesses' : req.params.type}.${action}`;
+const masterPermission = (action) => (req) => req.params.type === 'business' ? `businesses.${action}` : `masters.${action}`;
 
 router.get('/:type', adminContent.getMasters);
 router.get('/:type/:id', adminContent.getMasterById);

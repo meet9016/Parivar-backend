@@ -173,6 +173,9 @@ const loginAdmin = async (req, res) => {
     if (committeeMember && committeeMember.password) {
       const isMatch = await bcrypt.compare(password, committeeMember.password);
       if (isMatch) {
+        if (committeeMember.status === 0) {
+          return apiResponse(res, 403, 'Access denied: Your account is inactive.');
+        }
         if (committeeMember.role_id && committeeMember.role_id.status === 0) {
           return apiResponse(res, 403, 'Access denied: Your assigned role is inactive.');
         }
@@ -211,6 +214,9 @@ const loginAdmin = async (req, res) => {
     if (user) {
       const isMatch = await user.comparePassword(password);
       if (isMatch) {
+        if (user.status === 0) {
+          return apiResponse(res, 403, 'Access denied: Your account is inactive.');
+        }
         if (user.role_id && user.role_id.status === 0) {
           return apiResponse(res, 403, 'Access denied: Your assigned role is inactive.');
         }
