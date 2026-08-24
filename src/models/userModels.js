@@ -159,7 +159,7 @@ const userSchema = new mongoose.Schema({
 
 }, {
   timestamps: true,
-  strict: false
+  strict: false, id: false
 });
 
 // Pre-save hook to hash password if it was modified

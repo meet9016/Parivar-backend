@@ -29,7 +29,7 @@ const masterSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true,
-  strict: false
+  strict: false, id: false
 });
 
 module.exports = mongoose.model('Master', masterSchema);

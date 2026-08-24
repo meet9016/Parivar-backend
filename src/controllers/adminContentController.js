@@ -21,7 +21,7 @@ const findById = (Model, id, extraQuery = {}) => Model.findOne({
   ...extraQuery,
   $or: [
     { id: String(id) },
-    ...(isObjectId(id) ? [{ _id: id }] : [])
+    ...(isObjectId(id) ? [{ _id: id }, { _id: new mongoose.Types.ObjectId(id) }] : [])
   ]
 });
 

@@ -93,7 +93,7 @@ const configSchema = new mongoose.Schema({
 
 }, {
   timestamps: true,
-  strict: false
+  strict: false, id: false
 });
 
 module.exports = mongoose.model('Config', configSchema);

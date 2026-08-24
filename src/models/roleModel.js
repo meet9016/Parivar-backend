@@ -22,7 +22,7 @@ const roleSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true,
-  strict: false
+  strict: false, id: false
 });
 
 

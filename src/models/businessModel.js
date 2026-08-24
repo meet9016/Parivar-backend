@@ -111,7 +111,7 @@ const businessSchema = new mongoose.Schema({
 
 }, {
   timestamps: true,
-  strict: false
+  strict: false, id: false
 });
 
 module.exports = mongoose.model('Business', businessSchema);

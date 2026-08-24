@@ -61,7 +61,7 @@ created_by: {
 
 }, {
   timestamps: true,
-  strict: false
+  strict: false, id: false
 });
 
 module.exports = mongoose.model('Post', postSchema);
