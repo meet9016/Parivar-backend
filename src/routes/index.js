@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { loginAdmin, updateAdminRecovery, createAdmin } = require('../controllers/adminController');
+const { loginAdmin, updateAdminRecovery, createAdmin, changePassword } = require('../controllers/adminController');
 const { parseForm } = require('../middleware/upload');
 const { protect, requirePermission } = require('../middleware/auth');
 const roleController = require('../controllers/roleController');
@@ -11,6 +11,7 @@ const roleController = require('../controllers/roleController');
 router.post('/register_admin', parseForm, createAdmin);
 router.post('/admin_login', parseForm, loginAdmin);
 router.put('/update_admin', parseForm, updateAdminRecovery);
+router.post('/change-password', protect, parseForm, changePassword);
 
 
 // Unified Routes we updated
@@ -49,6 +50,8 @@ router.use('/business-categories', require('./businessCategoryRoutes'));
 router.use('/bank-details', require('./bankDetailRoutes'));
 router.use('/content', require('./contentRoutes'));
 router.use('/masters', require('./masterRoutes'));
+router.use('/inquiry', require('./inquiryRoutes'));
+router.use('/register-parivar', require('./tenantRoutes'));
 
 // Note: For backwards compatibility with member API, we also mount some of these directly
 // to match member/index.js legacy structure if needed, but the above uses are sufficient.

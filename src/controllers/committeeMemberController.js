@@ -65,7 +65,12 @@ const createcommitteeMember = async (req, res) => {
     };
 
     if (email && email.trim()) {
-      memberData.email = email.trim().toLowerCase();
+      const emailLower = email.trim().toLowerCase();
+      const existingEmail = await CommitteeMember.findOne({ email: emailLower });
+      if (existingEmail) {
+        return apiResponse(res, 400, 'A committee member with this email already exists in this community.');
+      }
+      memberData.email = emailLower;
     }
     if (hashedPassword) {
       memberData.password = hashedPassword;
@@ -105,12 +110,13 @@ const updatecommitteeMember = async (req, res) => {
       delete updateData.password;
     }
 
-    if (updateData.email) {
-      updateData.email = updateData.email.trim().toLowerCase();
-    }
-
-    if (!updateData.role_id) {
-      delete updateData.role_id;
+    if (updateData.email && updateData.email.trim()) {
+      const emailLower = updateData.email.trim().toLowerCase();
+      const existingEmail = await CommitteeMember.findOne({ email: emailLower, _id: { $ne: id } });
+      if (existingEmail) {
+        return apiResponse(res, 400, 'Another committee member with this email already exists in this community.');
+      }
+      updateData.email = emailLower;
     }
 
     if (!updateData.role_id) {

@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/userModels');
+const CommitteeMember = require('../models/committeeMemberModel');
 const { ALL_PERMISSION_KEYS } = require('../config/permissions');
 
 const isInvalidTokenValue = (token) => {
@@ -37,18 +38,36 @@ const getTokenFromRequest = (req) => {
   return isInvalidTokenValue(token) ? null : token;
 };
 
-const CommitteeMember = require('../models/committeeMemberModel');
+const { tenantContext } = require('../utils/tenantContext');
 
-const findUserFromToken = async (decoded) => {
+const getActiveUserModel = (req) => {
+  const conn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
+  if (conn) {
+    return conn.models.User || conn.model('User', User.schema);
+  }
+  return User;
+};
+
+const getActiveCommitteeModel = (req) => {
+  const conn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
+  if (conn) {
+    return conn.models.CommitteeMember || conn.model('CommitteeMember', CommitteeMember.schema);
+  }
+  return CommitteeMember;
+};
+
+const findUserFromToken = async (decoded, req) => {
   const userId = decoded.id || decoded._id || decoded.userId;
+  const UserModel = getActiveUserModel(req);
+  const CMModel = getActiveCommitteeModel(req);
 
   if (userId && mongoose.isValidObjectId(userId)) {
-    const user = await User.findById(userId).select('-password').populate('role_id');
+    const user = await UserModel.findById(userId).select('-password').populate('role_id');
     if (user) {
       return user;
     }
 
-    const committeeMember = await CommitteeMember.findById(userId).select('-password').populate('role_id');
+    const committeeMember = await CMModel.findById(userId).select('-password').populate('role_id');
     if (committeeMember) {
       const cmObj = committeeMember.toObject ? committeeMember.toObject() : { ...committeeMember };
       cmObj.is_committee = true;
@@ -57,23 +76,23 @@ const findUserFromToken = async (decoded) => {
   }
 
   if (userId) {
-    const user = await User.findOne({ member_id: String(userId) }).select('-password').populate('role_id');
+    const user = await UserModel.findOne({ member_id: String(userId) }).select('-password').populate('role_id');
     if (user) {
       return user;
     }
   }
 
   if (decoded.member_id) {
-    const user = await User.findOne({ member_id: String(decoded.member_id) }).select('-password').populate('role_id');
+    const user = await UserModel.findOne({ member_id: String(decoded.member_id) }).select('-password').populate('role_id');
     if (user) {
       return user;
     }
   }
 
   if (decoded.number) {
-    const user = await User.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
+    const user = await UserModel.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
     if (user) return user;
-    const committeeMember = await CommitteeMember.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
+    const committeeMember = await CMModel.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
     if (committeeMember) {
       const cmObj = committeeMember.toObject ? committeeMember.toObject() : { ...committeeMember };
       cmObj.is_committee = true;
@@ -105,7 +124,7 @@ const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretfamilykey');
-    req.user = await findUserFromToken(decoded);
+    req.user = await findUserFromToken(decoded, req);
 
     if (!req.user) {
       return res.status(401).json({
@@ -152,7 +171,7 @@ const protect = async (req, res, next) => {
 
 const getRolePermissions = (user = {}) => {
   const roleName = user.role_id?.name?.toLowerCase() || user.role_id?.roleName?.toLowerCase() || String(user.role || '').toLowerCase();
-  if (roleName === 'admin' || roleName === 'super admin' || user.role === 'superadmin' || user.committee_role === 'President' || user.is_super_admin === true) {
+  if (roleName === 'admin' || roleName === 'super admin' || user.role === 'superadmin' || user.committee_role === 'President' || user.is_super_admin === true || (user.is_committee === true && (!user.role_id || user.committee_role === 'Admin'))) {
     return ALL_PERMISSION_KEYS;
   }
 

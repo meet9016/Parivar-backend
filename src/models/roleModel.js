@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 const { ALL_PERMISSION_KEYS } = require('../config/permissions');
 
@@ -26,4 +27,4 @@ const roleSchema = new mongoose.Schema({
 });
 
 
-module.exports = mongoose.model('Role', roleSchema);
+module.exports = createTenantProxy('Role', roleSchema);

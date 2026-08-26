@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 
 const contactInquirySchema = new mongoose.Schema({
@@ -42,4 +43,4 @@ const contactInquirySchema = new mongoose.Schema({
   strict: false, id: false
 });
 
-module.exports = mongoose.model('ContactInquiry', contactInquirySchema);
+module.exports = createTenantProxy('ContactInquiry', contactInquirySchema);

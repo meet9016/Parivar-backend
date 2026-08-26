@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 
 const galleryCategorySchema = new mongoose.Schema({
@@ -19,4 +20,4 @@ const galleryCategorySchema = new mongoose.Schema({
 });
 
 
-module.exports = mongoose.model('GalleryCategory', galleryCategorySchema);
+module.exports = createTenantProxy('GalleryCategory', galleryCategorySchema);

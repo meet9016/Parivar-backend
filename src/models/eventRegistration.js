@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 
 const eventRegistrationSchema = new mongoose.Schema({
@@ -52,4 +53,4 @@ const eventRegistrationSchema = new mongoose.Schema({
 eventRegistrationSchema.index({ event_id: 1, email: 1 }, { unique: true });
 eventRegistrationSchema.index({ event_id: 1, number: 1 }, { unique: true, sparse: true }); 
 
-module.exports = mongoose.model('EventRegistration', eventRegistrationSchema);
+module.exports = createTenantProxy('EventRegistration', eventRegistrationSchema);

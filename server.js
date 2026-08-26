@@ -20,7 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Requested-With, Accept, Origin, x-tenant-id');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).send();
@@ -50,7 +50,8 @@ app.post('/test', (req, res) => {
 });
 
 // Unified API Routes
-app.use('/api', routes);
+const tenantMiddleware = require('./src/middleware/tenantMiddleware');
+app.use('/api', tenantMiddleware, routes);
 
 app.use((req, res) => {
   res.status(404).json({

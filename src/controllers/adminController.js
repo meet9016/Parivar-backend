@@ -209,10 +209,39 @@ const loginAdmin = async (req, res) => {
     }
 
     // 2. Fallback to User collection for legacy/main Admin login
-    const user = await User.findOne({ email: emailQuery }).populate('role_id');
+    // Get the correct connection — tenant-specific or auto-lookup from registry by email
+    const { tenantContext } = require('../utils/tenantContext');
+    const { getTenantConnection, getRegistryConnection } = require('../config/registryDb');
+    const store = tenantContext.getStore();
+    let UserModel;
+    let targetTenantSlug = null;
+
+    if (store?.tenantConn) {
+      // Use directly from tenant connection passed via header
+      const tenantConn = store.tenantConn;
+      UserModel = tenantConn.models.User || tenantConn.model('User', User.schema);
+    } else {
+      // Auto-detect Tenant from Registry by Admin Email
+      try {
+        const registryConn = await getRegistryConnection();
+        const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
+        const tenant = await Tenant.findOne({ 'admin.email': emailQuery });
+        if (tenant) {
+          const tenantConn = await getTenantConnection(tenant.db_name);
+          UserModel = tenantConn.models.User || tenantConn.model('User', User.schema);
+          targetTenantSlug = tenant.slug;
+        } else {
+          UserModel = User;
+        }
+      } catch (err) {
+        UserModel = User;
+      }
+    }
+    
+    const user = await UserModel.findOne({ email: emailQuery }).populate('role_id');
 
     if (user) {
-      const isMatch = await user.comparePassword(password);
+      const isMatch = await bcrypt.compare(password, user.password);
       if (isMatch) {
         if (user.status === 0) {
           return apiResponse(res, 403, 'Access denied: Your account is inactive.');
@@ -243,12 +272,14 @@ const loginAdmin = async (req, res) => {
           role_id: user.role_id?._id ? String(user.role_id._id) : '',
           role_name: user.role_id?.name || '',
           permissions,
-          is_super_admin: user.is_committee || user.relation === 'Self'
+          is_super_admin: user.is_committee || user.relation === 'Self',
+          tenant_code: targetTenantSlug || req.headers['x-tenant-id'] || ''
         };
 
         return apiResponse(res, 200, 'Login successful', {
           token,
-          user: userData
+          user: userData,
+          tenant_code: targetTenantSlug || req.headers['x-tenant-id'] || ''
         });
       }
     }
@@ -362,6 +393,19 @@ const getStats = async (req, res) => {
   try {
     const { membersRange = 'last_6_months', activityRange = 'last_6_months', businessRange = 'last_6_months' } = req.query;
     const Event = require('../models/eventModel');
+
+    // ── Tenant-aware model resolution ──
+    const conn = req.tenantConn || null;
+    const getModel = (ProxyModel, modelName) => {
+      if (conn) {
+        return conn.models[modelName] || conn.model(modelName, ProxyModel.schema);
+      }
+      return ProxyModel;
+    };
+    const TUser     = getModel(User,     'User');
+    const TBusiness = getModel(Business, 'Business');
+    const TPost     = getModel(Post,     'Post');
+    const TEvent    = getModel(Event,    'Event');
     
     const today = new Date();
     const startOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -373,22 +417,22 @@ const getStats = async (req, res) => {
       thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
       recentMembers, recentEvents, recentPosts
     ] = await Promise.all([
-      User.countDocuments({}),
-      Business.countDocuments({}),
-      Post.countDocuments({}),
-      Event.countDocuments({}),
-      User.countDocuments({ is_committee: true }),
-      User.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      Business.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      Post.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      Event.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      User.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      Business.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      Post.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      Event.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      User.find({}).sort({ createdAt: -1 }).limit(5).select('first_name last_name email status image createdAt'),
-      Event.find({}).sort({ createdAt: -1 }).limit(5).select('title start_time entry_type status image createdAt'),
-      Post.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt')
+      TUser.countDocuments({}),
+      TBusiness.countDocuments({}),
+      TPost.countDocuments({}),
+      TEvent.countDocuments({}),
+      TUser.countDocuments({ is_committee: true }),
+      TUser.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TBusiness.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TPost.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TEvent.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TUser.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      TBusiness.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      TPost.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      TEvent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      TUser.find({}).sort({ createdAt: -1 }).limit(5).select('first_name last_name email status image createdAt'),
+      TEvent.find({}).sort({ createdAt: -1 }).limit(5).select('title start_time entry_type status image createdAt'),
+      TPost.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt')
     ]);
 
     // Calculate percentage changes (This Month vs Last Month)
@@ -414,7 +458,7 @@ const getStats = async (req, res) => {
     const bizStartDate = getStartDate(businessRange);
 
     // Business Categories Dynamic Aggregation with Lookup
-    const businessCategoryCounts = await Business.aggregate([
+    const businessCategoryCounts = await TBusiness.aggregate([
       { $match: { createdAt: { $gte: bizStartDate } } },
       { 
         $addFields: { 
@@ -490,7 +534,7 @@ const getStats = async (req, res) => {
     // Build Members Overview Chart
     const membersBuckets = getBuckets(membersRange);
     const membersChart = [];
-    const membersQueries = membersBuckets.map(b => getMonthCount(User, b.start, b.end));
+    const membersQueries = membersBuckets.map(b => getMonthCount(TUser, b.start, b.end));
     const membersResults = await Promise.all(membersQueries);
     membersBuckets.forEach((b, index) => {
       membersChart.push({ name: b.name, members: membersResults[index] });
@@ -502,10 +546,10 @@ const getStats = async (req, res) => {
     const activityQueries = [];
     activityBuckets.forEach(b => {
       activityQueries.push(Promise.all([
-        getMonthCount(User, b.start, b.end),
-        getMonthCount(Business, b.start, b.end),
-        getMonthCount(Post, b.start, b.end),
-        getMonthCount(Event, b.start, b.end)
+        getMonthCount(TUser, b.start, b.end),
+        getMonthCount(TBusiness, b.start, b.end),
+        getMonthCount(TPost, b.start, b.end),
+        getMonthCount(TEvent, b.start, b.end)
       ]));
     });
     
@@ -612,10 +656,63 @@ const getStats = async (req, res) => {
 
 
 
+// Change password for logged in admin
+const changePassword = async (req, res) => {
+  try {
+    const { new_password, confirm_password } = req.body;
+
+    if (!new_password) {
+      return apiResponse(res, 400, 'New password is required');
+    }
+
+    if (confirm_password && new_password !== confirm_password) {
+      return apiResponse(res, 400, 'Passwords do not match');
+    }
+
+    if (new_password.length < 5) {
+      return apiResponse(res, 400, 'Password must be at least 5 characters');
+    }
+
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      return apiResponse(res, 401, 'Unauthorized: User not found in request');
+    }
+
+    const conn = req.tenantConn || null;
+    let UserModel;
+    if (conn) {
+      UserModel = conn.models.User || conn.model('User', User.schema);
+    } else {
+      UserModel = User;
+    }
+
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      // Check committee member
+      let CMModel = conn ? (conn.models.CommitteeMember || conn.model('CommitteeMember', CommitteeMember.schema)) : CommitteeMember;
+      const cm = await CMModel.findById(userId);
+      if (!cm) {
+        return apiResponse(res, 404, 'Admin user not found');
+      }
+      cm.password = new_password;
+      await cm.save();
+      return apiResponse(res, 200, 'Password updated successfully');
+    }
+
+    user.password = new_password;
+    await user.save();
+
+    return apiResponse(res, 200, 'Password updated successfully');
+  } catch (error) {
+    return apiResponse(res, 500, 'Error updating password', { error: error.message });
+  }
+};
+
 module.exports = {
   createAdmin,
   loginAdmin,
   updateAdminRecovery,
   getStats,
+  changePassword
 
 };

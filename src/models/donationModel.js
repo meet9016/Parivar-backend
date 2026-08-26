@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 
 const donationSchema = new mongoose.Schema({
@@ -41,4 +42,4 @@ const donationSchema = new mongoose.Schema({
   strict: false, id: false
 });
 
-module.exports = mongoose.model('Donation', donationSchema);
+module.exports = createTenantProxy('Donation', donationSchema);

@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 
 const committeeMemberSchema = new mongoose.Schema({
@@ -44,4 +45,4 @@ const committeeMemberSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-module.exports = mongoose.model('CommitteeMember', committeeMemberSchema);
+module.exports = createTenantProxy('CommitteeMember', committeeMemberSchema);

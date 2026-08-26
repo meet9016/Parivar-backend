@@ -1,3 +1,4 @@
+const { createTenantProxy } = require('../utils/tenantContext');
 const mongoose = require('mongoose');
 
 const jobVacancySchema = new mongoose.Schema({
@@ -62,4 +63,4 @@ const jobVacancySchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-module.exports = mongoose.model('JobVacancy', jobVacancySchema);
+module.exports = createTenantProxy('JobVacancy', jobVacancySchema);
