@@ -161,7 +161,7 @@ const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password.trim()) {
       return apiResponse(res, 400, 'Email and password are required');
     }
 
