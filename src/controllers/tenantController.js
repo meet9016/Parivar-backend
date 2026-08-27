@@ -299,11 +299,6 @@ const updateParivarPassword = async (req, res) => {
   }
 };
 
-// /**
- * POST /api/register-parivar/superadmin-login
- * Body: { email, password }
- * Default credentials: superadmin@gmail.com / admin@gmail
- */
 const loginSuperAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
