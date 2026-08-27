@@ -54,7 +54,11 @@ const getMatrimonies = async (req, res) => {
         biodata: item.biodata || '',
         person_image: item.person_image || '',
         member_id: item.member_id || '',
-        is_own: req.user ? (String(item.member_id) === String(req.user.member_id || req.user._id)) : false,
+        is_own: req.user ? (
+          String(item.member_id) === String(req.user.member_id) || 
+          String(item.member_id) === String(req.user._id) || 
+          String(item.member_id) === String(req.user.id)
+        ) : false,
         status: Number(item.status ?? 0)
       })),
       ...(pagination ? { pagination } : {})
@@ -103,7 +107,11 @@ const getMatrimonyById = async (req, res) => {
         biodata: matrimony.biodata || '',
         person_image: matrimony.person_image || '',
         member_id: matrimony.member_id || '',
-        is_own: req.user ? (String(matrimony.member_id) === String(req.user.member_id || req.user._id)) : false,
+        is_own: req.user ? (
+          String(matrimony.member_id) === String(req.user.member_id) || 
+          String(matrimony.member_id) === String(req.user._id) || 
+          String(matrimony.member_id) === String(req.user.id)
+        ) : false,
         status: Number(matrimony.status ?? 0)
       }
     });

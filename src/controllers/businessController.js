@@ -53,7 +53,11 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {
   website: b.website || '',
   image: publicUrl(req, b.image || b.image || ''),
   gallery_images: (b.gallery_images || []).map(img => publicUrl(req, img)),
-  is_own: req.user ? (String(b.member_id) === String(req.user.member_id || req.user._id)) : false,
+  is_own: req.user ? (
+    String(b.member_id) === String(req.user.member_id) || 
+    String(b.member_id) === String(req.user._id) || 
+    String(b.member_id) === String(req.user.id)
+  ) : false,
   status: b.status !== undefined ? Number(b.status) : 1,
   createdAt: b.createdAt || '',
   updatedAt: b.updatedAt || ''
