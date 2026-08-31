@@ -20,6 +20,20 @@ const tenantMiddleware = async (req, res, next) => {
     // Also support passing the full db name for flexibility
     const dbName = tenantSlug.startsWith('parivar_') ? tenantSlug : `parivar_${tenantSlug}`;
 
+    // Check if the tenant is suspended in the central registry
+    const { getRegistryConnection } = require('../config/registryDb');
+    const tenantSchema = require('../models/tenantSchema');
+    const registryConn = await getRegistryConnection();
+    const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', tenantSchema);
+    const tenant = await Tenant.findOne({ slug: tenantSlug });
+    if (tenant && tenant.status === 0) {
+      return res.status(403).json({
+        status: 403,
+        message: 'Access denied: Your Parivar community account has been suspended.',
+        data: []
+      });
+    }
+
     // Get or initialize connection for this tenant
     const tenantConn = await getTenantConnection(dbName);
 

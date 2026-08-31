@@ -216,6 +216,25 @@ const loginAdmin = async (req, res) => {
     let UserModel;
     let targetTenantSlug = null;
 
+    // Pre-check tenant status in registry to block suspended login
+    try {
+      const registryConn = await getRegistryConnection();
+      const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
+      const tenantIdHeader = req.headers['x-tenant-id']?.toLowerCase();
+      let checkTenant = null;
+      if (tenantIdHeader) {
+        checkTenant = await Tenant.findOne({ slug: tenantIdHeader });
+      } else {
+        checkTenant = await Tenant.findOne({ 'admin.email': emailQuery });
+      }
+
+      if (checkTenant && checkTenant.status === 0) {
+        return apiResponse(res, 403, 'Access denied: Your Parivar community account has been suspended.');
+      }
+    } catch (err) {
+      console.error('[loginAdmin] Tenant status check failed:', err);
+    }
+
     if (store?.tenantConn) {
       // Use directly from tenant connection passed via header
       const tenantConn = store.tenantConn;
@@ -227,6 +246,9 @@ const loginAdmin = async (req, res) => {
         const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
         const tenant = await Tenant.findOne({ 'admin.email': emailQuery });
         if (tenant) {
+          if (tenant.status === 0) {
+            return apiResponse(res, 403, 'Access denied: Your Parivar community account has been suspended.');
+          }
           const tenantConn = await getTenantConnection(tenant.db_name);
           UserModel = tenantConn.models.User || tenantConn.model('User', User.schema);
           targetTenantSlug = tenant.slug;
