@@ -52,6 +52,7 @@ router.use('/content', require('./contentRoutes'));
 router.use('/masters', require('./masterRoutes'));
 router.use('/inquiry', require('./inquiryRoutes'));
 router.use('/register-parivar', require('./tenantRoutes'));
+router.use('/pricing', require('./pricingRoutes'));
 
 // Note: For backwards compatibility with member API, we also mount some of these directly
 // to match member/index.js legacy structure if needed, but the above uses are sufficient.
