@@ -16,7 +16,6 @@ const requestData = (req) => ({
   ...req.body
 });
 
-const getMatrimonies = async (req, res) => {
 const checkIsOwn = (item, user) => {
   if (!user) return false;
   const userIds = new Set([
