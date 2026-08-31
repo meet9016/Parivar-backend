@@ -45,12 +45,53 @@ const extractVacancyData = (data) => {
   return { title, description, qualifications, company_name, location, job_type, salary, contact_email, contact_number, status };
 };
 
+const checkIsOwn = (item, user) => {
+  if (!user) return false;
+  const userIds = new Set([
+    String(user._id || ''),
+    String(user.id || ''),
+    String(user.member_id || '')
+  ].filter(Boolean));
+
+  const itemIds = [
+    String(item.created_by?.id || ''),
+    String(item.member_id || '')
+  ].filter(Boolean);
+
+  return itemIds.some(id => userIds.has(id));
+};
+
 const getJobVacancies = async (req, res) => {
   try {
     let baseQuery = {};
     const { is_own } = req.query;
-    if (is_own === 'true' && req.user) {
-      baseQuery['created_by.id'] = String(req.user._id) || String(req.user.id);
+    const user = req.user;
+
+    if (user) {
+      const userIds = [
+        String(user._id || ''),
+        String(user.id || ''),
+        String(user.member_id || '')
+      ].filter(Boolean);
+      const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+      const allConditions = [...userIds, ...objectIds];
+
+      if (is_own === 'true') {
+        baseQuery.$or = [
+          { 'created_by.id': { $in: allConditions } },
+          { member_id: { $in: allConditions } }
+        ];
+        delete req.query.status;
+      } else if (req.query.status === undefined || req.query.status === null || req.query.status === '') {
+        baseQuery.$or = [
+          { status: 1 },
+          { status: '1' },
+          { status: { $exists: false } },
+          { status: null },
+          { 'created_by.id': { $in: allConditions } },
+          { member_id: { $in: allConditions } }
+        ];
+      }
     }
     const { data: jobVacancies, pagination } = await queryHelper(JobVacancy, req.query, {
       baseQuery,
@@ -59,11 +100,11 @@ const getJobVacancies = async (req, res) => {
       defaultSort: { createdAt: -1 },
       lean: false
     });
-  const data = jobVacancies.map((job) => ({
-  ...job.toObject ? job.toObject() : job,
-  image: publicUrl(req, job.image || ''),
-  is_own: String(req.user?._id) === String(job.created_by?.id)
-}));
+    const data = jobVacancies.map((job) => ({
+      ...job.toObject ? job.toObject() : job,
+      image: publicUrl(req, job.image || ''),
+      is_own: checkIsOwn(job, req.user)
+    }));
     return apiResponse(res, 200, "Job vacancies retrieved successfully", data, pagination);
 
 

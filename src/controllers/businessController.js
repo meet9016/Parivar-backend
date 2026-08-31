@@ -32,6 +32,22 @@ const findBusinessByRequestId = (req, id) => {
   });
 };
 
+const checkIsOwn = (item, user) => {
+  if (!user) return false;
+  const userIds = new Set([
+    String(user._id || ''),
+    String(user.id || ''),
+    String(user.member_id || '')
+  ].filter(Boolean));
+
+  const itemIds = [
+    String(item.created_by?.id || ''),
+    String(item.member_id || '')
+  ].filter(Boolean);
+
+  return itemIds.some(id => userIds.has(id));
+};
+
 const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {}) => ({
   id: String(b._id),
   member_id: b.member_id || '',
@@ -62,9 +78,7 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {
   website: b.website || '',
   image: publicUrl(req, b.image || b.image || ''),
   gallery_images: (b.gallery_images || []).map(img => publicUrl(req, img)),
-  is_own: req.user ? (
-    String(b.created_by?.id) === String(req.user._id) || String(b.created_by?.id) === String(req.user.id)
-  ) : false,
+  is_own: checkIsOwn(b, req.user),
   status: b.status !== undefined ? Number(b.status) : 1,
   createdAt: b.createdAt || '',
   updatedAt: b.updatedAt || ''
@@ -74,8 +88,35 @@ const getBusinesses = async (req, res) => {
   try {
     let baseQuery = {};
     const { is_own } = req.query;
-    if (is_own === 'true' && req.user) {
-      baseQuery['created_by.id'] = String(req.user._id) || String(req.user.id);
+    const user = req.user;
+    const permissions = getRolePermissions(user);
+    const isAdmin = user?.committee_role === 'President' || permissions?.includes('businesses.edit') || !!user?.role_id;
+
+    if (user) {
+      const userIds = [
+        String(user._id || ''),
+        String(user.id || ''),
+        String(user.member_id || '')
+      ].filter(Boolean);
+      const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+      const allConditions = [...userIds, ...objectIds];
+
+      if (is_own === 'true') {
+        baseQuery.$or = [
+          { 'created_by.id': { $in: allConditions } },
+          { member_id: { $in: allConditions } }
+        ];
+        delete req.query.status;
+      } else if (!isAdmin && (req.query.status === undefined || req.query.status === null || req.query.status === '')) {
+        baseQuery.$or = [
+          { status: 1 },
+          { status: '1' },
+          { status: { $exists: false } },
+          { status: null },
+          { 'created_by.id': { $in: allConditions } },
+          { member_id: { $in: allConditions } }
+        ];
+      }
     }
     const [{ data: businesses, pagination }, categories, countries, states, cities] = await Promise.all([
       queryHelper(Business, req.query, {

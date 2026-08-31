@@ -17,18 +17,53 @@ const requestData = (req) => ({
 });
 
 const getMatrimonies = async (req, res) => {
+const checkIsOwn = (item, user) => {
+  if (!user) return false;
+  const userIds = new Set([
+    String(user._id || ''),
+    String(user.id || ''),
+    String(user.member_id || '')
+  ].filter(Boolean));
+
+  const itemIds = [
+    String(item.created_by?.id || ''),
+    String(item.member_id || '')
+  ].filter(Boolean);
+
+  return itemIds.some(id => userIds.has(id));
+};
+
+const getMatrimonies = async (req, res) => {
   try {
     let baseQuery = {};
     const { is_own } = req.query;
-    if (is_own === 'true' && req.user) {
-      baseQuery['created_by.id'] = String(req.user._id) || String(req.user.id);
-    } else {
-      // By default, for non-own fetches, admins can see all, users only see active ones.
-      // But typically we show status=1 if not specified. Wait, if it's Admin software, they might pass status directly.
-      // If we don't force baseQuery.status = 1 here, Admin can see all (since queryHelper allows filtering by status).
-      // If they explicitly pass status=1 it will filter. Let's not force status=1 here so Admin can see pending.
-      // Wait, user says "bydefault status is pending admin approva kare pachi list ma show thase." This means for normal users, they should only see status=1.
-      // In the admin panel, they might fetch all. We'll rely on the frontend to pass `status=1` if it's the app, or admin will just fetch without `status`.
+    const user = req.user;
+
+    if (user) {
+      const userIds = [
+        String(user._id || ''),
+        String(user.id || ''),
+        String(user.member_id || '')
+      ].filter(Boolean);
+      const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+      const allConditions = [...userIds, ...objectIds];
+
+      if (is_own === 'true') {
+        baseQuery.$or = [
+          { 'created_by.id': { $in: allConditions } },
+          { member_id: { $in: allConditions } }
+        ];
+        delete req.query.status;
+      } else if (req.query.status === undefined || req.query.status === null || req.query.status === '') {
+        baseQuery.$or = [
+          { status: 1 },
+          { status: '1' },
+          { status: { $exists: false } },
+          { status: null },
+          { 'created_by.id': { $in: allConditions } },
+          { member_id: { $in: allConditions } }
+        ];
+      }
     }
 
     const { data: matrimonies, pagination } = await queryHelper(Matrimony, requestData(req), {
@@ -62,9 +97,7 @@ const getMatrimonies = async (req, res) => {
         biodata: item.biodata || '',
         person_image: item.person_image || '',
         member_id: item.member_id || '',
-        is_own: req.user ? (
-          String(item.created_by?.id) === String(req.user._id) || String(item.created_by?.id) === String(req.user.id)
-        ) : false,
+        is_own: checkIsOwn(item, req.user),
         status: Number(item.status ?? 0)
       })),
       ...(pagination ? { pagination } : {})
@@ -113,9 +146,7 @@ const getMatrimonyById = async (req, res) => {
         biodata: matrimony.biodata || '',
         person_image: matrimony.person_image || '',
         member_id: matrimony.member_id || '',
-        is_own: req.user ? (
-          String(matrimony.created_by?.id) === String(req.user._id) || String(matrimony.created_by?.id) === String(req.user.id)
-        ) : false,
+        is_own: checkIsOwn(matrimony, req.user),
         status: Number(matrimony.status ?? 0)
       }
     });
