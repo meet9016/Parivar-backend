@@ -109,6 +109,14 @@ const businessSchema = new mongoose.Schema({
     default: 0,
     index: true
   },
+  created_by: {
+    id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
+    },
+    name: { type: String, default: '' }
+  },
 
 }, {
   timestamps: true,

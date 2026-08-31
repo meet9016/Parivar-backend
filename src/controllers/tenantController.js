@@ -43,6 +43,8 @@ const registerParivar = async (req, res) => {
   try {
     const {
       parivar_name,
+      village_name,
+      community_type = 'Parivar',
       admin_first_name,
       admin_last_name = '',
       admin_email,
@@ -50,11 +52,13 @@ const registerParivar = async (req, res) => {
       admin_password = 'Parivar@123',
     } = req.body;
 
+    const actualName = parivar_name || village_name;
+
     // ── 1. Validate required fields ──
-    if (!parivar_name || !admin_first_name || !admin_email || !admin_mobile) {
+    if (!actualName || !admin_first_name || !admin_email || !admin_mobile) {
       return apiResponse(
         res, 400,
-        'parivar_name, admin_first_name, admin_email and admin_mobile are required'
+        'parivar_name/village_name, admin_first_name, admin_email and admin_mobile are required'
       );
     }
 
@@ -63,7 +67,7 @@ const registerParivar = async (req, res) => {
     }
 
     // ── 2. Build slug & db_name ──
-    const slug    = toSlug(parivar_name);
+    const slug    = toSlug(actualName);
     const db_name = `parivar_${slug}`;
 
     // ── 3. Check uniqueness in registry DB (slug, db_name, and global admin_email) ──
@@ -90,7 +94,8 @@ const registerParivar = async (req, res) => {
 
     // ── 4. Create tenant record in registry ──
     const tenant = new Tenant({
-      parivar_name,
+      parivar_name: actualName,
+      community_type,
       slug,
       db_name,
       admin: {
@@ -136,6 +141,8 @@ const registerParivar = async (req, res) => {
       tenant: {
         _id:          tenant._id,
         parivar_name: tenant.parivar_name,
+        ...(tenant.community_type === 'Village' ? { village_name: tenant.parivar_name } : {}),
+        community_type: tenant.community_type,
         slug:         tenant.slug,
         db_name:      tenant.db_name,
         plan:         tenant.plan,
@@ -237,7 +244,13 @@ const updateParivar = async (req, res) => {
       }
     }
 
-    return apiResponse(res, 200, 'Parivar updated successfully', tenant);
+    const responseData = tenant.toObject();
+    if (tenant.community_type === 'Village') {
+      responseData.village_name = responseData.parivar_name;
+      delete responseData.parivar_name;
+    }
+
+    return apiResponse(res, 200, 'Parivar updated successfully', responseData);
   } catch (error) {
     return apiResponse(res, 500, 'Error updating Parivar', { error: error.message });
   }

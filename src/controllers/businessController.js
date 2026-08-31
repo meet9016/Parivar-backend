@@ -5,8 +5,17 @@ const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
 const City = require('../models/cityModel');
 const { getRolePermissions } = require('../middleware/auth');
-const { apiResponse, memberPublicId, publicUrl } = require('../utils/apiResponse');
+const { apiResponse, memberPublicId, publicUrl, fullName } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+const mongoose = require('mongoose');
+
+const createdBy = (req) => {
+  const user = req.user || {};
+  return {
+    id: user._id || user.id || '',
+    name: fullName(user) || user.name || user.username || user.email || ''
+  };
+};
 
 const requestData = (req) => ({
   ...req.query,
@@ -54,9 +63,7 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {
   image: publicUrl(req, b.image || b.image || ''),
   gallery_images: (b.gallery_images || []).map(img => publicUrl(req, img)),
   is_own: req.user ? (
-    String(b.member_id) === String(req.user.member_id) || 
-    String(b.member_id) === String(req.user._id) || 
-    String(b.member_id) === String(req.user.id)
+    String(b.created_by?.id) === String(req.user._id) || String(b.created_by?.id) === String(req.user.id)
   ) : false,
   status: b.status !== undefined ? Number(b.status) : 1,
   createdAt: b.createdAt || '',
@@ -68,7 +75,7 @@ const getBusinesses = async (req, res) => {
     let baseQuery = {};
     const { is_own } = req.query;
     if (is_own === 'true' && req.user) {
-      baseQuery.member_id = req.user.member_id || String(req.user._id);
+      baseQuery['created_by.id'] = String(req.user._id) || String(req.user.id);
     }
     const [{ data: businesses, pagination }, categories, countries, states, cities] = await Promise.all([
       queryHelper(Business, req.query, {
@@ -86,7 +93,7 @@ const getBusinesses = async (req, res) => {
     const owners = memberIds.length > 0 ? await User.find({
       $or: [
         { id: { $in: memberIds } },
-        { _id: { $in: memberIds.filter(id => require('mongoose').isValidObjectId(id)) } }
+        { _id: { $in: memberIds.filter(id => mongoose.isValidObjectId(id)) } }
       ]
     }).lean() : [];
 
@@ -159,31 +166,31 @@ const getBusinessById = async (req, res) => {
       BusinessCategory.findOne({
         $or: [
           { id: String(business.business_category_id) },
-          ...(require('mongoose').isValidObjectId(business.business_category_id) ? [{ _id: business.business_category_id }] : [])
+          ...(mongoose.isValidObjectId(business.business_category_id) ? [{ _id: business.business_category_id }] : [])
         ]
       }).lean(),
       Country.findOne({
         $or: [
           { id: String(business.country_id) },
-          ...(require('mongoose').isValidObjectId(business.country_id) ? [{ _id: business.country_id }] : [])
+          ...(mongoose.isValidObjectId(business.country_id) ? [{ _id: business.country_id }] : [])
         ]
       }).lean(),
       State.findOne({
         $or: [
           { id: String(business.state_id) },
-          ...(require('mongoose').isValidObjectId(business.state_id) ? [{ _id: business.state_id }] : [])
+          ...(mongoose.isValidObjectId(business.state_id) ? [{ _id: business.state_id }] : [])
         ]
       }).lean(),
       City.findOne({
         $or: [
           { id: String(business.city_id) },
-          ...(require('mongoose').isValidObjectId(business.city_id) ? [{ _id: business.city_id }] : [])
+          ...(mongoose.isValidObjectId(business.city_id) ? [{ _id: business.city_id }] : [])
         ]
       }).lean(),
       User.findOne({
         $or: [
           { id: String(business.member_id) },
-          ...(require('mongoose').isValidObjectId(business.member_id) ? [{ _id: business.member_id }] : [])
+          ...(mongoose.isValidObjectId(business.member_id) ? [{ _id: business.member_id }] : [])
         ]
       }).lean()
     ]);
@@ -348,6 +355,7 @@ const addBusinessDetails = async (req, res) => {
     businessData.member_id = currentMemberId;
     businessData.status = Number(status ?? 0);
     businessData.cdate = new Date().toISOString().slice(0, 10);
+    businessData.created_by = createdBy(req);
 
     const doc = await Business.create(businessData);
 

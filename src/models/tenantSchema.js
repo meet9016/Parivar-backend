@@ -13,6 +13,11 @@ const tenantSchema = new mongoose.Schema(
       trim: true,
     },
 
+    community_type: {
+      type: String,
+      default: 'Parivar',
+    },
+
     // URL-safe slug  e.g. "patel"  (used as DB name suffix)
     slug: {
       type: String,

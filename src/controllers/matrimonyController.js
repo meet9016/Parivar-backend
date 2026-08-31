@@ -1,7 +1,15 @@
 const mongoose = require('mongoose');
 const Matrimony = require('../models/matrimonyModel');
-const { apiResponse, publicUrl } = require('../utils/apiResponse');
+const { apiResponse, publicUrl, fullName } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+
+const createdBy = (req) => {
+  const user = req.user || {};
+  return {
+    id: user._id || user.id || '',
+    name: fullName(user) || user.name || user.username || user.email || ''
+  };
+};
 
 const requestData = (req) => ({
   ...req.query,
@@ -13,7 +21,7 @@ const getMatrimonies = async (req, res) => {
     let baseQuery = {};
     const { is_own } = req.query;
     if (is_own === 'true' && req.user) {
-      baseQuery.member_id = req.user.member_id || String(req.user._id);
+      baseQuery['created_by.id'] = String(req.user._id) || String(req.user.id);
     } else {
       // By default, for non-own fetches, admins can see all, users only see active ones.
       // But typically we show status=1 if not specified. Wait, if it's Admin software, they might pass status directly.
@@ -55,9 +63,7 @@ const getMatrimonies = async (req, res) => {
         person_image: item.person_image || '',
         member_id: item.member_id || '',
         is_own: req.user ? (
-          String(item.member_id) === String(req.user.member_id) || 
-          String(item.member_id) === String(req.user._id) || 
-          String(item.member_id) === String(req.user.id)
+          String(item.created_by?.id) === String(req.user._id) || String(item.created_by?.id) === String(req.user.id)
         ) : false,
         status: Number(item.status ?? 0)
       })),
@@ -108,9 +114,7 @@ const getMatrimonyById = async (req, res) => {
         person_image: matrimony.person_image || '',
         member_id: matrimony.member_id || '',
         is_own: req.user ? (
-          String(matrimony.member_id) === String(req.user.member_id) || 
-          String(matrimony.member_id) === String(req.user._id) || 
-          String(matrimony.member_id) === String(req.user.id)
+          String(matrimony.created_by?.id) === String(req.user._id) || String(matrimony.created_by?.id) === String(req.user.id)
         ) : false,
         status: Number(matrimony.status ?? 0)
       }
@@ -172,7 +176,8 @@ const addMatrimony = async (req, res) => {
       person_image: person_image || '',
       member_id: req.user ? (req.user.member_id || String(req.user._id)) : '',
       status: status === undefined ? 0 : Number(status),
-      cdate: new Date().toISOString().slice(0, 10)
+      cdate: new Date().toISOString().slice(0, 10),
+      created_by: createdBy(req)
     };
 
     const matrimonial = await Matrimony.create(data);

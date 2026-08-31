@@ -47,7 +47,13 @@ const extractVacancyData = (data) => {
 
 const getJobVacancies = async (req, res) => {
   try {
-    const { data: jobVacancies, pagination } = await queryHelper(JobVacancy, requestData(req), {
+    let baseQuery = {};
+    const { is_own } = req.query;
+    if (is_own === 'true' && req.user) {
+      baseQuery['created_by.id'] = String(req.user._id) || String(req.user.id);
+    }
+    const { data: jobVacancies, pagination } = await queryHelper(JobVacancy, req.query, {
+      baseQuery,
       searchFields: ['title', 'company_name', 'location', 'description', 'qualifications'],
       filterFields: ['job_type', 'status'],
       defaultSort: { createdAt: -1 },
