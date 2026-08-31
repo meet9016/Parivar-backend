@@ -20,8 +20,10 @@ const buildIdQuery = (id) => ({
 
 const createdBy = (req) => {
   const user = req.user || {};
+  const rawId = user._id || user.id || '';
+  const validId = mongoose.isValidObjectId(String(rawId)) ? new mongoose.Types.ObjectId(String(rawId)) : null;
   return {
-    id: user._id || user.id || '',
+    id: validId,
     name: fullName(user) || user.name || user.username || user.email || ''
   };
 };
@@ -73,13 +75,15 @@ const getJobVacancies = async (req, res) => {
         String(user.id || ''),
         String(user.member_id || '')
       ].filter(Boolean);
-      const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
-      const allConditions = [...userIds, ...objectIds];
+      
+      const validObjectIds = userIds
+        .filter(id => mongoose.isValidObjectId(id))
+        .map(id => new mongoose.Types.ObjectId(id));
 
       if (is_own === 'true') {
         baseQuery.$or = [
-          { 'created_by.id': { $in: allConditions } },
-          { member_id: { $in: allConditions } }
+          { 'created_by.id': { $in: validObjectIds } },
+          { member_id: { $in: userIds } }
         ];
         delete req.query.status;
       } else if (req.query.status === undefined || req.query.status === null || req.query.status === '') {
@@ -88,8 +92,8 @@ const getJobVacancies = async (req, res) => {
           { status: '1' },
           { status: { $exists: false } },
           { status: null },
-          { 'created_by.id': { $in: allConditions } },
-          { member_id: { $in: allConditions } }
+          { 'created_by.id': { $in: validObjectIds } },
+          { member_id: { $in: userIds } }
         ];
       }
     }
@@ -157,6 +161,11 @@ const postJobVacancy = async (req, res) => {
         image: publicUrl(req, existing.image || ''),
         is_own: String(req.user?._id) === String(existing.created_by?.id)
       });
+    }
+
+    const userId = req.user?._id || req.user?.id;
+    if (!userId || !mongoose.isValidObjectId(String(userId))) {
+      return apiResponse(res, 400, "Invalid creator user ID format. Must be a valid MongoDB ObjectId.");
     }
 
     const jobVacancyData = extractVacancyData(body);
