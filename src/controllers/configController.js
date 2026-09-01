@@ -18,32 +18,25 @@ const getConfig = async (req, res) => {
         const registryConn = await getRegistryConnection();
         const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', tenantSchema);
         tenantRecord = await Tenant.findOne({ slug: tenantSlug });
-        console.log('[getConfig] tenantRecord found:', tenantRecord?.parivar_name);
       } catch (err) {
         console.error('[getConfig] Error looking up tenant from registry:', err.message);
       }
     }
 
+    const expectedName = tenantRecord && tenantRecord.parivar_name
+      ? (tenantRecord.community_type === 'Village' || tenantRecord.parivar_name.toLowerCase().includes('parivar')
+          ? tenantRecord.parivar_name
+          : `${tenantRecord.parivar_name} Parivar`)
+      : (tenantSlug ? `${tenantSlug.charAt(0).toUpperCase() + tenantSlug.slice(1)} Parivar` : 'Parivar');
+
     if (!config) {
-      let defaultName = 'Parivar';
-      if (tenantRecord && tenantRecord.parivar_name) {
-        defaultName =
-          tenantRecord.community_type === 'Village' ||
-          tenantRecord.parivar_name.toLowerCase().includes('parivar')
-            ? tenantRecord.parivar_name
-            : `${tenantRecord.parivar_name} Parivar`;
-      }
-      console.log('[getConfig] Creating new config with defaultName:', defaultName);
-      const newConfig = new Config({ name: defaultName });
+      const newConfig = new Config({ name: expectedName });
       await newConfig.save();
       config = newConfig;
     } else if (tenantRecord && tenantRecord.parivar_name) {
-      if (!config.name || config.name === 'Parivar') {
-        config.name =
-          tenantRecord.community_type === 'Village' ||
-          tenantRecord.parivar_name.toLowerCase().includes('parivar')
-            ? tenantRecord.parivar_name
-            : `${tenantRecord.parivar_name} Parivar`;
+      // If name is default 'Parivar' or contains wrong surname from template/clone
+      if (!config.name || config.name === 'Parivar' || !config.name.toLowerCase().includes(tenantRecord.parivar_name.toLowerCase())) {
+        config.name = expectedName;
         await config.save();
       }
     }
