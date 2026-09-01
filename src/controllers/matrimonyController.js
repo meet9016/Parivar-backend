@@ -5,8 +5,9 @@ const queryHelper = require('../utils/queryHelper');
 
 const createdBy = (req) => {
   const user = req.user || {};
+  const idStr = String(user._id || user.id || '');
   return {
-    id: user._id || user.id || '',
+    id: mongoose.isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : undefined,
     name: fullName(user) || user.name || user.username || user.email || ''
   };
 };
@@ -45,13 +46,14 @@ const getMatrimonies = async (req, res) => {
         String(user.member_id || '')
       ].filter(Boolean);
       const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
-      const allConditions = [...userIds, ...objectIds];
 
       if (is_own === 'true') {
         baseQuery.$or = [
-          { 'created_by.id': { $in: allConditions } },
-          { member_id: { $in: allConditions } }
+          { member_id: { $in: userIds } }
         ];
+        if (objectIds.length > 0) {
+          baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
+        }
         delete req.query.status;
       } else if (req.query.status === undefined || req.query.status === null || req.query.status === '') {
         baseQuery.$or = [
@@ -59,9 +61,11 @@ const getMatrimonies = async (req, res) => {
           { status: '1' },
           { status: { $exists: false } },
           { status: null },
-          { 'created_by.id': { $in: allConditions } },
-          { member_id: { $in: allConditions } }
+          { member_id: { $in: userIds } }
         ];
+        if (objectIds.length > 0) {
+          baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
+        }
       }
     }
 
@@ -236,6 +240,7 @@ const addMatrimony = async (req, res) => {
         biodata: matrimonial.biodata || '',
         person_image: matrimonial.person_image || '',
         member_id: matrimonial.member_id || '',
+        is_own: true,
         status: Number(matrimonial.status ?? 0)
       }
     });
@@ -314,6 +319,7 @@ const updateMatrimony = async (req, res) => {
       biodata: matrimony.biodata || '',
       person_image: matrimony.person_image || '',
       member_id: matrimony.member_id || '',
+      is_own: checkIsOwn(matrimony, req.user),
       status: Number(matrimony.status ?? 0)
     });
   } catch (error) {
