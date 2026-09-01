@@ -5,8 +5,9 @@ const queryHelper = require('../utils/queryHelper');
 
 const createdBy = (req) => {
   const user = req.user || {};
+  const idStr = String(user._id || user.id || '');
   return {
-    id: user._id || user.id || '',
+    id: mongoose.isValidObjectId(idStr) ? new mongoose.Types.ObjectId(idStr) : undefined,
     name: fullName(user) || user.name || user.username || user.email || ''
   };
 };
