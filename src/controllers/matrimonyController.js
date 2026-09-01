@@ -46,13 +46,14 @@ const getMatrimonies = async (req, res) => {
         String(user.member_id || '')
       ].filter(Boolean);
       const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
-      const allConditions = [...userIds, ...objectIds];
 
       if (is_own === 'true') {
         baseQuery.$or = [
-          { 'created_by.id': { $in: allConditions } },
-          { member_id: { $in: allConditions } }
+          { member_id: { $in: userIds } }
         ];
+        if (objectIds.length > 0) {
+          baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
+        }
         delete req.query.status;
       } else if (req.query.status === undefined || req.query.status === null || req.query.status === '') {
         baseQuery.$or = [
@@ -60,9 +61,11 @@ const getMatrimonies = async (req, res) => {
           { status: '1' },
           { status: { $exists: false } },
           { status: null },
-          { 'created_by.id': { $in: allConditions } },
-          { member_id: { $in: allConditions } }
+          { member_id: { $in: userIds } }
         ];
+        if (objectIds.length > 0) {
+          baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
+        }
       }
     }
 
