@@ -264,7 +264,8 @@ const getBusinessCategoryList = async (req, res) => {
     });
     const data = categories.map((category) => ({
       id: String(category._id),
-      business: category.business || category.name || ''
+      business: category.business || category.name || '',
+      image: publicUrl(req, category.image || '')
     }));
 
     return apiResponse(res, 200, 'Business category data fetch successfully', data, pagination);

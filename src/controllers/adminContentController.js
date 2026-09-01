@@ -175,7 +175,7 @@ const masterConfig = {
   'expense-category': { Model: Master, type: 'expense-category' }
 };
 
-const formatMaster = (type, item, config, parentMap = {}) => {
+const formatMaster = (req, type, item, config, parentMap = {}) => {
   const name = config.nameKeys?.map((key) => item[key]).find(Boolean) || item.name || '';
   const parentVal = String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '');
   const parentName = parentMap[parentVal] || (typeof parentVal === 'object' ? parentVal.name : '') || '';
@@ -186,7 +186,7 @@ const formatMaster = (type, item, config, parentMap = {}) => {
     parent_id: parentVal,
     parent_name: parentName,
     status: Number(item.status ?? 1),
-    image: item.image || ''
+    image: publicUrl(req, item.image || '')
   };
 };
 
@@ -236,7 +236,7 @@ const getMasters = async (req, res) => {
       });
     }
 
-    return apiResponse(res, 200, 'Master data retrieved successfully', data.map((row) => formatMaster(type, row, config, parentMap)), pagination);
+    return apiResponse(res, 200, 'Master data retrieved successfully', data.map((row) => formatMaster(req, type, row, config, parentMap)), pagination);
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving master data', { error: error.message });
   }
@@ -249,7 +249,7 @@ const getMasterById = async (req, res) => {
     if (!config) return apiResponse(res, 404, 'Master type not found');
     const existing = await findById(config.Model, req.params.id);
     if (!existing) return apiResponse(res, 404, 'Master data not found');
-    return apiResponse(res, 200, 'Master data retrieved successfully', formatMaster(type, existing.toObject(), config));
+    return apiResponse(res, 200, 'Master data retrieved successfully', formatMaster(req, type, existing.toObject(), config));
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving master data', { error: error.message });
   }
@@ -285,7 +285,7 @@ const saveMaster = async (req, res) => {
       doc.set('status', Number(req.body.status));
     }
     await doc.save();
-    return apiResponse(res, existing ? 200 : 201, 'Master data saved successfully', formatMaster(type, doc.toObject(), config));
+    return apiResponse(res, existing ? 200 : 201, 'Master data saved successfully', formatMaster(req, type, doc.toObject(), config));
   } catch (error) {
     return apiResponse(res, 500, 'Error saving master data', { error: error.message });
   }

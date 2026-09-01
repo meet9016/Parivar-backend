@@ -25,8 +25,8 @@ const {
 
 
 //admin resgister
+//admin resgister
 const createAdmin = async (req, res) => {
-
   try {
     const {
       first_name,
@@ -52,20 +52,25 @@ const createAdmin = async (req, res) => {
       familyHead
     } = req.body;
 
-
-
     if (!first_name || !number) {
       return apiResponse(res, 400, 'First name and number are required');
     }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (email && email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return apiResponse(res, 400, 'Invalid email format');
     }
 
-    if (await User.findOne({ email: email ? email.toLowerCase() : undefined })) {
-      return apiResponse(res, 400, 'Email already exists');
+    if (email && email.trim()) {
+      const existingEmail = await User.findOne({ email: email.trim().toLowerCase() });
+      if (existingEmail) {
+        return apiResponse(res, 400, 'Email already exists');
+      }
     }
-    if (await User.findOne({ number: number ? number : undefined })) {
-      return apiResponse(res, 400, 'Number already exists');
+
+    if (number && String(number).trim()) {
+      const existingNumber = await User.findOne({ number: String(number).trim() });
+      if (existingNumber) {
+        return apiResponse(res, 400, 'Number already exists');
+      }
     }
 
     if ((is_committee === true || is_committee === 'true') && req.file?.size > 1024 * 1024) {
@@ -73,60 +78,60 @@ const createAdmin = async (req, res) => {
     }
 
     const familyData = await familyUtil.prepareFamilyFields({
-      relation,
+      relation: relation || 'Self',
       family_head_id: req.body.family_head_id,
-      status,
+      status: status !== undefined ? Number(status) : 1,
       familyHead
     }, {});
 
     const assignedRoleId = role_id && mongoose.isValidObjectId(role_id) ? role_id : null;
 
     const users = await User.find({ member_id: /^\d+$/ }).select('member_id');
-    
 
     const highestId = users.reduce((max, u) => {
       const num = Number(u.member_id);
       return Number.isFinite(num) && num > max ? num : max;
     }, 0);
 
+    const isCommitteeFlag = is_committee !== undefined ? (is_committee === true || is_committee === 'true') : true;
+
     const newUser = new User({
       member_id: String(highestId + 1),
-      first_name: first_name,
-      middle_name: middle_name || '',
-      last_name: last_name || '',
-      email: email ? email.toLowerCase() : '',
+      first_name: first_name.trim(),
+      middle_name: middle_name ? middle_name.trim() : '',
+      last_name: last_name ? last_name.trim() : '',
+      email: email ? email.trim().toLowerCase() : '',
       password: password || '12345',
-      number: number,
+      number: String(number).trim(),
       gender: gender || '',
       dob: dob || null,
       anniversary: anniversary || null,
       blood_group: blood_group || '',
-      relation: familyData.relation,
-      is_committee: is_committee === true || is_committee === 'true',
-      committee_role: committee_role || '',
+      relation: familyData.relation || 'Self',
+      is_committee: isCommitteeFlag,
+      committee_role: committee_role || designation || 'Admin',
       role_id: assignedRoleId,
       address: address || '',
-      designation: designation || '',
-      status: familyData.status,
+      designation: designation || committee_role || '',
+      status: familyData.status !== undefined ? familyData.status : 1,
       family_head: familyData.family_head,
-
       image: imageFromRequest(req),
     });
 
     await newUser.save();
 
-    if (familyData.relation === 'Self') {
+    if (familyData.relation === 'Self' || !newUser.family_head?.id) {
       newUser.family_head = {
         id: newUser._id,
         name: familyUtil.fullName(newUser)
       };
       if (status === undefined) {
-        newUser.status = 0;
+        newUser.status = 1;
       }
       await newUser.save();
     }
 
-    return apiResponse(res, 201, 'User created successfully', {
+    return apiResponse(res, 201, 'Admin created successfully', {
       _id: newUser._id,
       first_name: newUser.first_name,
       middle_name: newUser.middle_name || '',
@@ -138,18 +143,74 @@ const createAdmin = async (req, res) => {
       anniversary: newUser.anniversary || null,
       blood_group: newUser.blood_group || '',
       relation: newUser.relation || 'Self',
-      is_committee: newUser.is_committee || false,
+      is_committee: newUser.is_committee,
       committee_role: newUser.committee_role || '',
       role_id: newUser.role_id ? String(newUser.role_id) : '',
       address: newUser.address || '',
       designation: newUser.designation || '',
       status: Number(newUser.status ?? 1),
       image: publicUrl(req, newUser.image || ''),
-
-
     });
   } catch (error) {
-    return apiResponse(res, 500, 'Error creating user', { error: error.message });
+    return apiResponse(res, 500, 'Error creating admin', { error: error.message });
+  }
+};
+
+// GET /api/register_admin or /api/get_admins — Fetch registered admin users
+const getAdmins = async (req, res) => {
+  try {
+    const { page = 1, limit = 50, search = '' } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const query = {
+      $or: [
+        { is_committee: true },
+        { committee_role: { $ne: '' } },
+        { relation: 'Self' }
+      ]
+    };
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      query.$and = [
+        {
+          $or: [
+            { first_name: regex },
+            { last_name: regex },
+            { email: regex },
+            { number: regex }
+          ]
+        }
+      ];
+    }
+
+    const [admins, total] = await Promise.all([
+      User.find(query)
+        .populate('role_id')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      User.countDocuments(query)
+    ]);
+
+    const sanitized = admins.map((u) => {
+      delete u.password;
+      return {
+        ...u,
+        id: String(u._id),
+        image: publicUrl(req, u.image || '')
+      };
+    });
+
+    return apiResponse(res, 200, 'Admins fetched successfully', sanitized, {
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      pages: Math.ceil(total / Number(limit))
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error fetching admins', { error: error.message });
   }
 };
 
@@ -732,9 +793,9 @@ const changePassword = async (req, res) => {
 
 module.exports = {
   createAdmin,
+  getAdmins,
   loginAdmin,
   updateAdminRecovery,
   getStats,
   changePassword
-
 };

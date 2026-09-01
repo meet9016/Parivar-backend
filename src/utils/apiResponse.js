@@ -1,3 +1,5 @@
+const SERVICE_BASE_URL = process.env.SERVICE_URL || 'https://service.digitalks.co.in';
+
 const publicUrl = (req, value) => {
   if (!value) {
     return '';
@@ -8,7 +10,7 @@ const publicUrl = (req, value) => {
   }
 
   const normalized = value.startsWith('/') ? value : `/${value}`;
-  return `${req.protocol}://${req.get('host')}${normalized}`;
+  return `${SERVICE_BASE_URL}${normalized}`;
 };
 
 const apiResponse = (res, status, message, data = [], pagination) => {
