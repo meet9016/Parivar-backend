@@ -240,6 +240,7 @@ const addMatrimony = async (req, res) => {
         biodata: matrimonial.biodata || '',
         person_image: matrimonial.person_image || '',
         member_id: matrimonial.member_id || '',
+        is_own: true,
         status: Number(matrimonial.status ?? 0)
       }
     });
@@ -318,6 +319,7 @@ const updateMatrimony = async (req, res) => {
       biodata: matrimony.biodata || '',
       person_image: matrimony.person_image || '',
       member_id: matrimony.member_id || '',
+      is_own: checkIsOwn(matrimony, req.user),
       status: Number(matrimony.status ?? 0)
     });
   } catch (error) {

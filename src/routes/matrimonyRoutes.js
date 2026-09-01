@@ -19,8 +19,7 @@ const isAdminCall = (req) => {
 
 router.get('/', optionalProtect, getMatrimonies);
 
-router.get('/:id', getMatrimonyById);
-router.get('/:id', getMatrimonyById);
+router.get('/:id', optionalProtect, getMatrimonyById);
 
 router.post('/', protect, parseForm, (req, res, next) => {
     if (isAdminCall(req)) {
