@@ -1,6 +1,28 @@
 const Config = require('../models/configModel');
 const { getRegistryConnection } = require('../config/registryDb');
 const tenantSchema = require('../models/tenantSchema');
+const { publicUrl } = require('../utils/apiResponse');
+
+const formatConfig = (req, config) => {
+  if (!config) return null;
+  const obj = config.toObject ? config.toObject() : { ...config };
+
+  if (obj.appLogo) obj.appLogo = publicUrl(req, obj.appLogo);
+  if (obj.webLogo) obj.webLogo = publicUrl(req, obj.webLogo);
+  if (obj.favicon) obj.favicon = publicUrl(req, obj.favicon);
+
+  if (Array.isArray(obj.bannerImages)) {
+    obj.bannerImages = obj.bannerImages
+      .filter(Boolean)
+      .map(url => publicUrl(req, url));
+  } else if (obj.bannerImages) {
+    obj.bannerImages = [publicUrl(req, obj.bannerImages)];
+  } else {
+    obj.bannerImages = [];
+  }
+
+  return obj;
+};
 
 // Get configuration, create default if none exists
 const getConfig = async (req, res) => {
@@ -44,7 +66,7 @@ const getConfig = async (req, res) => {
     console.log('[getConfig] Final config sending:', config);
     res.status(200).json({
       message: 'Configuration retrieved successfully',
-      data: config
+      data: formatConfig(req, config)
     });
   } catch (error) {
     console.error('[getConfig] Catch error:', error);
@@ -61,10 +83,18 @@ const updateConfig = async (req, res) => {
     } else {
       config.set({ ...req.body });
     }
+
+    if (req.body.bannerImages !== undefined) {
+      config.bannerImages = Array.isArray(req.body.bannerImages)
+        ? req.body.bannerImages
+        : (req.body.bannerImages ? [req.body.bannerImages] : []);
+      config.markModified('bannerImages');
+    }
+
     await config.save();
     res.status(200).json({
       message: 'Configuration updated successfully',
-      data: config
+      data: formatConfig(req, config)
     });
   } catch (error) {
     console.error('[updateConfig] error:', error);

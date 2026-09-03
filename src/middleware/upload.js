@@ -134,6 +134,14 @@ const parseForm = (req, res, next) => {
             continue;
           }
 
+          if (fieldName === 'bannerImages') {
+            if (!Array.isArray(req.body.bannerImages)) {
+              req.body.bannerImages = req.body.bannerImages ? [req.body.bannerImages] : [];
+            }
+            req.body.bannerImages.push(imagePath);
+            continue;
+          }
+
           if (req.body[fieldName] === undefined) {
             req.body[fieldName] = imagePath;
           } else if (Array.isArray(req.body[fieldName])) {
@@ -165,6 +173,14 @@ const parseForm = (req, res, next) => {
               req.body.images = [];
             }
             req.body.images.push(imagePath);
+            continue;
+          }
+
+          if (fieldName === 'bannerImages') {
+            if (!Array.isArray(req.body.bannerImages)) {
+              req.body.bannerImages = req.body.bannerImages ? [req.body.bannerImages] : [];
+            }
+            req.body.bannerImages.push(imagePath);
             continue;
           }
 

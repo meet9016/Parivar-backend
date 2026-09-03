@@ -31,6 +31,11 @@ const tenantMiddleware = async (req, res, next) => {
       }
     }
 
+    // Ignore purely numeric values (like IP address octets e.g. "192")
+    if (tenantSlug && /^\d+$/.test(tenantSlug)) {
+      tenantSlug = null;
+    }
+
     console.log(tenantSlug, "tenantSlug");
     
     if (!tenantSlug) {

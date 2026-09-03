@@ -21,12 +21,9 @@ const signArchiveToken = (payload) => {
 };
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-// Static test numbers with preset OTP to bypass live SMS gateway
 const STATIC_OTP_NUMBERS = {
   '9510582641': '123456'
 };
-
 const getStaticConfig = (numStr) => {
   if (!numStr) return null;
   const digits = String(numStr).replace(/\D/g, '').slice(-10);
@@ -56,11 +53,8 @@ const login = async (req, res) => {
     const now = new Date();
     const staticConfig = getStaticConfig(rawNumber) || getStaticConfig(user.number);
 
-    // ==========================================
-    // SCENARIO A: REQUEST / RESEND OTP
-    // ==========================================
+
     if (!otp) {
-      // If number is configured as static, bypass live SMS gateway and rate limit cooldowns
       if (staticConfig) {
         user.otp = staticConfig.otp;
         user.otp_expiry = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours valid
