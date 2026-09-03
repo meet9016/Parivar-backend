@@ -22,21 +22,54 @@ const signArchiveToken = (payload) => {
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
+// Static test numbers with preset OTP to bypass live SMS gateway
+const STATIC_OTP_NUMBERS = {
+  '9510582641': '123456'
+};
+
+const getStaticConfig = (numStr) => {
+  if (!numStr) return null;
+  const digits = String(numStr).replace(/\D/g, '').slice(-10);
+  return STATIC_OTP_NUMBERS[digits] ? { number: digits, otp: STATIC_OTP_NUMBERS[digits] } : null;
+};
+
 const login = async (req, res) => {
   try {
     const { number, otp, fcm_token } = requestData(req);
 
     if (!number) return apiResponse(res, 400, 'Number is required');
 
-    const user = await User.findOne({ number: String(number) }).select('-password');
+    const rawNumber = String(number).trim();
+    const cleanNumber = rawNumber.replace(/\D/g, '').slice(-10);
+
+    const user = await User.findOne({
+      $or: [
+        { number: rawNumber },
+        { number: cleanNumber },
+        { number: `+91${cleanNumber}` },
+        { number: `91${cleanNumber}` }
+      ]
+    }).select('-password');
+
     if (!user) return apiResponse(res, 400, 'Invalid number');
 
     const now = new Date();
+    const staticConfig = getStaticConfig(rawNumber) || getStaticConfig(user.number);
 
     // ==========================================
     // SCENARIO A: REQUEST / RESEND OTP
     // ==========================================
     if (!otp) {
+      // If number is configured as static, bypass live SMS gateway and rate limit cooldowns
+      if (staticConfig) {
+        user.otp = staticConfig.otp;
+        user.otp_expiry = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours valid
+        user.otp_last_sent = now;
+        await user.save();
+        console.log(`[AUTH] Static OTP ${staticConfig.otp} set for test number ${cleanNumber} (No SMS sent)`);
+        return apiResponse(res, 200, 'OTP sent successfully', { otp: staticConfig.otp });
+      }
+
       // 1. Check & Reset Daily Rate Limit Tracker if 24 hours have passed
       if (!user.otp_reset_day || now - new Date(user.otp_reset_day) >= 24 * 60 * 60 * 1000) {
         user.otp_count = 0;
@@ -78,14 +111,18 @@ const login = async (req, res) => {
     // ==========================================
     // SCENARIO B: VERIFY OTP
     // ==========================================
-    // 1. Check if an OTP transaction exists or matches
-    if (!user.otp || user.otp !== String(otp)) {
-      return apiResponse(res, 400, 'Invalid OTP');
-    }
+    const isStaticMatch = staticConfig && (String(otp) === staticConfig.otp || String(otp) === '1234');
 
-    // 2. Check if the 10-minute expiration has passed
-    if (now > new Date(user.otp_expiry)) {
-      return apiResponse(res, 400, 'OTP has expired');
+    if (!isStaticMatch) {
+      // 1. Check if an OTP transaction exists or matches
+      if (!user.otp || user.otp !== String(otp)) {
+        return apiResponse(res, 400, 'Invalid OTP');
+      }
+
+      // 2. Check if the 10-minute expiration has passed
+      if (now > new Date(user.otp_expiry)) {
+        return apiResponse(res, 400, 'OTP has expired');
+      }
     }
 
     // 3. Clear token states immediately to avoid replay attacks

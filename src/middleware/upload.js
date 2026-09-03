@@ -101,7 +101,7 @@ const parseForm = (req, res, next) => {
     { name: 'qr_code', maxCount: 1 },
     { name: 'student_image', maxCount: 1 },
 
-    { name: 'bannerImages', maxCount: 5 },
+    { name: 'bannerImages', maxCount: 20 },
     { name: 'appLogo', maxCount: 1 },
     { name: 'webLogo', maxCount: 1 },
     { name: 'favicon', maxCount: 1 },
@@ -157,6 +157,12 @@ const parseForm = (req, res, next) => {
       } else if (req.file) {
         const imagePath = await uploadToExternalService(req.file, req.file.fieldname);
         req.body[req.file.fieldname] = imagePath;
+      }
+
+      // Normalize bannerImages to array of valid URLs
+      if (req.body.bannerImages !== undefined) {
+        const raw = Array.isArray(req.body.bannerImages) ? req.body.bannerImages : [req.body.bannerImages];
+        req.body.bannerImages = raw.filter(url => typeof url === 'string' && url.trim().length > 0);
       }
 
       // Clear req.file and req.files so controllers don't prepend /uploads/
