@@ -14,11 +14,13 @@ const getRegistryConnection = async () => {
     return registryConn;
   }
 
-  const baseUri = process.env.MONGO_URI; // e.g. "mongodb+srv://user:pass@cluster.net/"
+  const baseUri = process.env.MONGO_URI; // e.g. "mongodb+srv://user:pass@cluster.net/dbname"
   if (!baseUri) throw new Error('MONGO_URI is not defined in .env');
 
-  // Build registry DB URI — strip trailing slash then append DB name
-  const registryUri = baseUri.replace(/\/?$/, '/') + REGISTRY_DB_NAME;
+  // Parse the URI and replace the database name with REGISTRY_DB_NAME
+  const parsedUri = new URL(baseUri);
+  parsedUri.pathname = `/${REGISTRY_DB_NAME}`;
+  const registryUri = parsedUri.toString();
 
   registryConn = await mongoose.createConnection(registryUri).asPromise();
   console.log(`[Registry] Connected to: ${REGISTRY_DB_NAME} ✅`);
@@ -58,7 +60,11 @@ const getTenantConnection = async (dbName) => {
   const baseUri = process.env.MONGO_URI;
   if (!baseUri) throw new Error('MONGO_URI is not defined in .env');
 
-  const tenantUri = baseUri.replace(/\/?$/, '/') + dbName;
+  // Parse the URI and replace the database name with the tenant dbName
+  const parsedUri = new URL(baseUri);
+  parsedUri.pathname = `/${dbName}`;
+  const tenantUri = parsedUri.toString();
+  
   const conn = await mongoose.createConnection(tenantUri).asPromise();
 
   ensureTenantModels(conn);

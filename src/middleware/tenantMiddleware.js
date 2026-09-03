@@ -8,7 +8,8 @@ const { getTenantConnection } = require('../config/registryDb');
 const tenantMiddleware = async (req, res, next) => {
   try {
     const tenantSlug = req.headers['x-tenant-id']?.toLowerCase();
-
+    console.log(tenantSlug,"tenantSlug");
+    
     if (!tenantSlug) {
       // If no tenant is specified, proceed with default connection
       // This ensures existing parivar/users are unaffected.
