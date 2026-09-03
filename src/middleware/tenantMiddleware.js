@@ -7,11 +7,34 @@ const { getTenantConnection } = require('../config/registryDb');
  */
 const tenantMiddleware = async (req, res, next) => {
   try {
-    const tenantSlug = req.headers['x-tenant-id']?.toLowerCase();
-    console.log(tenantSlug,"tenantSlug");
+    let tenantSlug = req.headers['x-tenant-id']?.toLowerCase();
+    
+    // Fallback: Extract tenant slug from subdomain if header is missing
+    if (!tenantSlug) {
+      let hostToParse = req.hostname;
+      const origin = req.headers.origin;
+      
+      // If request comes from a frontend (CORS), use the Origin header's hostname
+      if (origin) {
+        try {
+          hostToParse = new URL(origin).hostname;
+        } catch (e) {}
+      }
+
+      // If the host ends with .parivar.me, extract the subdomain
+      if (hostToParse && hostToParse.endsWith('.parivar.me')) {
+        const parts = hostToParse.split('.');
+        // e.g. chovatiya.parivar.me -> ['chovatiya', 'parivar', 'me']
+        if (parts.length >= 3 && parts[0] !== 'www') {
+          tenantSlug = parts[0].toLowerCase();
+        }
+      }
+    }
+
+    console.log(tenantSlug, "tenantSlug");
     
     if (!tenantSlug) {
-      // If no tenant is specified, proceed with default connection
+      // If no tenant is specified (no header and no subdomain), proceed with default connection
       // This ensures existing parivar/users are unaffected.
       return next();
     }
