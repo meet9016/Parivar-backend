@@ -45,14 +45,19 @@ const businessUpload = (req, res, next) => {
     if (err) return next(err);
     try {
       if (req.files) {
+        const uploadPromises = [];
         for (const fieldName in req.files) {
           const filesArray = req.files[fieldName];
           for (let i = 0; i < filesArray.length; i++) {
             const file = filesArray[i];
-            const imagePath = await uploadToExternalService(file, fieldName);
-            file.filename = imagePath;
+            uploadPromises.push(
+              uploadToExternalService(file, fieldName).then(imagePath => {
+                file.filename = imagePath;
+              })
+            );
           }
         }
+        await Promise.all(uploadPromises);
       }
       next();
     } catch (error) {
@@ -111,10 +116,16 @@ const parseForm = (req, res, next) => {
 
     try {
       if (Array.isArray(req.files)) {
-        for (const file of req.files) {
-          const fieldName = file.fieldname;
-          const imagePath = await uploadToExternalService(file, fieldName);
-
+        const uploadPromises = req.files.map(file => 
+          uploadToExternalService(file, file.fieldname).then(imagePath => ({
+            fieldName: file.fieldname,
+            imagePath
+          }))
+        );
+        
+        const uploadedFiles = await Promise.all(uploadPromises);
+        
+        for (const { fieldName, imagePath } of uploadedFiles) {
           if (fieldName === 'images') {
             if (!Array.isArray(req.body.images)) {
               req.body.images = [];
@@ -132,26 +143,37 @@ const parseForm = (req, res, next) => {
           }
         }
       } else if (req.files) {
+        const uploadPromises = [];
+        
         for (const fieldName in req.files) {
           const filesArray = req.files[fieldName];
           for (const file of filesArray) {
-            const imagePath = await uploadToExternalService(file, fieldName);
-
-            if (fieldName === 'images') {
-              if (!Array.isArray(req.body.images)) {
-                req.body.images = [];
-              }
-              req.body.images.push(imagePath);
-              continue;
+            uploadPromises.push(
+              uploadToExternalService(file, fieldName).then(imagePath => ({
+                fieldName,
+                imagePath
+              }))
+            );
+          }
+        }
+        
+        const uploadedFiles = await Promise.all(uploadPromises);
+        
+        for (const { fieldName, imagePath } of uploadedFiles) {
+          if (fieldName === 'images') {
+            if (!Array.isArray(req.body.images)) {
+              req.body.images = [];
             }
+            req.body.images.push(imagePath);
+            continue;
+          }
 
-            if (req.body[fieldName] === undefined) {
-              req.body[fieldName] = imagePath;
-            } else if (Array.isArray(req.body[fieldName])) {
-              req.body[fieldName].push(imagePath);
-            } else {
-              req.body[fieldName] = [req.body[fieldName], imagePath];
-            }
+          if (req.body[fieldName] === undefined) {
+            req.body[fieldName] = imagePath;
+          } else if (Array.isArray(req.body[fieldName])) {
+            req.body[fieldName].push(imagePath);
+          } else {
+            req.body[fieldName] = [req.body[fieldName], imagePath];
           }
         }
       } else if (req.file) {
