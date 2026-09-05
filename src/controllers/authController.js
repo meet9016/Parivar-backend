@@ -22,7 +22,8 @@ const signArchiveToken = (payload) => {
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 const STATIC_OTP_NUMBERS = {
-  '9510582641': '123456'
+  '9510582641': '123456',
+  '9876543210': '111111',
 };
 const getStaticConfig = (numStr) => {
   if (!numStr) return null;
