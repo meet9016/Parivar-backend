@@ -71,13 +71,16 @@ const galleryPayload = (req, existing = {}) => {
     }
   }
 
-  month = formatMonthName(month);
+  let date = req.body.date !== undefined ? String(req.body.date) : (existing.date || '');
+  let category = req.body.category !== undefined ? String(req.body.category) : (existing.category || 'General');
 
   return {
     ...req.body,
     images,
     year,
     month,
+    date,
+    category,
     gallery_category_id: String(req.body.gallery_category_id || existing.gallery_category_id || ''),
     status: req.body.status !== undefined ? Number(req.body.status) : (existing.status !== undefined ? Number(existing.status) : 1)
   };
@@ -86,6 +89,16 @@ const galleryPayload = (req, existing = {}) => {
 const formatGallery = (req, item) => {
   let year = item.year || '';
   let month = item.month || '';
+  let date = item.date || '';
+
+  if ((!year || !month) && date) {
+    const parts = String(date).split('-');
+    if (parts.length >= 2) {
+      if (!year) year = parts[0];
+      if (!month) month = parts[1];
+    }
+  }
+
   if ((!year || !month) && item.createdAt) {
     const d = new Date(item.createdAt);
     if (!isNaN(d.getTime())) {
@@ -102,6 +115,7 @@ const formatGallery = (req, item) => {
     images: Array.isArray(item.images) ? item.images.map(img => publicUrl(req, img)) : [],
     year: String(year || ''),
     month: formattedMonth,
+    date: String(date || ''),
     category: item.category || 'General',
     gallery_category_id: String(item.gallery_category_id || ''),
     status: item.status !== undefined ? Number(item.status) : 1

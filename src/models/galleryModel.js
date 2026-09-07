@@ -19,6 +19,10 @@ const gallerySchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  date: {
+    type: String,
+    default: ''
+  },
   gallery_category_id: {
     type: String,
     default: '',
