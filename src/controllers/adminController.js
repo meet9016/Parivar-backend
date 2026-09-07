@@ -249,17 +249,19 @@ const loginAdmin = async (req, res) => {
           { expiresIn: '1d' }
         );
 
+        const isSuperAdmin = committeeMember.designation === 'President' || committeeMember.role_id?.name?.toLowerCase() === 'admin' || committeeMember.role_id?.name?.toLowerCase() === 'super admin' || (!committeeMember.role_id && committeeMember.designation === 'Admin');
+
         const userData = {
           id: String(committeeMember._id),
           name: `${committeeMember.first_name} ${committeeMember.last_name || ''}`.trim(),
           email: committeeMember.email,
-          role: 'admin',
+          role: isSuperAdmin ? 'admin' : 'committee',
           is_committee: true,
           committee_role: committeeMember.designation || 'Committee Member',
           role_id: committeeMember.role_id?._id ? String(committeeMember.role_id._id) : (committeeMember.role_id || ''),
           role_name: committeeMember.role_id?.name || '',
           permissions,
-          is_super_admin: false
+          is_super_admin: isSuperAdmin
         };
 
         return apiResponse(res, 200, 'Login successful', {
@@ -345,17 +347,19 @@ const loginAdmin = async (req, res) => {
           { expiresIn: '1d' }
         );
 
+        const isSuperAdmin = user.role === 'superadmin' || user.committee_role === 'President' || user.role_id?.name?.toLowerCase() === 'admin' || user.role_id?.name?.toLowerCase() === 'super admin' || (!user.role_id && (user.role === 'admin' || user.committee_role === 'Admin'));
+
         const userData = {
           id: user.id || String(user._id),
           name: fullName(user),
           email: user.email,
-          role: user.is_committee ? 'admin' : 'user',
+          role: isSuperAdmin ? 'admin' : (user.is_committee ? 'committee' : 'user'),
           is_committee: user.is_committee,
           committee_role: user.committee_role,
           role_id: user.role_id?._id ? String(user.role_id._id) : '',
           role_name: user.role_id?.name || '',
           permissions,
-          is_super_admin: user.is_committee || user.relation === 'Self',
+          is_super_admin: isSuperAdmin,
           tenant_code: targetTenantSlug || req.headers['x-tenant-id'] || ''
         };
 

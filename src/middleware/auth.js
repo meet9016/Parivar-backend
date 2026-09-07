@@ -288,8 +288,12 @@ const legacyPermissionFor = (permission) => {
 };
 
 const requirePermission = (permission) => async (req, res, next) => {
-  if (req.user) {
-    return next();
+  if (!req.user) {
+    return res.status(401).json({
+      status: 401,
+      message: 'Unauthorized: User not authenticated',
+      data: []
+    });
   }
 
   const permissions = getRolePermissions(req.user);
