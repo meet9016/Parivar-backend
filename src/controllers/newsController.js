@@ -91,14 +91,17 @@ const addNews = async (req, res) => {
         });
         await news.save();
 
-        if (req.body.send_notification === 'true' || req.body.send_notification === true) {
+        // Send notification to all users when news is created
+        if (req.body.send_notification !== 'false' && req.body.send_notification !== false) {
             const imageUrl = news.image ? publicUrl(req, news.image) : '';
+            const newsDate = news.date || news.cdate || news.createdAt || '';
             createAndBroadcast({
                 title: news.title,
                 body: news.description?.slice(0, 150) || '',
                 image: imageUrl,
                 type: 'news',
-                ref_id: String(news._id)
+                ref_id: String(news._id),
+                date: newsDate
             });
         }
 

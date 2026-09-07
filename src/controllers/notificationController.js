@@ -4,7 +4,7 @@ const { sendNotificationToAll } = require('../utils/fcmHelper');
 const socketManager = require('../config/socket');
 
 // Called internally when news/event is created with send_notification=true
-const createAndBroadcast = async ({ title, body, image = '', type = 'news', ref_id = '' }) => {
+const createAndBroadcast = async ({ title, body, image = '', type = 'news', ref_id = '', date = '', ...rest }) => {
   const notif = await Notification.create({ title, body, image, type, ref_id });
 
   // Socket broadcast to all connected clients
@@ -16,12 +16,20 @@ const createAndBroadcast = async ({ title, body, image = '', type = 'news', ref_
       image: notif.image,
       type: notif.type,
       ref_id: notif.ref_id,
+      date: date || notif.createdAt,
       createdAt: notif.createdAt,
+      ...rest
     });
   } catch (_) {}
 
   // FCM push to all users with token
-  sendNotificationToAll(title, body, image);
+  sendNotificationToAll(title, body, image, {
+    type,
+    ref_id: String(ref_id || ''),
+    date: String(date || notif.createdAt || ''),
+    notification_id: String(notif._id),
+    ...rest
+  });
 
   return notif;
 };

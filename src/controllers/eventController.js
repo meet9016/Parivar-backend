@@ -1,6 +1,7 @@
 const Event = require('../models/eventModel');
 const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+const { createAndBroadcast } = require('./notificationController');
 
 const isObjectId = (id) => require('mongoose').isValidObjectId(id);
 
@@ -151,6 +152,22 @@ const addEvent = async (req, res) => {
     const data = eventPayload(req);
     const event = new Event(data);
     await event.save();
+
+    // Send push notification to all users for newly created event
+    if (req.body.send_notification !== 'false' && req.body.send_notification !== false) {
+      const imageUrl = event.image ? publicUrl(req, event.image) : '';
+      const eventDate = event.start_time || event.event_date || event.createdAt || '';
+      createAndBroadcast({
+        title: `New Event: ${event.title}`,
+        body: event.description?.slice(0, 150) || `Join us for ${event.title}!`,
+        image: imageUrl,
+        type: 'event',
+        ref_id: String(event._id),
+        date: eventDate,
+        event_location: event.event_location || ''
+      });
+    }
+
     return apiResponse(res, 201, 'Event saved successfully', formatEvent(req, event.toObject()));
   } catch (error) {
     return apiResponse(res, 400, error.message || 'Error saving event');
