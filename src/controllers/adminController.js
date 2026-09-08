@@ -322,7 +322,7 @@ const loginAdmin = async (req, res) => {
         UserModel = User;
       }
     }
-    
+
     const user = await UserModel.findOne({ email: emailQuery }).populate('role_id');
 
     if (user) {
@@ -489,11 +489,17 @@ const getStats = async (req, res) => {
       }
       return ProxyModel;
     };
-    const TUser     = getModel(User,     'User');
+    const TUser = getModel(User, 'User');
     const TBusiness = getModel(Business, 'Business');
-    const TPost     = getModel(Post,     'Post');
-    const TEvent    = getModel(Event,    'Event');
-    
+    const TPost = getModel(Post, 'Post');
+    const TEvent = getModel(Event, 'Event');
+    const TStudent = getModel(Student, 'Student');
+
+    const JobVacancy = require('../models/jobVacancy');
+    const Donation = require('../models/donationModel');
+    const TJobVacancy = getModel(JobVacancy, 'JobVacancy');
+    const TDonation = getModel(Donation, 'Donation');
+
     const today = new Date();
     const startOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
@@ -502,7 +508,12 @@ const getStats = async (req, res) => {
       userCount, businessCount, postCount, eventCount, committeeCount,
       lastMonthUsers, lastMonthBusinesses, lastMonthPosts, lastMonthEvents,
       thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
-      recentMembers, recentEvents, recentPosts
+      recentMembers, recentEvents, recentPosts,
+      studentCount, upcomingEventCount, activeJobCount, donationCount,
+      lastMonthStudents, thisMonthStudents,
+      lastMonthUpcomingEvents, thisMonthUpcomingEvents,
+      lastMonthJobs, thisMonthJobs,
+      lastMonthDonations, thisMonthDonations
     ] = await Promise.all([
       TUser.countDocuments({}),
       TBusiness.countDocuments({}),
@@ -519,7 +530,19 @@ const getStats = async (req, res) => {
       TEvent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
       TUser.find({}).sort({ createdAt: -1 }).limit(5).select('first_name last_name email status image createdAt'),
       TEvent.find({}).sort({ createdAt: -1 }).limit(5).select('title start_time entry_type status image createdAt'),
-      TPost.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt')
+      TPost.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt'),
+      TStudent.countDocuments({}),
+      TEvent.countDocuments({ start_time: { $gte: today } }),
+      TJobVacancy.countDocuments({ status: 1 }),
+      TDonation.countDocuments({}),
+      TStudent.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TStudent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+      TEvent.countDocuments({ start_time: { $gte: today }, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TEvent.countDocuments({ start_time: { $gte: today }, createdAt: { $gte: startOfThisMonth } }),
+      TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfThisMonth } }),
+      TDonation.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+      TDonation.countDocuments({ createdAt: { $gte: startOfThisMonth } })
     ]);
 
     // Calculate percentage changes (This Month vs Last Month)
@@ -527,11 +550,15 @@ const getStats = async (req, res) => {
       if (last === 0) return current > 0 ? 100 : 0;
       return Math.round(((current - last) / last) * 100);
     };
-    
+
     const usersGrowth = calcGrowth(thisMonthUsers, lastMonthUsers);
     const businessGrowth = calcGrowth(thisMonthBusinesses, lastMonthBusinesses);
     const postsGrowth = calcGrowth(thisMonthPosts, lastMonthPosts);
     const eventsGrowth = calcGrowth(thisMonthEvents, lastMonthEvents);
+    const studentsGrowth = calcGrowth(thisMonthStudents, lastMonthStudents);
+    const upcomingEventsGrowth = calcGrowth(thisMonthUpcomingEvents, lastMonthUpcomingEvents);
+    const activeJobsGrowth = calcGrowth(thisMonthJobs, lastMonthJobs);
+    const donationsGrowth = calcGrowth(thisMonthDonations, lastMonthDonations);
 
     const getStartDate = (range) => {
       const d = new Date();
@@ -547,10 +574,10 @@ const getStats = async (req, res) => {
     // Business Categories Dynamic Aggregation with Lookup
     const businessCategoryCounts = await TBusiness.aggregate([
       { $match: { createdAt: { $gte: bizStartDate } } },
-      { 
-        $addFields: { 
-          convertedCategoryId: { $toObjectId: "$business_category_id" } 
-        } 
+      {
+        $addFields: {
+          convertedCategoryId: { $toObjectId: "$business_category_id" }
+        }
       },
       {
         $lookup: {
@@ -563,12 +590,12 @@ const getStats = async (req, res) => {
       {
         $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true }
       },
-      { 
-        $group: { 
-          _id: "$business_category_id", 
+      {
+        $group: {
+          _id: "$business_category_id",
           name: { $first: "$categoryDetails.name" },
-          count: { $sum: 1 } 
-        } 
+          count: { $sum: 1 }
+        }
       },
       { $sort: { count: -1 } },
       { $sort: { count: -1 } }
@@ -639,7 +666,7 @@ const getStats = async (req, res) => {
         getMonthCount(TEvent, b.start, b.end)
       ]));
     });
-    
+
     const activityResults = await Promise.all(activityQueries);
     let totalActivityPosts = 0;
     let totalActivityMembers = 0;
@@ -651,7 +678,7 @@ const getStats = async (req, res) => {
       activityChart.push({
         name: b.name,
         posts: pCount,
-        events: eCount, 
+        events: eCount,
         members: uCount,
         businesses: bCount
       });
@@ -685,24 +712,28 @@ const getStats = async (req, res) => {
         icon: 'file-text'
       }))
     ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 8);
-    
+
     return apiResponse(res, 200, 'Dashboard statistics fetched successfully', {
-      kpis: {
-        users: { total: userCount, growth: usersGrowth },
-        businesses: { total: businessCount, growth: businessGrowth },
-        posts: { total: postCount, growth: postsGrowth },
-        events: { total: eventCount, growth: eventsGrowth } 
-      },
+      // kpis: {
+      //   users: { total: userCount, growth: usersGrowth },
+      //   businesses: { total: businessCount, growth: businessGrowth },
+      //   posts: { total: postCount, growth: postsGrowth },
+      //   events: { total: eventCount, growth: eventsGrowth }
+      // },
       charts: {
         members: membersChart,
         businessCategories: businessCategoriesChart,
         activity: activityChart
       },
       activitySummaryTotals: {
-         posts: { total: totalActivityPosts, growth: postsGrowth },
-         events: { total: totalActivityEvents, growth: eventsGrowth },
-         members: { total: totalActivityMembers, growth: usersGrowth },
-         businesses: { total: totalActivityBusinesses, growth: businessGrowth }
+        posts: { total: totalActivityPosts, growth: postsGrowth },
+        events: { total: totalActivityEvents, growth: eventsGrowth },
+        members: { total: totalActivityMembers, growth: usersGrowth },
+        businesses: { total: totalActivityBusinesses, growth: businessGrowth },
+        students: { total: studentCount, growth: studentsGrowth },
+        upcomingEvents: { total: upcomingEventCount, growth: upcomingEventsGrowth },
+        activeJobs: { total: activeJobCount, growth: activeJobsGrowth },
+        donations: { total: donationCount, growth: donationsGrowth }
       },
       tables: {
         recentMembers: recentMembers.map(m => ({
@@ -732,7 +763,7 @@ const getStats = async (req, res) => {
       atAGlance: {
         activeMembers: userCount,
         activeBusinesses: businessCount,
-        postsThisMonth: thisMonthPosts, 
+        postsThisMonth: thisMonthPosts,
         upcomingEvents: 0
       }
     });
