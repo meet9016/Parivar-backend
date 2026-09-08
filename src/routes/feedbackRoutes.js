@@ -6,10 +6,10 @@ const { parseForm } = require('../middleware/upload');
 
 const router = express.Router();
 
-router.get('/', protect,parseForm, requirePermission('feedback.view'), getAllFeedback);
-router.get('/:id', protect, parseForm, getFeedbackById);
+router.get('/', protect, parseForm, requirePermission(['feedback.list', 'feedback.view']), getAllFeedback);
+router.get('/:id', protect, parseForm, requirePermission(['feedback.list', 'feedback.view']), getFeedbackById);
 router.post('/', protect, parseForm, addFeedback);
-router.put('/:id', protect, parseForm, requirePermission('feedback.edit'), addFeedback);
-router.delete('/:id', protect, parseForm, requirePermission('feedback.delete'), deleteFeedback);
+router.put('/:id', protect, parseForm, requirePermission(['feedback.edit', 'feedback.add']), addFeedback);
+router.delete('/:id', protect, parseForm, requirePermission(['feedback.delete', 'feedback.edit']), deleteFeedback);
 
 module.exports = router;

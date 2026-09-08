@@ -154,13 +154,15 @@ const userSchema = new mongoose.Schema({
   otp_last_sent: { type: Date, default: null },
   otp_count: { type: Number, default: 0 },
   otp_reset_day: { type: Date, default: null },
-  fcm_token: { type: String, default: '' }
-
+  fcm_token: { type: String, default: '' },
+  birthday_notification_year: { type: Number, default: null, index: true },
+  anniversary_notification_year: { type: Number, default: null, index: true }
 
 }, {
   timestamps: true,
   strict: false, id: false
 });
+
 
 // Pre-save hook to hash password if it was modified
 userSchema.pre('save', async function (next) {

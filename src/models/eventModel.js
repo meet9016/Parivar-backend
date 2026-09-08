@@ -82,6 +82,24 @@ const eventSchema = new mongoose.Schema({
     default: 1,
     index: true
   },
+  send_notification: {
+    type: Boolean,
+    default: true
+  },
+  target_type: {
+    type: String,
+    enum: ['all', 'committee', 'specific'],
+    default: 'all'
+  },
+  target_users: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  reminder_sent: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   created_by: {
     id: {
       type: mongoose.Schema.Types.ObjectId,

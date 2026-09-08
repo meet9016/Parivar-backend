@@ -2,11 +2,10 @@ const admin = require('../config/firebase');
 const { getMessaging } = require('firebase-admin/messaging');
 const User = require('../models/userModels');
 
-const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {}) => {
+const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '', extraData = {}) => {
   try {
-    const users = await User.find({ fcm_token: { $exists: true, $ne: '' } }, 'fcm_token').lean();
-    const tokens = [...new Set(users.map(u => u.fcm_token).filter(Boolean))];
-    if (!tokens.length) return;
+    const uniqueTokens = [...new Set(tokens.filter(Boolean))];
+    if (!uniqueTokens.length) return;
 
     const dataPayload = {
       title: String(title || ''),
@@ -20,9 +19,9 @@ const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {})
 
     // FCM supports max 500 tokens per multicast
     const chunks = [];
-    for (let i = 0; i < tokens.length; i += 500) chunks.push(tokens.slice(i, i + 500));
+    for (let i = 0; i < uniqueTokens.length; i += 500) chunks.push(uniqueTokens.slice(i, i + 500));
 
-    console.log(`[FCM Broadcast] Found ${tokens.length} user token(s) to send push notification.`);
+    console.log(`[FCM Multicast] Sending to ${uniqueTokens.length} token(s)...`);
 
     for (const chunk of chunks) {
       const message = {
@@ -35,7 +34,7 @@ const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {})
         tokens: chunk
       };
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`[FCM Broadcast] Success: ${response.successCount}, Failed: ${response.failureCount}`);
+      console.log(`[FCM Multicast] Success: ${response.successCount}, Failed: ${response.failureCount}`);
       if (response.failureCount > 0) {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
@@ -45,8 +44,33 @@ const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {})
       }
     }
   } catch (err) {
+    console.error('[FCM Multicast Error]:', err.message);
+  }
+};
+
+const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {}) => {
+  try {
+    const users = await User.find({ fcm_token: { $exists: true, $ne: '' } }, 'fcm_token').lean();
+    const tokens = users.map(u => u.fcm_token).filter(Boolean);
+    await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
+  } catch (err) {
     console.error('[FCM Broadcast Error]:', err.message);
   }
 };
 
-module.exports = { sendNotificationToAll };
+const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '', extraData = {}) => {
+  try {
+    if (!userIds || !userIds.length) return;
+    const users = await User.find(
+      { _id: { $in: userIds }, fcm_token: { $exists: true, $ne: '' } },
+      'fcm_token'
+    ).lean();
+    const tokens = users.map(u => u.fcm_token).filter(Boolean);
+    await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
+  } catch (err) {
+    console.error('[FCM Targeted Error]:', err.message);
+  }
+};
+
+module.exports = { sendNotificationToAll, sendNotificationToUsers, sendNotificationToTokens };
+

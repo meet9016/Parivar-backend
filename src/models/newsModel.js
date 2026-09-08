@@ -45,6 +45,24 @@ const newsSchema = new mongoose.Schema({
   status: {
     type: Number,
     default: 1
+  },
+  send_notification: {
+    type: Boolean,
+    default: true
+  },
+  target_type: {
+    type: String,
+    enum: ['all', 'committee', 'specific'],
+    default: 'all'
+  },
+  target_users: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  reminder_sent: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true,

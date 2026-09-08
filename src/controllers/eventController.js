@@ -57,6 +57,10 @@ const formatEvent = (req, item = {}) => {
     state: item.state || '',
     city: item.city || '',
     status: Number(item.status ?? 1),
+    send_notification: item.send_notification !== false,
+    target_type: item.target_type || 'all',
+    target_users: Array.isArray(item.target_users) ? item.target_users.map(String) : [],
+    reminder_sent: !!item.reminder_sent,
     created_by: normalizedCreatedBy
   };
 };
@@ -64,6 +68,24 @@ const formatEvent = (req, item = {}) => {
 const eventPayload = (req, existing = {}) => {
   const title = req.body.title || existing.title || '';
   const description = req.body.description || existing.description || '';
+
+  let target_users = req.body.target_user_ids || req.body.target_users;
+  if (typeof target_users === 'string') {
+    try {
+      target_users = JSON.parse(target_users);
+    } catch (_) {
+      target_users = target_users.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+  if (!Array.isArray(target_users)) {
+    target_users = existing.target_users || [];
+  }
+
+  const send_notification = req.body.send_notification !== undefined
+    ? (req.body.send_notification === true || req.body.send_notification === 'true')
+    : (existing.send_notification !== undefined ? existing.send_notification : true);
+
+  const target_type = req.body.target_type || req.body.target_audience || existing.target_type || 'all';
 
   return {
     ...req.body,
@@ -84,6 +106,10 @@ const eventPayload = (req, existing = {}) => {
     state: req.body.state || existing.state || '',
     city: req.body.city || existing.city || '',
     status: Number(req.body.status ?? existing.status ?? 1),
+    send_notification,
+    target_type,
+    target_users,
+    reminder_sent: req.body.reminder_sent !== undefined ? Boolean(req.body.reminder_sent) : (existing.reminder_sent || false),
     created_by: existing.created_by || getCreatedByPayload(req),
     image: imageFromRequest(req, existing.image || '')
   };
@@ -153,10 +179,13 @@ const addEvent = async (req, res) => {
     const event = new Event(data);
     await event.save();
 
-    // Send push notification to all users for newly created event
+    // Send push notification if requested
     if (req.body.send_notification !== 'false' && req.body.send_notification !== false) {
       const imageUrl = event.image ? publicUrl(req, event.image) : '';
       const eventDate = event.start_time || event.event_date || event.createdAt || '';
+      const target_type = req.body.target_type || req.body.target_audience || 'all';
+      const target_users = req.body.target_user_ids || req.body.target_users || [];
+
       createAndBroadcast({
         title: `New Event: ${event.title}`,
         body: event.description?.slice(0, 150) || `Join us for ${event.title}!`,
@@ -164,7 +193,9 @@ const addEvent = async (req, res) => {
         type: 'event',
         ref_id: String(event._id),
         date: eventDate,
-        event_location: event.event_location || ''
+        event_location: event.event_location || '',
+        target_type,
+        target_users
       });
     }
 
@@ -173,6 +204,7 @@ const addEvent = async (req, res) => {
     return apiResponse(res, 400, error.message || 'Error saving event');
   }
 };
+
 
 const updateEvent = async (req, res) => {
   try {
