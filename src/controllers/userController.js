@@ -260,7 +260,6 @@ const getUsers = async (req, res) => {
 
     if (birthday) {
       query.dob = { $exists: true, $ne: null };
-      
       const conditions = [];
       if (req.query.dob_month) {
         conditions.push({
@@ -399,7 +398,6 @@ const getFamilyMembersByNumber = async (req, res) => {
     } else {
       users = await User.find({ number }).populate('role_id');
     }
-    
     const formatted = users.map(u => ({
       id: u.id || String(u._id),
       _id: u._id,
@@ -568,7 +566,7 @@ const updateUser = async (req, res) => {
       user.image = imageFromRequest(req, user.image);
       // Delete old image from external service if it was replaced with a new one
       if (oldImage && oldImage !== user.image) {
-        deleteFileFromExternalService(oldImage).catch(() => {});
+        deleteFileFromExternalService(oldImage).catch(() => { });
       }
     }
 
@@ -616,7 +614,7 @@ const deleteUser = async (req, res) => {
     // Delete user's image from external service
     const userImage = user.image || user.profile_image || '';
     if (userImage) {
-      deleteFileFromExternalService(userImage).catch(() => {});
+      deleteFileFromExternalService(userImage).catch(() => { });
     }
 
     await User.deleteOne({ _id: id });
@@ -632,12 +630,10 @@ const bulkUpdateUsers = async (req, res) => {
     if (!userIds || !Array.isArray(userIds)) {
       return apiResponse(res, 400, 'userIds array is required');
     }
-    
     await User.updateMany(
       { _id: { $in: userIds } },
       { $set: { status: Number(status) } }
     );
-    
     return apiResponse(res, 200, 'Users updated successfully');
   } catch (error) {
     return apiResponse(res, 500, 'Error updating users', { error: error.message });

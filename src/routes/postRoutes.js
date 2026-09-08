@@ -5,14 +5,6 @@ const { savePost, getPosts, getPostById, deletePost } = require('../controllers/
 
 const router = express.Router();
 
-const optionalProtect = async (req, res, next) => {
-    const token = getTokenFromRequest(req);
-    if (token) {
-        return protect(req, res, next);
-    }
-    return next();
-};
-
 const isAdminCall = (req) => {
     return req.user && (req.user.is_committee || req.user.role_id || req.user.role === 'admin');
 };
@@ -47,13 +39,13 @@ router.delete('/:id', protect, (req, res, next) => {
 
 // Member legacy routes
 router.post('/posts', protect, postUpload, savePost);
-router.post('/add_post', protect, postUpload, savePost);
+// router.post('/add_post', protect, postUpload, savePost);
 router.put('/posts/:id', protect, postUpload, savePost);
-router.put('/add_post/:id', protect, postUpload, savePost);
+// router.put('/add_post/:id', protect, postUpload, savePost);
 router.get('/posts', protect, getPosts);
-router.get('/all_post_list', protect, getPosts);
-router.post('/all_post_list', protect, getPosts);
-router.get('/posts/:id', protect, getPostById);
+// router.get('/all_post_list', protect, getPosts);
+// router.post('/all_post_list', protect, getPosts);
+// router.get('/posts/:id', protect, getPostById);
 router.delete('/posts/:id', protect, deletePost);
 
 module.exports = router;

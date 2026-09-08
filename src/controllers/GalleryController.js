@@ -11,13 +11,13 @@ const nextPublicId = async (Model, prefix = '') => {
   return `${prefix}${Date.now()}${count}`;
 };
 
-const findById = (Model, id, extraQuery = {}) => Model.findOne({
-  ...extraQuery,
-  $or: [
-    { id: String(id) },
-    ...(isObjectId(id) ? [{ _id: id }] : [])
-  ]
-});
+const findById = async (Model, id, extraQuery = {}) => {
+  if (isObjectId(id)) {
+    const doc = await Model.findOne({ ...extraQuery, _id: id });
+    if (doc) return doc;
+  }
+  return Model.findOne({ ...extraQuery, id: String(id) });
+};
 
 const normalizeArrayField = (value) => {
   if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null && item !== '')

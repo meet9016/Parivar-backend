@@ -90,11 +90,15 @@ const savePost = async (req, res) => {
     const { title, description } = req.body;
     const status = req.body.status;
 
-    const existing = id
-      ? await Post.findOne({
-        $or: [{ id: String(id) }, { _id: mongoose.isValidObjectId(id) ? id : undefined }]
-      })
-      : null;
+    let existing = null;
+    if (id) {
+      if (mongoose.isValidObjectId(id)) {
+        existing = await Post.findById(id);
+      }
+      if (!existing) {
+        existing = await Post.findOne({ id: String(id) });
+      }
+    }
 
     if (id && !existing) return apiResponse(res, 404, 'Post not found or unauthorized');
 

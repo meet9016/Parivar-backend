@@ -199,13 +199,11 @@ const exportExpenses = async (req, res) => {
       const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       query.$or = [{ description: regex }, { expense_category_name: regex }, { committee_member_name: regex }];
     }
-    
-    const expenses = await Expense.find(query).sort({ _id: -1 }).lean();
-    
-    let filteredExpenses = expenses;
     if (month) {
-      filteredExpenses = filteredExpenses.filter(e => e.date && e.date.startsWith(month));
+      query.date = { $regex: `^${month}` };
     }
+    
+    const filteredExpenses = await Expense.find(query).sort({ _id: -1 }).lean();
 
     const rows = filteredExpenses.map(e => ({
       'Date': e.date || '',
