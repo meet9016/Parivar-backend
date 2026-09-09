@@ -42,7 +42,22 @@ router.use('/bank-details', require('./bankDetailRoutes'));
 router.use('/content', require('./contentRoutes'));
 router.use('/masters', require('./masterRoutes'));
 router.use('/inquiry', require('./inquiryRoutes'));
-router.use('/register-parivar', require('./tenantRoutes'));
 router.use('/pricing', require('./pricingRoutes'));
+
+// Dedicated Upload endpoint to upload images to external Digitalks service (https://service.digitalks.co.in)
+const { upload } = require('../middleware/upload');
+const { uploadToExternalService } = require('../utils/fileUpload');
+const { apiResponse } = require('../utils/apiResponse');
+
+router.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return apiResponse(res, 400, 'No file provided');
+    const folder = req.body.folder_structure || req.body.folder || 'members';
+    const url = await uploadToExternalService(req.file, folder);
+    return apiResponse(res, 200, 'File uploaded successfully', { url, file_url: url });
+  } catch (err) {
+    return apiResponse(res, 500, err.message || 'Upload failed');
+  }
+});
 
 module.exports = router;

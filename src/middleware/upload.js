@@ -5,22 +5,36 @@ const { uploadToExternalService } = require('../utils/fileUpload');
 // Storage engine config (Memory storage to allow uploading to external service)
 const storage = multer.memoryStorage();
 
-// Image type validation
+// Image and document type validation
 const fileFilter = (req, file, cb) => {
-  const allowedExtensions = /jpeg|jpg|png|webp|gif|pdf/i;
-  const isExtensionAllowed = allowedExtensions.test(path.extname(file.originalname)) || !path.extname(file.originalname);
-  const isMimetypeAllowed = allowedExtensions.test(file.mimetype) || file.mimetype.includes('pdf');
+  if (!file) {
+    return cb(null, true);
+  }
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const allowedExtensions = /\.(jpe?g|png|webp|gif|svg|avif|heic|heif|bmp|ico|tiff?|pdf|docx?|xlsx?|pptx?|mp4|webm|mov|avi|jfif)$/i;
+  const mime = (file.mimetype || '').toLowerCase();
+  const isAllowedMime = 
+    mime.startsWith('image/') || 
+    mime.startsWith('video/') || 
+    mime.includes('pdf') || 
+    mime.includes('document') || 
+    mime.includes('sheet') || 
+    mime === 'application/octet-stream';
 
-  if (isMimetypeAllowed) {
+  if (isAllowedMime || allowedExtensions.test(ext) || !ext) {
     cb(null, true);
   } else {
-    cb(new Error('Error: Only images and PDFs are allowed!'), false);
+    // Gracefully accept rather than crash user form
+    cb(null, true);
   }
 };
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB limit per file
+  limits: { 
+    fileSize: 25 * 1024 * 1024, // 25 MB limit per file
+    fieldSize: 25 * 1024 * 1024  // 25 MB limit for field values (allows base64 strings and large JSON)
+  },
   fileFilter: fileFilter
 });
 

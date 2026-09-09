@@ -158,6 +158,7 @@ const register = async (req, res) => {
           village: newUser.village,
           village_id: newUser.village_id,
           address: newUser.address,
+          image: m.image || m.profile_image || '',
           family_head: {
             id: newUser._id,
             name: fullName(newUser)
@@ -585,13 +586,10 @@ const updateUser = async (req, res) => {
     if (familyHead !== undefined) user.familyHead = familyHead === true || familyHead === 'true';
     user.family_head = familyData.family_head;
     if (password) user.password = password;
-    if (req.body.image) {
-      const oldImage = user.image || '';
-      user.image = imageFromRequest(req, user.image);
-      // Delete old image from external service if it was replaced with a new one
-      if (oldImage && oldImage !== user.image) {
-        deleteFileFromExternalService(oldImage).catch(() => { });
-      }
+    if (req.body.image !== undefined) {
+      user.image = req.body.image;
+    } else if (req.file) {
+      user.image = `/uploads/${req.file.filename}`;
     }
 
     await user.save();
@@ -657,6 +655,7 @@ const updateUser = async (req, res) => {
                 city_id: user.city_id,
                 village: user.village,
                 address: user.address,
+                ...(m.image !== undefined ? { image: m.image } : {}),
                 family_head: {
                   id: user._id,
                   name: fullName(user)
@@ -687,6 +686,7 @@ const updateUser = async (req, res) => {
             village: user.village,
             village_id: user.village_id,
             address: user.address,
+            image: m.image || m.profile_image || '',
             family_head: {
               id: user._id,
               name: fullName(user)

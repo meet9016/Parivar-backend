@@ -15,8 +15,9 @@ const uploadToExternalService = async (file, folderName = 'general') => {
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
     const MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25MB
 
-    const isVideo = file.mimetype.startsWith('video/');
-    const isImage = file.mimetype.startsWith('image/');
+    const mime = (file.mimetype || 'image/jpeg').toLowerCase();
+    const isVideo = mime.startsWith('video/');
+    const isImage = mime.startsWith('image/');
 
     if (isVideo && file.size > MAX_VIDEO_SIZE) {
       throw new Error('File size is too large. Please upload a smaller video (max 25MB).');
@@ -32,8 +33,8 @@ const uploadToExternalService = async (file, folderName = 'general') => {
     
     // multer memory storage gives us file.buffer
     formData.append('file', file.buffer, {
-      filename: file.originalname,
-      contentType: file.mimetype,
+      filename: file.originalname || 'upload.jpg',
+      contentType: file.mimetype || 'application/octet-stream',
     });
 
     const response = await axios.post(`${BASE_URL}/upload-file`, formData, {
