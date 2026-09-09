@@ -23,16 +23,12 @@ const imageFromRequest = (req, fallback = '') => {
 
 const sanitizeUser = (user) => {
   if (!user) return user;
-
   const data = user.toObject ? user.toObject() : { ...user };
   delete data.password;
-
   return data;
 };
 
-// Register a new user member
 const register = async (req, res) => {
-
   try {
     const {
       first_name,
@@ -58,7 +54,6 @@ const register = async (req, res) => {
       image,
       family_head_id,
       familyHead
-
     } = req.body;
 
     if (!first_name || !number) {
@@ -73,7 +68,6 @@ const register = async (req, res) => {
     }
 
     const owner = req.user ? req.user : {};
-
     const familyData = await prepareFamilyFields({
       relation,
       family_head_id: req.body.family_head_id,
@@ -82,7 +76,6 @@ const register = async (req, res) => {
     });
 
     const users = await User.find({ member_id: /^\d+$/ }).select('member_id');
-
     const highestId = users.reduce((max, u) => {
       const num = Number(u.member_id);
       return Number.isFinite(num) && num > max ? num : max;
@@ -115,31 +108,73 @@ const register = async (req, res) => {
       familyHead: familyHead === true || familyHead === 'true',
       status: familyData.status,
     });
-
     const Role = require('../models/roleModel');
     const defaultRole = await Role.findOne({ name: 'UserRole' });
     if (defaultRole) {
       newUser.role_id = defaultRole._id;
     }
-
+    
     await newUser.save();
-
-    if (familyData.relation === 'Self') {
+    if (familyData.relation === 'Self' || newUser.familyHead) {
       newUser.family_head = {
         id: newUser._id,
         name: fullName(newUser)
       };
-
       if (req.body.status === undefined) {
-        newUser.status = 0;
+        newUser.status = 1;
       }
-
       await newUser.save();
     }
-
+    let membersList = req.body.members;
+    if (typeof membersList === 'string') {
+      try {
+        membersList = JSON.parse(membersList);
+      } catch (e) {
+        membersList = [];
+      }
+    }
+    const createdMembers = [];
+    if (Array.isArray(membersList) && membersList.length > 0) {
+      let currentMemberId = highestId + 1;
+      for (const m of membersList) {
+        if (!m.first_name || !m.first_name.trim()) continue;
+        currentMemberId += 1;
+        const childUser = new User({
+          member_id: String(currentMemberId),
+          first_name: m.first_name.trim(),
+          middle_name: m.middle_name ? m.middle_name.trim() : (newUser.first_name || ''),
+          last_name: m.last_name ? m.last_name.trim() : (newUser.last_name || ''),
+          email: m.email ? m.email.toLowerCase().trim() : '',
+          password: m.password || '12345',
+          number: m.number ? m.number.trim() : (newUser.number || ''),
+          gender: m.gender || 'Male',
+          dob: m.dob || null,
+          anniversary: m.anniversary || null,
+          blood_group: m.blood_group || '',
+          relation: m.relation || 'Other',
+          country_id: newUser.country_id,
+          state_id: newUser.state_id,
+          city_id: newUser.city_id,
+          village: newUser.village,
+          village_id: newUser.village_id,
+          address: newUser.address,
+          family_head: {
+            id: newUser._id,
+            name: fullName(newUser)
+          },
+          familyHead: false,
+          status: m.status !== undefined ? Number(m.status) : (newUser.status !== undefined ? Number(newUser.status) : 1),
+          role_id: defaultRole ? defaultRole._id : undefined
+        });
+        await childUser.save();
+        createdMembers.push(sanitizeUser(childUser));
+      }
+    }
     const registeredData = sanitizeUser(newUser);
     registeredData.image = publicUrl(req, registeredData.image || registeredData.profile_image || '');
-
+    if (createdMembers.length > 0) {
+      registeredData.members = createdMembers;
+    }
     res.status(201).json({
       message: 'User registered successfully',
       data: registeredData
@@ -153,28 +188,23 @@ const register = async (req, res) => {
 // const login = async (req, res) => {
 //   try {
 //     const { email, password } = req.body;
-
 //     if (!email || !password) {
 //       return res.status(400).json({ message: 'Email and password are required' });
 //     }
-
 //     const user = await User.findOne({ email: email.toLowerCase() });
 //     if (!user) {
 //       return res.status(401).json({ message: 'Invalid email or password' });
 //     }
-
 //     const isMatch = await user.comparePassword(password);
 //     if (!isMatch) {
 //       return res.status(401).json({ message: 'Invalid email or password' });
 //     }
-
 //     // Generate JWT token
 //     const token = jwt.sign(
 //       { id: user._id },
 //       JWT_SECRET,
 //       { expiresIn: JWT_EXPIRES_IN }
 //     );
-
 //     res.status(200).json({
 //       message: 'Login successful',
 //       token,
@@ -184,8 +214,8 @@ const register = async (req, res) => {
 //     res.status(500).json({ message: 'Error logging in', error: error.message });
 //   }
 // };
-
 // Get authenticated user profile
+
 const getProfile = async (req, res) => {
   try {
     // req.user is populated by the protect middleware
@@ -230,15 +260,12 @@ const getUsers = async (req, res) => {
     if (!canListMembers && canListCommittee) {
       query.is_committee = true;
     }
-
     if (req.query.is_head === 'true' || req.query.heads === 'true') {
       query.relation = 'Self';
     }
-
     if (req.query.familyHead !== undefined) {
       query.familyHead = req.query.familyHead === 'true';
     }
-
     if (req.query.family_head_id) {
       const headId = mongooseQueryForUser(req.query.family_head_id)._id;
       if (mongoose.isValidObjectId(headId)) {
@@ -253,11 +280,9 @@ const getUsers = async (req, res) => {
         ];
       }
     }
-
     if (req.query.family_head_name) {
       query['family_head.name'] = { $regex: req.query.family_head_name, $options: 'i' };
     }
-
     if (birthday) {
       query.dob = { $exists: true, $ne: null };
       const conditions = [];
@@ -280,7 +305,6 @@ const getUsers = async (req, res) => {
       if (conditions.length > 0) {
         query.$expr = conditions.length === 1 ? conditions[0] : { $and: conditions };
       }
-
       if (req.query.dob_start || req.query.dob_end) {
         const range = {};
         if (req.query.dob_start) range.$gte = new Date(req.query.dob_start);
@@ -571,6 +595,109 @@ const updateUser = async (req, res) => {
     }
 
     await user.save();
+
+    // Handle updating/creating/deleting child family members if passed
+    let membersList = req.body.members;
+    if (typeof membersList === 'string') {
+      try {
+        membersList = JSON.parse(membersList);
+      } catch (e) {
+        membersList = [];
+      }
+    }
+
+    let deletedMemberIds = req.body.deletedMemberIds;
+    if (typeof deletedMemberIds === 'string') {
+      try {
+        deletedMemberIds = JSON.parse(deletedMemberIds);
+      } catch (e) {
+        deletedMemberIds = [];
+      }
+    }
+
+    if (Array.isArray(deletedMemberIds) && deletedMemberIds.length > 0) {
+      await User.deleteMany({
+        _id: { $in: deletedMemberIds },
+        $or: [
+          { 'family_head.id': user._id },
+          { 'family_head.id': String(user._id) }
+        ]
+      });
+    }
+
+    if (Array.isArray(membersList) && membersList.length > 0) {
+      const usersCountList = await User.find({ member_id: /^\d+$/ }).select('member_id');
+      let currentMaxId = usersCountList.reduce((max, u) => {
+        const num = Number(u.member_id);
+        return Number.isFinite(num) && num > max ? num : max;
+      }, 0);
+
+      for (const m of membersList) {
+        if (!m.first_name || !m.first_name.trim()) continue;
+        const memberId = m._id || m.id;
+        if (memberId && mongoose.isValidObjectId(memberId)) {
+          // Update existing child member
+          await User.findOneAndUpdate(
+            { _id: memberId },
+            {
+              $set: {
+                first_name: m.first_name.trim(),
+                middle_name: m.middle_name !== undefined ? m.middle_name.trim() : (user.first_name || ''),
+                last_name: m.last_name !== undefined ? m.last_name.trim() : (user.last_name || ''),
+                email: m.email ? m.email.toLowerCase().trim() : '',
+                number: m.number ? m.number.trim() : (user.number || ''),
+                gender: m.gender || 'Male',
+                dob: m.dob || null,
+                anniversary: m.anniversary || null,
+                blood_group: m.blood_group || '',
+                relation: m.relation || 'Other',
+                status: m.status !== undefined ? Number(m.status) : 1,
+                country_id: user.country_id,
+                state_id: user.state_id,
+                city_id: user.city_id,
+                village: user.village,
+                address: user.address,
+                family_head: {
+                  id: user._id,
+                  name: fullName(user)
+                },
+                familyHead: false
+              }
+            }
+          );
+        } else {
+          // Create new child member
+          currentMaxId += 1;
+          const childUser = new User({
+            member_id: String(currentMaxId),
+            first_name: m.first_name.trim(),
+            middle_name: m.middle_name ? m.middle_name.trim() : (user.first_name || ''),
+            last_name: m.last_name ? m.last_name.trim() : (user.last_name || ''),
+            email: m.email ? m.email.toLowerCase().trim() : '',
+            password: m.password || '12345',
+            number: m.number ? m.number.trim() : (user.number || ''),
+            gender: m.gender || 'Male',
+            dob: m.dob || null,
+            anniversary: m.anniversary || null,
+            blood_group: m.blood_group || '',
+            relation: m.relation || 'Other',
+            country_id: user.country_id,
+            state_id: user.state_id,
+            city_id: user.city_id,
+            village: user.village,
+            village_id: user.village_id,
+            address: user.address,
+            family_head: {
+              id: user._id,
+              name: fullName(user)
+            },
+            familyHead: false,
+            status: m.status !== undefined ? Number(m.status) : (user.status !== undefined ? Number(user.status) : 1)
+          });
+          await childUser.save();
+        }
+      }
+    }
 
     return apiResponse(res, 200, 'User updated  ', {
       id: user._id,
