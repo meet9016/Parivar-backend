@@ -75,6 +75,10 @@ app.use((error, req, res, next) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`http://localhost:${PORT}`);
+  // Start the automated scheduled notification service
+  const scheduledNotificationService = require('./src/services/scheduledNotificationService');
+  scheduledNotificationService.startScheduler();
 });
+
 
 

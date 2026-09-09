@@ -81,18 +81,25 @@ const register = async (req, res) => {
       familyHead
     });
 
-    const users = await User.find({ member_id: /^\d+$/ }).select('member_id');
+    const latestUser = await User.findOne({ member_id: /^\d+$/ })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('member_id')
+      .lean();
 
-    const highestId = users.reduce((max, u) => {
-      const num = Number(u.member_id);
-      return Number.isFinite(num) && num > max ? num : max;
-    }, 0);
+    let nextMemberId = '1';
+    if (latestUser && !isNaN(Number(latestUser.member_id))) {
+      nextMemberId = String(Number(latestUser.member_id) + 1);
+    } else {
+      const count = await User.countDocuments();
+      nextMemberId = String(count + 1);
+    }
 
     const newUser = new User({
-      member_id: String(highestId + 1),
+      member_id: nextMemberId,
       first_name,
       middle_name,
       last_name,
+
       email: email ? email.toLowerCase() : '',
       password: password || '12345',
       number,

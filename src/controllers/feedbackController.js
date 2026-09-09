@@ -21,12 +21,8 @@ const formatFeedback = (f) => ({
 
 const getAllFeedback = async (req, res) => {
     try {
-        const isAdmin = req.user?.committee_role === 'President';
-        const currentMemberId = memberPublicId(req.user || {});
-
-        const query = isAdmin ? {} : { member_id: currentMemberId };
         const { data: feedbacks, pagination } = await queryHelper(Feedback, req.query, {
-            baseQuery: query,
+            baseQuery: {},
             searchFields: ['name', 'email', 'message'],
             filterFields: ['member_id', 'status']
         });

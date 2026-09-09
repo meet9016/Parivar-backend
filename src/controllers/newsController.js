@@ -30,6 +30,10 @@ const formatNews = (req, item = {}) => {
         date: item.date || item.createdAt || '',
         cdate: item.cdate || (item.createdAt ? new Date(item.createdAt).toISOString().slice(0, 10) : ''),
         status: Number(item.status ?? 1),
+        send_notification: item.send_notification !== false,
+        target_type: item.target_type || 'all',
+        target_users: Array.isArray(item.target_users) ? item.target_users.map(String) : [],
+        reminder_sent: !!item.reminder_sent,
         image: publicUrl(req, image),
         reporter_name: item.reporter_name || '',
         location: item.location || ''
@@ -40,6 +44,24 @@ const newsPayload = (req, existing = {}) => {
     const title = req.body.title || existing.title || '';
     const description = req.body.description || existing.description || req.body.content || existing.content || '';
 
+    let target_users = req.body.target_user_ids || req.body.target_users;
+    if (typeof target_users === 'string') {
+        try {
+            target_users = JSON.parse(target_users);
+        } catch (_) {
+            target_users = target_users.split(',').map(s => s.trim()).filter(Boolean);
+        }
+    }
+    if (!Array.isArray(target_users)) {
+        target_users = existing.target_users || [];
+    }
+
+    const send_notification = req.body.send_notification !== undefined
+        ? (req.body.send_notification === true || req.body.send_notification === 'true')
+        : (existing.send_notification !== undefined ? existing.send_notification : true);
+
+    const target_type = req.body.target_type || req.body.target_audience || existing.target_type || 'all';
+
     const data = { ...req.body };
     delete data.image;
 
@@ -49,10 +71,15 @@ const newsPayload = (req, existing = {}) => {
         title,
         description,
         content: req.body.content || description,
+        date: req.body.date ? new Date(req.body.date) : (existing.date || new Date()),
         reporter_name: req.body.reporter_name || existing.reporter_name || fullName(req.user) || req.user?.email || 'Admin',
         location: req.body.location || existing.location || 'Admin',
         category: req.body.category || existing.category || '',
         status: req.body.status !== undefined ? Number(req.body.status) : (existing.status !== undefined ? Number(existing.status) : 1),
+        send_notification,
+        target_type,
+        target_users,
+        reminder_sent: req.body.reminder_sent !== undefined ? Boolean(req.body.reminder_sent) : (existing.reminder_sent || false),
         image: imageFromRequest(req, existing.image || (typeof existing.image === 'string' ? existing.image : '')),
         cdate: existing.cdate || new Date().toISOString().slice(0, 10)
     };
@@ -91,17 +118,22 @@ const addNews = async (req, res) => {
         });
         await news.save();
 
-        // Send notification to all users when news is created
+        // Send notification if requested
         if (req.body.send_notification !== 'false' && req.body.send_notification !== false) {
             const imageUrl = news.image ? publicUrl(req, news.image) : '';
             const newsDate = news.date || news.cdate || news.createdAt || '';
+            const target_type = req.body.target_type || req.body.target_audience || 'all';
+            const target_users = req.body.target_user_ids || req.body.target_users || [];
+
             createAndBroadcast({
                 title: news.title,
                 body: news.description?.slice(0, 150) || '',
                 image: imageUrl,
                 type: 'news',
                 ref_id: String(news._id),
-                date: newsDate
+                date: newsDate,
+                target_type,
+                target_users
             });
         }
 
@@ -110,6 +142,7 @@ const addNews = async (req, res) => {
         return apiResponse(res, 400, error.message || 'Error saving news');
     }
 };
+
 
 const updateNews = async (req, res) => {
     try {

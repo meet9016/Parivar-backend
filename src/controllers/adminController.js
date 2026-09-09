@@ -371,7 +371,7 @@ const loginAdmin = async (req, res) => {
       }
     }
 
-    return apiResponse(res, 401, 'Invalid email or password');
+    return apiResponse(res, 400, 'Invalid email or password');
   } catch (error) {
     return apiResponse(res, 500, 'Error in login', { error: error.message });
   }
