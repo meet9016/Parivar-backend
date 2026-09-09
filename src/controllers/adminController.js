@@ -504,62 +504,6 @@ const getStats = async (req, res) => {
     const startOfThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
 
-    const [
-      userCount, businessCount, postCount, eventCount, committeeCount,
-      lastMonthUsers, lastMonthBusinesses, lastMonthPosts, lastMonthEvents,
-      thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
-      recentMembers, recentEvents, recentPosts,
-      studentCount, upcomingEventCount, activeJobCount, donationCount,
-      lastMonthStudents, thisMonthStudents,
-      lastMonthUpcomingEvents, thisMonthUpcomingEvents,
-      lastMonthJobs, thisMonthJobs,
-      lastMonthDonations, thisMonthDonations
-    ] = await Promise.all([
-      TUser.countDocuments({}),
-      TBusiness.countDocuments({}),
-      TPost.countDocuments({}),
-      TEvent.countDocuments({}),
-      TUser.countDocuments({ is_committee: true }),
-      TUser.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TBusiness.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TPost.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TEvent.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TUser.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      TBusiness.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      TPost.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      TEvent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      TUser.find({}).sort({ createdAt: -1 }).limit(5).select('first_name last_name email status image createdAt'),
-      TEvent.find({}).sort({ createdAt: -1 }).limit(5).select('title start_time entry_type status image createdAt'),
-      TPost.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt'),
-      TStudent.countDocuments({}),
-      TEvent.countDocuments({ start_time: { $gte: today } }),
-      TJobVacancy.countDocuments({ status: 1 }),
-      TDonation.countDocuments({}),
-      TStudent.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TStudent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
-      TEvent.countDocuments({ start_time: { $gte: today }, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TEvent.countDocuments({ start_time: { $gte: today }, createdAt: { $gte: startOfThisMonth } }),
-      TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfThisMonth } }),
-      TDonation.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-      TDonation.countDocuments({ createdAt: { $gte: startOfThisMonth } })
-    ]);
-
-    // Calculate percentage changes (This Month vs Last Month)
-    const calcGrowth = (current, last) => {
-      if (last === 0) return current > 0 ? 100 : 0;
-      return Math.round(((current - last) / last) * 100);
-    };
-
-    const usersGrowth = calcGrowth(thisMonthUsers, lastMonthUsers);
-    const businessGrowth = calcGrowth(thisMonthBusinesses, lastMonthBusinesses);
-    const postsGrowth = calcGrowth(thisMonthPosts, lastMonthPosts);
-    const eventsGrowth = calcGrowth(thisMonthEvents, lastMonthEvents);
-    const studentsGrowth = calcGrowth(thisMonthStudents, lastMonthStudents);
-    const upcomingEventsGrowth = calcGrowth(thisMonthUpcomingEvents, lastMonthUpcomingEvents);
-    const activeJobsGrowth = calcGrowth(thisMonthJobs, lastMonthJobs);
-    const donationsGrowth = calcGrowth(thisMonthDonations, lastMonthDonations);
-
     const getStartDate = (range) => {
       const d = new Date();
       if (range === 'last_1_month') return new Date(d.getFullYear(), d.getMonth() - 1, d.getDate());
@@ -568,45 +512,6 @@ const getStats = async (req, res) => {
       if (range === 'this_year') return new Date(d.getFullYear(), 0, 1);
       return new Date(d.getFullYear(), d.getMonth(), 1);
     };
-
-    const bizStartDate = getStartDate(businessRange);
-
-    // Business Categories Dynamic Aggregation with Lookup
-    const businessCategoryCounts = await TBusiness.aggregate([
-      { $match: { createdAt: { $gte: bizStartDate } } },
-      {
-        $addFields: {
-          convertedCategoryId: { $toObjectId: "$business_category_id" }
-        }
-      },
-      {
-        $lookup: {
-          from: 'businesscategories',
-          localField: 'convertedCategoryId',
-          foreignField: '_id',
-          as: 'categoryDetails'
-        }
-      },
-      {
-        $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true }
-      },
-      {
-        $group: {
-          _id: "$business_category_id",
-          name: { $first: "$categoryDetails.name" },
-          count: { $sum: 1 }
-        }
-      },
-      { $sort: { count: -1 } },
-      { $sort: { count: -1 } }
-    ]);
-
-    const COLORS = ['#8b5cf6', '#f59e0b', '#10b981', '#3b82f6'];
-    const businessCategoriesChart = businessCategoryCounts.map((item, index) => ({
-      name: item.name || 'Other',
-      value: item.count,
-      color: COLORS[index % COLORS.length]
-    }));
 
     // Dynamic Chart Buckets Generator
     const getBuckets = (range) => {
@@ -645,29 +550,126 @@ const getStats = async (req, res) => {
       return await Model.countDocuments({ createdAt: { $gte: start, $lt: end } });
     };
 
-    // Build Members Overview Chart
+    const bizStartDate = getStartDate(businessRange);
     const membersBuckets = getBuckets(membersRange);
-    const membersChart = [];
-    const membersQueries = membersBuckets.map(b => getMonthCount(TUser, b.start, b.end));
-    const membersResults = await Promise.all(membersQueries);
-    membersBuckets.forEach((b, index) => {
-      membersChart.push({ name: b.name, members: membersResults[index] });
-    });
-
-    // Build Activity Summary Chart
     const activityBuckets = getBuckets(activityRange);
-    const activityChart = [];
-    const activityQueries = [];
-    activityBuckets.forEach(b => {
-      activityQueries.push(Promise.all([
+
+    const [
+      initialStats,
+      businessCategoryCounts,
+      membersResults,
+      activityResults
+    ] = await Promise.all([
+      // 1. Initial Queries
+      Promise.all([
+        TUser.countDocuments({}),
+        TBusiness.countDocuments({}),
+        TPost.countDocuments({}),
+        TEvent.countDocuments({}),
+        TUser.countDocuments({ is_committee: true }),
+        TUser.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TBusiness.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TPost.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TEvent.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TUser.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+        TBusiness.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+        TPost.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+        TEvent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+        TUser.find({}).sort({ createdAt: -1 }).limit(5).select('first_name last_name email status image createdAt').lean(),
+        TEvent.find({}).sort({ createdAt: -1 }).limit(5).select('title start_time entry_type status image createdAt').lean(),
+        TPost.find({}).sort({ createdAt: -1 }).limit(5).select('title status image createdAt').lean(),
+        TStudent.countDocuments({}),
+        TEvent.countDocuments({ start_time: { $gte: today } }),
+        TJobVacancy.countDocuments({ status: 1 }),
+        TDonation.countDocuments({}),
+        TStudent.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TStudent.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+        TEvent.countDocuments({ start_time: { $gte: today }, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TEvent.countDocuments({ start_time: { $gte: today }, createdAt: { $gte: startOfThisMonth } }),
+        TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfThisMonth } }),
+        TDonation.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TDonation.countDocuments({ createdAt: { $gte: startOfThisMonth } })
+      ]),
+      // 2. Business Category Counts
+      TBusiness.aggregate([
+        { $match: { createdAt: { $gte: bizStartDate } } },
+        {
+          $addFields: {
+            convertedCategoryId: { $toObjectId: "$business_category_id" }
+          }
+        },
+        {
+          $lookup: {
+            from: 'businesscategories',
+            localField: 'convertedCategoryId',
+            foreignField: '_id',
+            as: 'categoryDetails'
+          }
+        },
+        {
+          $unwind: { path: "$categoryDetails", preserveNullAndEmptyArrays: true }
+        },
+        {
+          $group: {
+            _id: "$business_category_id",
+            name: { $first: "$categoryDetails.name" },
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { count: -1 } }
+      ]),
+      // 3. Members Queries
+      Promise.all(membersBuckets.map(b => getMonthCount(TUser, b.start, b.end))),
+      // 4. Activity Queries
+      Promise.all(activityBuckets.map(b => Promise.all([
         getMonthCount(TUser, b.start, b.end),
         getMonthCount(TBusiness, b.start, b.end),
         getMonthCount(TPost, b.start, b.end),
         getMonthCount(TEvent, b.start, b.end)
-      ]));
+      ])))
+    ]);
+
+    const [
+      userCount, businessCount, postCount, eventCount, committeeCount,
+      lastMonthUsers, lastMonthBusinesses, lastMonthPosts, lastMonthEvents,
+      thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
+      recentMembers, recentEvents, recentPosts,
+      studentCount, upcomingEventCount, activeJobCount, donationCount,
+      lastMonthStudents, thisMonthStudents,
+      lastMonthUpcomingEvents, thisMonthUpcomingEvents,
+      lastMonthJobs, thisMonthJobs,
+      lastMonthDonations, thisMonthDonations
+    ] = initialStats;
+
+    // Calculate percentage changes (This Month vs Last Month)
+    const calcGrowth = (current, last) => {
+      if (last === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - last) / last) * 100);
+    };
+
+    const usersGrowth = calcGrowth(thisMonthUsers, lastMonthUsers);
+    const businessGrowth = calcGrowth(thisMonthBusinesses, lastMonthBusinesses);
+    const postsGrowth = calcGrowth(thisMonthPosts, lastMonthPosts);
+    const eventsGrowth = calcGrowth(thisMonthEvents, lastMonthEvents);
+    const studentsGrowth = calcGrowth(thisMonthStudents, lastMonthStudents);
+    const upcomingEventsGrowth = calcGrowth(thisMonthUpcomingEvents, lastMonthUpcomingEvents);
+    const activeJobsGrowth = calcGrowth(thisMonthJobs, lastMonthJobs);
+    const donationsGrowth = calcGrowth(thisMonthDonations, lastMonthDonations);
+
+    const COLORS = ['#8b5cf6', '#f59e0b', '#10b981', '#3b82f6'];
+    const businessCategoriesChart = businessCategoryCounts.map((item, index) => ({
+      name: item.name || 'Other',
+      value: item.count,
+      color: COLORS[index % COLORS.length]
+    }));
+
+    const membersChart = [];
+    membersBuckets.forEach((b, index) => {
+      membersChart.push({ name: b.name, members: membersResults[index] });
     });
 
-    const activityResults = await Promise.all(activityQueries);
+    const activityChart = [];
     let totalActivityPosts = 0;
     let totalActivityMembers = 0;
     let totalActivityBusinesses = 0;
