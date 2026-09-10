@@ -172,21 +172,68 @@ const masterConfig = {
   'blood-group': { Model: Master, type: 'blood-group' },
   'event-category': { Model: Master, type: 'event-category' },
   'gallery-category': { Model: GalleryCategory, nameKeys: ['category'], skipCustomId: true },
-  'expense-category': { Model: Master, type: 'expense-category' }
+  'expense-category': { Model: Master, type: 'expense-category' },
+  'relationship': { Model: Master, type: 'relationship' }
 };
+
+const DEFAULT_RELATIONSHIPS = [
+  { name: 'Wife', gujarati_name: 'પત્ની', hindi_name: 'पत्नी', description: 'પરિવારના વડાની ધર્મપત્ની' },
+  { name: 'Husband', gujarati_name: 'પતિ', hindi_name: 'पति', description: 'પરિવારના વડાના જીવનસાથી (પતિ)' },
+  { name: 'Son', gujarati_name: 'પુત્ર', hindi_name: 'बेटा / पुत्र', description: 'દીકરો / પુત્ર' },
+  { name: 'Daughter', gujarati_name: 'પુત્રી', hindi_name: 'बेटी / पुत्री', description: 'દીકરી / પુત્રી' },
+  { name: 'Father', gujarati_name: 'પિતા', hindi_name: 'पिता', description: 'પિતાશ્રી' },
+  { name: 'Mother', gujarati_name: 'માતા', hindi_name: 'माता', description: 'માતુશ્રી' },
+  { name: 'Brother', gujarati_name: 'ભાઈ', hindi_name: 'भाई', description: 'સગો ભાઈ' },
+  { name: 'Sister', gujarati_name: 'બહેન', hindi_name: 'बहन', description: 'સગી બહેન' },
+  { name: 'Grandfather', gujarati_name: 'દાદા', hindi_name: 'दादा / नाना', description: 'પિતાના પિતા (દાદા)' },
+  { name: 'Grandmother', gujarati_name: 'દાદી', hindi_name: 'दादी / नानी', description: 'પિતાની માતા (દાદી)' },
+  { name: 'Uncle', gujarati_name: 'કાકા / મામા', hindi_name: 'चाचा / मामा', description: 'પિતાના ભાઈ (કાકા) અથવા માતાના ભાઈ (મામા)' },
+  { name: 'Aunt', gujarati_name: 'કાકી / મામી / ફોઈ', hindi_name: 'चाची / मामी / बुआ', description: 'કાકાના પત્ની (કાકી), મામાના પત્ની (મામી) અથવા પિતાની બહેન (ફોઈ)' },
+  { name: 'Daughter-in-law', gujarati_name: 'પુત્રવધૂ', hindi_name: 'बहू / पुत्रवधू', description: 'પુત્રની પત્ની (વહુ / પુત્રવધૂ)' },
+  { name: 'Son-in-law', gujarati_name: 'જમાઈ', hindi_name: 'दामाद', description: 'દીકરીના પતિ (જમાઈ)' },
+  { name: 'Grandson', gujarati_name: 'પૌત્ર', hindi_name: 'पोता / नाती', description: 'દીકરાનો દીકરો (પૌત્ર)' },
+  { name: 'Granddaughter', gujarati_name: 'પૌત્રી', hindi_name: 'पोती / नातिन', description: 'દીકરાની દીકરી (પૌત્રી)' },
+  { name: 'Cousin', gujarati_name: 'પિતરાઈ ભાઈ/બહેન', hindi_name: 'चचेरा भाई/बहन', description: 'કાકા/મામા/ફોઈ/માસીના સંતાન' },
+  { name: 'Father-in-law', gujarati_name: 'સસરા', hindi_name: 'ससुर', description: 'પતિ અથવા પત્નીના પિતા' },
+  { name: 'Mother-in-law', gujarati_name: 'સાસુ', hindi_name: 'सास', description: 'પતિ અથવા પત્નીની માતા' },
+  { name: 'Brother-in-law', gujarati_name: 'સાળો / બનેવી', hindi_name: 'साला / जीजा', description: 'પત્નીનો ભાઈ (સાળો) અથવા બહેનનો પતિ (બનેવી)' },
+  { name: 'Sister-in-law', gujarati_name: 'સાળી / ભાભી / નણંદ', hindi_name: 'साली / भाभी / ननद', description: 'પત્નીની બહેન (સાળી) અથવા ભાઈની પત્ની (ભાભી) અથવા પતિની બહેન (નણંદ)' },
+  { name: 'Other', gujarati_name: 'અન્ય', hindi_name: 'अन्य', description: 'અન્ય સંબંધ' }
+];
+
+const FIXED_RELATION_NAMES = DEFAULT_RELATIONSHIPS.map(d => d.name.toLowerCase());
 
 const formatMaster = (req, type, item, config, parentMap = {}) => {
   const name = config.nameKeys?.map((key) => item[key]).find(Boolean) || item.name || '';
   const parentVal = String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '');
   const parentName = parentMap[parentVal] || (typeof parentVal === 'object' ? parentVal.name : '') || '';
+  
+  let gujName = item.gujarati_name || '';
+  let hiName = item.hindi_name || '';
+  let desc = item.description || '';
+  const isDefault = type === 'relationship' && FIXED_RELATION_NAMES.includes((name || '').trim().toLowerCase());
+
+  if (type === 'relationship' && (!gujName || !desc || !hiName)) {
+    const defaultMatch = DEFAULT_RELATIONSHIPS.find(d => d.name.toLowerCase() === (name || '').toLowerCase());
+    if (defaultMatch) {
+      if (!gujName) gujName = defaultMatch.gujarati_name;
+      if (!hiName) hiName = defaultMatch.hindi_name || '';
+      if (!desc) desc = defaultMatch.description;
+    }
+  }
+
   return {
     id: String(item._id),
     type,
     name,
+    gujarati_name: gujName,
+    hindi_name: hiName,
+    description: desc,
     parent_id: parentVal,
     parent_name: parentName,
     status: Number(item.status ?? 1),
-    image: publicUrl(req, item.image || '')
+    image: publicUrl(req, item.image || ''),
+    is_default: isDefault
   };
 };
 
@@ -195,6 +242,42 @@ const getMasters = async (req, res) => {
     const type = req.params.type;
     const config = masterConfig[type];
     if (!config) return apiResponse(res, 404, 'Master type not found');
+
+    // Auto seed or backfill default relationships and remove obsolete ones
+    if (type === 'relationship') {
+      // Remove Nephew and Niece if they exist in DB
+      await config.Model.deleteMany({
+        type: 'relationship',
+        name: { $in: [/^nephew$/i, /^niece$/i] }
+      });
+
+      const count = await config.Model.countDocuments({ type: 'relationship' });
+      if (count === 0) {
+        const seedDocs = DEFAULT_RELATIONSHIPS.map((relItem, index) => ({
+          id: `REL_${Date.now()}_${index}`,
+          type: 'relationship',
+          name: relItem.name,
+          gujarati_name: relItem.gujarati_name,
+          hindi_name: relItem.hindi_name,
+          description: relItem.description,
+          status: 1
+        }));
+        await config.Model.insertMany(seedDocs);
+      } else {
+        // Backfill any existing records where gujarati_name / hindi_name is missing
+        const existingRels = await config.Model.find({ type: 'relationship' });
+        for (const relDoc of existingRels) {
+          const match = DEFAULT_RELATIONSHIPS.find(d => d.name.toLowerCase() === (relDoc.name || '').toLowerCase());
+          if (match && (!relDoc.gujarati_name || !relDoc.description || !relDoc.hindi_name)) {
+            if (!relDoc.gujarati_name) relDoc.set('gujarati_name', match.gujarati_name);
+            if (!relDoc.hindi_name && match.hindi_name) relDoc.set('hindi_name', match.hindi_name);
+            if (!relDoc.description) relDoc.set('description', match.description);
+            await relDoc.save();
+          }
+        }
+      }
+    }
+
     const query = { ...(config.type ? { type: config.type } : {}) };
     if (req.query.parent_id && config.parentKey) query[config.parentKey] = String(req.query.parent_id);
     if (req.query.parent_id && config.type) query.parent_id = String(req.query.parent_id);
@@ -269,6 +352,8 @@ const saveMaster = async (req, res) => {
       doc.type = config.type;
       doc.name = name;
       doc.parent_id = req.body.parent_id || '';
+      if (req.body.gujarati_name !== undefined) doc.set('gujarati_name', req.body.gujarati_name);
+      if (req.body.description !== undefined) doc.set('description', req.body.description);
     } else {
       const primaryNameKey = config.nameKeys[0];
       doc[primaryNameKey] = name;
