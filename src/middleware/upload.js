@@ -1,6 +1,14 @@
 const multer = require('multer');
 const path = require('path');
 const { uploadToExternalService } = require('../utils/fileUpload');
+const { tenantContext } = require('../utils/tenantContext');
+
+const runWithTenant = (req, fn) => {
+  if (req && req.tenantConn) {
+    return tenantContext.run({ tenantConn: req.tenantConn }, fn);
+  }
+  return fn();
+};
 
 // Storage engine config (Memory storage to allow uploading to external service)
 const storage = multer.memoryStorage();
@@ -56,7 +64,7 @@ const multerBusinessUpload = upload.fields([
 
 const businessUpload = (req, res, next) => {
   multerBusinessUpload(req, res, async (err) => {
-    if (err) return next(err);
+    if (err) return runWithTenant(req, () => next(err));
     try {
       if (req.files) {
         const uploadPromises = [];
@@ -73,19 +81,19 @@ const businessUpload = (req, res, next) => {
         }
         await Promise.all(uploadPromises);
       }
-      next();
+      return runWithTenant(req, () => next());
     } catch (error) {
-      next(error);
+      return runWithTenant(req, () => next(error));
     }
   });
 };
 
-// Multer single image upload for posts
+// Multer single image upload for posts & events
 const multerPostUpload = upload.single('image');
 
 const postUpload = (req, res, next) => {
   multerPostUpload(req, res, async (err) => {
-    if (err) return next(err);
+    if (err) return runWithTenant(req, () => next(err));
     try {
       if (req.file) {
         const imagePath = await uploadToExternalService(req.file, req.file.fieldname);
@@ -93,16 +101,16 @@ const postUpload = (req, res, next) => {
         // Delete req.file so controllers fall back to req.body.image and don't prepend /uploads/
         delete req.file;
       }
-      next();
+      return runWithTenant(req, () => next());
     } catch (error) {
-      next(error);
+      return runWithTenant(req, () => next(error));
     }
   });
 };
 
 const parseForm = (req, res, next) => {
   if (!req.is('multipart/form-data')) {
-    return next();
+    return runWithTenant(req, () => next());
   }
 
   return upload.fields([
@@ -126,7 +134,7 @@ const parseForm = (req, res, next) => {
     { name: 'favicon', maxCount: 1 },
 
   ])(req, res, async (error) => {
-    if (error) return next(error);
+    if (error) return runWithTenant(req, () => next(error));
 
     try {
       if (Array.isArray(req.files)) {
@@ -221,11 +229,18 @@ const parseForm = (req, res, next) => {
       if (req.file) delete req.file;
       if (req.files) delete req.files;
 
-      return next();
+      return runWithTenant(req, () => next());
     } catch (err) {
-      return next(err);
+      return runWithTenant(req, () => next(err));
     }
   });
+};
+
+module.exports = {
+  upload,
+  businessUpload,
+  postUpload,
+  parseForm
 };
 
 module.exports = {

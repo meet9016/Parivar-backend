@@ -11,9 +11,15 @@ const imageFromRequest = (req, fallback = '') => {
   return req.body.image || req.body.image_url || fallback || '';
 };
 
-const findEvent = (req, id) => Event.findOne(
-  isObjectId(id) ? { _id: id } : { _id: String(id) }
-);
+const findEvent = (req, id) => {
+  const mongoose = require('mongoose');
+  const conditions = [{ id: String(id) }];
+  if (mongoose.isValidObjectId(id)) {
+    conditions.push({ _id: new mongoose.Types.ObjectId(String(id)) });
+  }
+  conditions.push({ _id: String(id) });
+  return Event.findOne({ $or: conditions });
+};
 
 const getCreatedByPayload = (req) => ({
   id: String(req.user?.id || req.user?._id || ''),
