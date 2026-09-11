@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const { deleteFileFromExternalService } = require('../utils/fileUpload');
 const queryHelper = require('../utils/queryHelper');
 const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
+const XLSX = require('xlsx');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
@@ -775,6 +776,157 @@ const bulkUpdateUsers = async (req, res) => {
   }
 };
 
+/**
+ * Bulk import members from an uploaded Excel (.xlsx/.xls) file.
+ * Family grouping logic (Option A):
+ *   - Row with Relation=Self OR Is Family Head=Yes  → becomes a family head
+ *   - Subsequent rows (until next head) → linked to the most recent head
+ * Duplicate handling: skip row if mobile number already exists, report in errors array.
+ */
+const bulkImportUsers = async (req, res) => {
+  try {
+    if (!req.file) {
+      return apiResponse(res, 400, 'Excel file is required');
+    }
+
+    // Parse Excel buffer
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    if (!rows || rows.length === 0) {
+      return apiResponse(res, 400, 'Excel file is empty or has no data rows');
+    }
+
+    // Helper to normalise column header keys (trim + lowercase)
+    const getVal = (row, ...keys) => {
+      for (const key of keys) {
+        const found = Object.keys(row).find(k => k.trim().toLowerCase() === key.toLowerCase());
+        if (found !== undefined && row[found] !== undefined && String(row[found]).trim() !== '') {
+          return String(row[found]).trim();
+        }
+      }
+      return '';
+    };
+
+    // Helper to parse date (handles Excel date objects and string formats)
+    const parseDate = (val) => {
+      if (!val) return null;
+      if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+      const str = String(val).trim();
+      if (!str) return null;
+      // Try DD-MM-YYYY
+      const ddmmyyyy = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+      if (ddmmyyyy) {
+        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      const d = new Date(str);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    // Get the role to assign by default
+    const Role = require('../models/roleModel');
+    const defaultRole = await Role.findOne({ name: 'UserRole' });
+
+    // Get current highest member_id
+    const latestUser = await User.findOne({ member_id: /^\d+$/ })
+      .sort({ createdAt: -1, _id: -1 })
+      .select('member_id')
+      .lean();
+    let nextMemberId = latestUser && !isNaN(Number(latestUser.member_id))
+      ? Number(latestUser.member_id) + 1
+      : (await User.countDocuments()) + 1;
+
+    const created = [];
+    const errors = [];
+    let currentHead = null; // tracks the last created family head User doc
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2; // Excel row number (1 = header)
+
+      const firstName = getVal(row, 'First Name', 'first_name', 'firstname', 'name');
+      const number    = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone');
+
+      if (!firstName) {
+        errors.push({ row: rowNum, reason: 'First Name is required' });
+        continue;
+      }
+      if (!number) {
+        errors.push({ row: rowNum, name: firstName, reason: 'Mobile Number is required' });
+        continue;
+      }
+
+      // Duplicate check by mobile number
+      const existing = await User.findOne({ number });
+      if (existing) {
+        errors.push({ row: rowNum, name: firstName, reason: `Mobile number ${number} already exists` });
+        continue;
+      }
+
+      const isFamilyHeadVal = getVal(row, 'Is Family Head', 'is family head', 'family head', 'familyhead').toLowerCase();
+      const relation        = getVal(row, 'Relation', 'relation') || 'Self';
+      const isFamilyHead    = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
+
+      try {
+        const newUser = new User({
+          member_id:    String(nextMemberId),
+          first_name:   firstName,
+          middle_name:  getVal(row, 'Middle Name', 'middle_name', 'middlename'),
+          last_name:    getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
+          email:        getVal(row, 'Email', 'email').toLowerCase() || '',
+          password:     '12345',
+          number,
+          gender:       getVal(row, 'Gender', 'gender') || '',
+          dob:          parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
+          anniversary:  parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
+          blood_group:  getVal(row, 'Blood Group', 'blood group', 'blood_group'),
+          address:      getVal(row, 'Address', 'address'),
+          relation:     isFamilyHead ? 'Self' : (relation || 'Other'),
+          familyHead:   isFamilyHead,
+          status:       1,
+          role_id:      defaultRole ? defaultRole._id : undefined
+        });
+
+        if (isFamilyHead) {
+          // Save first to get _id, then set family_head to self
+          await newUser.save();
+          newUser.family_head = { id: newUser._id, name: fullName(newUser) };
+          await newUser.save();
+          currentHead = newUser;
+        } else {
+          // Link to current head
+          if (currentHead) {
+            newUser.family_head = { id: currentHead._id, name: fullName(currentHead) };
+            newUser.parent_member_id = String(currentHead.member_id);
+          }
+          await newUser.save();
+        }
+
+        nextMemberId++;
+        created.push({
+          member_id: newUser.member_id,
+          name: fullName(newUser),
+          number: newUser.number
+        });
+      } catch (saveErr) {
+        errors.push({ row: rowNum, name: firstName, reason: saveErr.message });
+      }
+    }
+
+    return apiResponse(res, 200, `Import complete: ${created.length} created, ${errors.length} failed`, {
+      created_count: created.length,
+      failed_count:  errors.length,
+      created,
+      errors
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error importing users', { error: error.message });
+  }
+};
+
 module.exports = {
   register,
   // login,
@@ -785,5 +937,6 @@ module.exports = {
   deleteUser,
   getFamilyMembers,
   getFamilyMembersByNumber,
-  bulkUpdateUsers
+  bulkUpdateUsers,
+  bulkImportUsers
 };

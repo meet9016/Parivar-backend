@@ -1,7 +1,7 @@
 const express = require('express');
 const userController = require('../controllers/userController');
 const { authorizeUserUpdate, protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
-const { parseForm } = require('../middleware/upload');
+const { parseForm, upload } = require('../middleware/upload');
 const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
 
@@ -66,6 +66,8 @@ router.put('/bulk-update', protect, (req, res, next) => {
     }
     return userController.bulkUpdateUsers(req, res, next);
 });
+
+router.post('/bulk-import', protect, requirePermission('members.add'), upload.single('file'), userController.bulkImportUsers);
 
 router.get('/:id', protect, (req, res, next) => {
     return userController.getUserById(req, res, next);
