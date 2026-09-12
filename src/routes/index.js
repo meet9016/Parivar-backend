@@ -43,6 +43,7 @@ router.use('/content', require('./contentRoutes'));
 router.use('/masters', require('./masterRoutes'));
 router.use('/inquiry', require('./inquiryRoutes'));
 router.use('/pricing', require('./pricingRoutes'));
+router.use('/mandal', require('./mandalRoutes'));
 
 // Dedicated Upload endpoint to upload images to external Digitalks service (https://service.digitalks.co.in)
 const { upload } = require('../middleware/upload');
