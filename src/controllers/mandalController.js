@@ -61,7 +61,7 @@ exports.getMandalsList = async (req, res) => {
 // 2. Create New Mandal
 exports.createMandal = async (req, res) => {
   try {
-    const { name, monthly_amount, start_date, mandal_head_id, status, description, rules } = req.body;
+    const { name, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
 
     if (!name || !name.trim()) {
       return apiResponse(res, 400, 'Mandal name is required');
@@ -78,6 +78,7 @@ exports.createMandal = async (req, res) => {
     const newMandal = await Mandal.create({
       name: name.trim(),
       monthly_amount: monthly_amount !== undefined ? Number(monthly_amount) : 500,
+      due_day: due_day !== undefined ? Number(due_day) : 10,
       start_date: start_date ? new Date(start_date) : new Date(),
       mandal_head_id: mandal_head_id || null,
       mandal_head_name: headName,
@@ -114,10 +115,11 @@ exports.updateMandalSetup = async (req, res) => {
   try {
     const mandalId = req.query.mandal_id || req.params.id || req.body.mandal_id;
     const mandal = await resolveMandal(mandalId);
-    const { name, monthly_amount, start_date, mandal_head_id, status, description, rules } = req.body;
+    const { name, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
 
     if (name !== undefined) mandal.name = name;
     if (monthly_amount !== undefined) mandal.monthly_amount = Number(monthly_amount);
+    if (due_day !== undefined) mandal.due_day = Number(due_day);
     if (start_date !== undefined) mandal.start_date = new Date(start_date);
     if (status !== undefined) mandal.status = Number(status);
     if (description !== undefined) mandal.description = description;
@@ -457,10 +459,10 @@ exports.recordContribution = async (req, res) => {
   }
 };
 
-// 11. Bulk Mark All as Paid for a Month
+// 11. Bulk Mark Selected or All Pending as Paid for a Month
 exports.bulkMarkPaid = async (req, res) => {
   try {
-    const { month, mandal_id, payment_mode = 'Cash', payment_date = new Date() } = req.body;
+    const { month, mandal_id, contribution_ids, payment_mode = 'Cash', payment_date = new Date() } = req.body;
     const currentMonthStr = new Date().toISOString().slice(0, 7);
     const targetMonth = month || currentMonthStr;
 
@@ -471,11 +473,24 @@ exports.bulkMarkPaid = async (req, res) => {
       return apiResponse(res, 400, 'No members enrolled in this Mandal');
     }
 
-    const pendingContribs = await MandalContribution.find({
+    let filter = {
       mandal_id: mandal._id,
-      month: targetMonth,
       status: 'Pending'
-    });
+    };
+
+    if (Array.isArray(contribution_ids) && contribution_ids.length > 0) {
+      filter._id = { $in: contribution_ids };
+    } else {
+      filter.month = targetMonth;
+    }
+
+    const pendingContribs = await MandalContribution.find(filter);
+
+    if (pendingContribs.length === 0) {
+      return apiResponse(res, 200, 'No pending contributions found for the selection', {
+        updated_count: 0
+      });
+    }
 
     const recordedByName = req.user ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() : 'Admin';
 
@@ -490,7 +505,7 @@ exports.bulkMarkPaid = async (req, res) => {
       await contrib.save();
     }
 
-    return apiResponse(res, 200, `Successfully marked ${pendingContribs.length} members as Paid for ${targetMonth}`, {
+    return apiResponse(res, 200, `Successfully marked ${pendingContribs.length} members as Paid`, {
       updated_count: pendingContribs.length
     });
   } catch (error) {
@@ -602,6 +617,7 @@ exports.getMandalDashboard = async (req, res) => {
         id: mandal._id,
         name: mandal.name,
         monthly_amount: mandal.monthly_amount,
+        due_day: mandal.due_day || 10,
         mandal_head_name: mandal.mandal_head_name,
         members_count: totalMembers
       },

@@ -179,26 +179,28 @@ const masterConfig = {
 const DEFAULT_RELATIONSHIPS = [
   { name: 'Wife', gujarati_name: 'પત્ની', hindi_name: 'पत्नी', description: 'પરિવારના વડાની ધર્મપત્ની' },
   { name: 'Husband', gujarati_name: 'પતિ', hindi_name: 'पति', description: 'પરિવારના વડાના જીવનસાથી (પતિ)' },
-  { name: 'Son', gujarati_name: 'પુત્ર', hindi_name: 'बेटा / पुत्र', description: 'દીકરો / પુત્ર' },
-  { name: 'Daughter', gujarati_name: 'પુત્રી', hindi_name: 'बेटी / पुत्री', description: 'દીકરી / પુત્રી' },
-  { name: 'Father', gujarati_name: 'પિતા', hindi_name: 'पिता', description: 'પિતાશ્રી' },
-  { name: 'Mother', gujarati_name: 'માતા', hindi_name: 'माता', description: 'માતુશ્રી' },
-  { name: 'Brother', gujarati_name: 'ભાઈ', hindi_name: 'भाई', description: 'સગો ભાઈ' },
-  { name: 'Sister', gujarati_name: 'બહેન', hindi_name: 'बहन', description: 'સગી બહેન' },
-  { name: 'Grandfather', gujarati_name: 'દાદા', hindi_name: 'दादा / नाना', description: 'પિતાના પિતા (દાદા)' },
-  { name: 'Grandmother', gujarati_name: 'દાદી', hindi_name: 'दादी / नानी', description: 'પિતાની માતા (દાદી)' },
-  { name: 'Uncle', gujarati_name: 'કાકા / મામા', hindi_name: 'चाचा / मामा', description: 'પિતાના ભાઈ (કાકા) અથવા માતાના ભાઈ (મામા)' },
-  { name: 'Aunt', gujarati_name: 'કાકી / મામી / ફોઈ', hindi_name: 'चाची / मामी / बुआ', description: 'કાકાના પત્ની (કાકી), મામાના પત્ની (મામી) અથવા પિતાની બહેન (ફોઈ)' },
-  { name: 'Daughter-in-law', gujarati_name: 'પુત્રવધૂ', hindi_name: 'बहू / पुत्रवधू', description: 'પુત્રની પત્ની (વહુ / પુત્રવધૂ)' },
-  { name: 'Son-in-law', gujarati_name: 'જમાઈ', hindi_name: 'दामाद', description: 'દીકરીના પતિ (જમાઈ)' },
-  { name: 'Grandson', gujarati_name: 'પૌત્ર', hindi_name: 'पोता / नाती', description: 'દીકરાનો દીકરો (પૌત્ર)' },
-  { name: 'Granddaughter', gujarati_name: 'પૌત્રી', hindi_name: 'पोती / नातिन', description: 'દીકરાની દીકરી (પૌત્રી)' },
-  { name: 'Cousin', gujarati_name: 'પિતરાઈ ભાઈ/બહેન', hindi_name: 'चचेरा भाई/बहन', description: 'કાકા/મામા/ફોઈ/માસીના સંતાન' },
-  { name: 'Father-in-law', gujarati_name: 'સસરા', hindi_name: 'ससुर', description: 'પતિ અથવા પત્નીના પિતા' },
-  { name: 'Mother-in-law', gujarati_name: 'સાસુ', hindi_name: 'सास', description: 'પતિ અથવા પત્નીની માતા' },
-  { name: 'Brother-in-law', gujarati_name: 'સાળો / બનેવી', hindi_name: 'साला / जीजा', description: 'પત્નીનો ભાઈ (સાળો) અથવા બહેનનો પતિ (બનેવી)' },
-  { name: 'Sister-in-law', gujarati_name: 'સાળી / ભાભી / નણંદ', hindi_name: 'साली / भाभी / ननद', description: 'પત્નીની બહેન (સાળી) અથવા ભાઈની પત્ની (ભાભી) અથવા પતિની બહેન (નણંદ)' },
-  { name: 'Other', gujarati_name: 'અન્ય', hindi_name: 'अन्य', description: 'અન્ય સંબંધ' }
+  { name: 'Son', gujarati_name: 'પુત્ર', hindi_name: 'બેટા / પુત્ર', description: 'દીકરો / પુત્ર' },
+  { name: 'Daughter', gujarati_name: 'પુત્રી', hindi_name: 'બેટી / પુત્રી', description: 'દીકરી / પુત્રી' },
+  { name: 'Father', gujarati_name: 'પિતા', hindi_name: 'પિતા', description: 'પિતાશ્રી' },
+  { name: 'Mother', gujarati_name: 'માતા', hindi_name: 'માતા', description: 'માતુશ્રી' },
+  { name: 'Brother', gujarati_name: 'ભાઈ', hindi_name: 'ભાઈ', description: 'સગો ભાઈ' },
+  { name: 'Sister', gujarati_name: 'બહેન', hindi_name: 'બહેન', description: 'સગી બહેન' },
+  { name: 'Nephew', gujarati_name: 'ભત્રીજો (ભાઈનો દીકરો) / ભાણો', hindi_name: 'ભતીજો (ભાઈ કા લડકા) / ભાણજા', description: 'સગા ભાઈનો દીકરો (ભત્રીજો) અથવા સગી બહેનનો દીકરો (ભાણો)' },
+  { name: 'Niece', gujarati_name: 'ભત્રીજી (ભાઈની દીકરી) / ભાણી', hindi_name: 'ભતીજી (ભાઈ કી લડકી) / ભાણજી', description: 'સગા ભાઈની દીકરી (ભત્રીજી) અથવા સગી બહેનની દીકરી (ભાણી)' },
+  { name: 'Grandfather', gujarati_name: 'દાદા', hindi_name: 'દાદા / નાના', description: 'પિતાના પિતા (દાદા)' },
+  { name: 'Grandmother', gujarati_name: 'દાદી', hindi_name: 'દાદી / નાની', description: 'પિતાની માતા (દાદી)' },
+  { name: 'Uncle', gujarati_name: 'કાકા / મામા', hindi_name: 'ચાચા / મામા', description: 'પિતાના ભાઈ (કાકા) અથવા માતાના ભાઈ (મામા)' },
+  { name: 'Aunt', gujarati_name: 'કાકી / મામી / ફોઈ', hindi_name: 'ચાચી / મામી / બુઆ', description: 'કાકાના પત્ની (કાકી), મામાના પત્ની (મામી) અથવા પિતાની બહેન (ફોઈ)' },
+  { name: 'Daughter-in-law', gujarati_name: 'પુત્રવધૂ', hindi_name: 'બહૂ / પુત્રવધૂ', description: 'પુત્રની પત્ની (વહુ / પુત્રવધૂ)' },
+  { name: 'Son-in-law', gujarati_name: 'જમાઈ', hindi_name: 'દામાદ', description: 'દીકરીના પતિ (જમાઈ)' },
+  { name: 'Grandson', gujarati_name: 'પૌત્ર', hindi_name: 'પોતા / નાતી', description: 'દીકરાનો દીકરો (પૌત્ર)' },
+  { name: 'Granddaughter', gujarati_name: 'પૌત્રી', hindi_name: 'પોતી / નાતિન', description: 'દીકરાની દીકરી (પૌત્રી)' },
+  { name: 'Cousin', gujarati_name: 'પિતરાઈ ભાઈ/બહેન (કાકા/બાપાના સંતાન)', hindi_name: 'ચચેરા/મમેરા ભાઈ/બહન (ચાચા/તાઉ કે બેટે-બેટી)', description: 'પિતાના ભાઈ (કાકા/મોટાબાપા) ના સંતાન અથવા મામા/ફોઈ/માસીના સંતાન' },
+  { name: 'Father-in-law', gujarati_name: 'સસરા', hindi_name: 'સસુર', description: 'પતિ અથવા પત્નીના પિતા' },
+  { name: 'Mother-in-law', gujarati_name: 'સાસુ', hindi_name: 'સાસ', description: 'પતિ અથવા પત્નીની માતા' },
+  { name: 'Brother-in-law', gujarati_name: 'સાળો / બનેવી', hindi_name: 'સાલા / જીજા', description: 'પત્નીનો ભાઈ (સાળો) અથવા બહેનનો પતિ (બનેવી)' },
+  { name: 'Sister-in-law', gujarati_name: 'સાળી / ભાભી / નણંદ', hindi_name: 'સાલી / ભાભી / નનદ', description: 'પત્નીની બહેન (સાળી) અથવા ભાઈની પત્ની (ભાભી) અથવા પતિની બહેન (નણંદ)' },
+  { name: 'Other', gujarati_name: 'અન્ય', hindi_name: 'અન્ય', description: 'અન્ય સંબંધ' }
 ];
 
 const FIXED_RELATION_NAMES = DEFAULT_RELATIONSHIPS.map(d => d.name.toLowerCase());
@@ -243,37 +245,44 @@ const getMasters = async (req, res) => {
     const config = masterConfig[type];
     if (!config) return apiResponse(res, 404, 'Master type not found');
 
-    // Auto seed or backfill default relationships and remove obsolete ones
+    // Auto seed or backfill default relationships
     if (type === 'relationship') {
-      // Remove Nephew and Niece if they exist in DB
-      await config.Model.deleteMany({
-        type: 'relationship',
-        name: { $in: [/^nephew$/i, /^niece$/i] }
-      });
+      const existingRels = await config.Model.find({ type: 'relationship' });
+      const existingNames = new Set(existingRels.map(r => (r.name || '').toLowerCase().trim()));
 
-      const count = await config.Model.countDocuments({ type: 'relationship' });
-      if (count === 0) {
-        const seedDocs = DEFAULT_RELATIONSHIPS.map((relItem, index) => ({
-          id: `REL_${Date.now()}_${index}`,
-          type: 'relationship',
-          name: relItem.name,
-          gujarati_name: relItem.gujarati_name,
-          hindi_name: relItem.hindi_name,
-          description: relItem.description,
-          status: 1
-        }));
-        await config.Model.insertMany(seedDocs);
-      } else {
-        // Backfill any existing records where gujarati_name / hindi_name is missing
-        const existingRels = await config.Model.find({ type: 'relationship' });
-        for (const relDoc of existingRels) {
-          const match = DEFAULT_RELATIONSHIPS.find(d => d.name.toLowerCase() === (relDoc.name || '').toLowerCase());
-          if (match && (!relDoc.gujarati_name || !relDoc.description || !relDoc.hindi_name)) {
-            if (!relDoc.gujarati_name) relDoc.set('gujarati_name', match.gujarati_name);
-            if (!relDoc.hindi_name && match.hindi_name) relDoc.set('hindi_name', match.hindi_name);
-            if (!relDoc.description) relDoc.set('description', match.description);
-            await relDoc.save();
+      // Insert any missing default relationships (including Nephew, Niece, Cousin)
+      for (const relItem of DEFAULT_RELATIONSHIPS) {
+        if (!existingNames.has(relItem.name.toLowerCase())) {
+          await config.Model.create({
+            id: `REL_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            type: 'relationship',
+            name: relItem.name,
+            gujarati_name: relItem.gujarati_name,
+            hindi_name: relItem.hindi_name,
+            description: relItem.description,
+            status: 1
+          });
+        }
+      }
+
+      // Backfill and update existing records with accurate gujarati_name, hindi_name, description
+      for (const relDoc of existingRels) {
+        const match = DEFAULT_RELATIONSHIPS.find(d => d.name.toLowerCase() === (relDoc.name || '').toLowerCase().trim());
+        if (match) {
+          let updated = false;
+          if (relDoc.gujarati_name !== match.gujarati_name) {
+            relDoc.set('gujarati_name', match.gujarati_name);
+            updated = true;
           }
+          if (relDoc.hindi_name !== match.hindi_name) {
+            relDoc.set('hindi_name', match.hindi_name);
+            updated = true;
+          }
+          if (relDoc.description !== match.description) {
+            relDoc.set('description', match.description);
+            updated = true;
+          }
+          if (updated) await relDoc.save();
         }
       }
     }

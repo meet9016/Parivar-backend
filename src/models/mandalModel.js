@@ -12,6 +12,12 @@ const mandalSchema = new mongoose.Schema({
     default: 500,
     min: 0
   },
+  due_day: {
+    type: Number,
+    default: 10,
+    min: 1,
+    max: 31
+  },
   start_date: {
     type: Date,
     default: Date.now

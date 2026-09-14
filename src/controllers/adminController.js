@@ -228,147 +228,141 @@ const loginAdmin = async (req, res) => {
 
     const emailQuery = email.trim().toLowerCase();
 
-    // 1. Check CommitteeMember collection first for Committee Member Login
-    const committeeMember = await CommitteeMember.findOne({ email: emailQuery }).select('+password').populate('role_id');
-
-    if (committeeMember && committeeMember.password) {
-      const isMatch = await bcrypt.compare(password, committeeMember.password);
-      if (isMatch) {
-        if (committeeMember.status === 0) {
-          return apiResponse(res, 403, 'Access denied: Your account is inactive.');
-        }
-        if (committeeMember.role_id && committeeMember.role_id.status === 0) {
-          return apiResponse(res, 403, 'Access denied: Your assigned role is inactive.');
-        }
-
-        const permissions = getRolePermissions(committeeMember);
-
-        const token = jwt.sign(
-          { id: committeeMember._id },
-          JWT_SECRET,
-          { expiresIn: '1d' }
-        );
-
-        const isSuperAdmin = committeeMember.designation === 'President' || committeeMember.role_id?.name?.toLowerCase() === 'admin' || committeeMember.role_id?.name?.toLowerCase() === 'super admin' || (!committeeMember.role_id && committeeMember.designation === 'Admin');
-
-        const userData = {
-          id: String(committeeMember._id),
-          name: `${committeeMember.first_name} ${committeeMember.last_name || ''}`.trim(),
-          email: committeeMember.email,
-          role: isSuperAdmin ? 'admin' : 'committee',
-          is_committee: true,
-          committee_role: committeeMember.designation || 'Committee Member',
-          role_id: committeeMember.role_id?._id ? String(committeeMember.role_id._id) : (committeeMember.role_id || ''),
-          role_name: committeeMember.role_id?.name || '',
-          permissions,
-          is_super_admin: isSuperAdmin
-        };
-
-        return apiResponse(res, 200, 'Login successful', {
-          token,
-          user: userData
-        });
-      }
-    }
-
-    // 2. Fallback to User collection for legacy/main Admin login
-    // Get the correct connection — tenant-specific or auto-lookup from registry by email
     const { tenantContext } = require('../utils/tenantContext');
     const { getTenantConnection, getRegistryConnection } = require('../config/registryDb');
     const store = tenantContext.getStore();
-    let UserModel;
-    let targetTenantSlug = null;
 
-    // Pre-check tenant status in registry to block suspended login
+    const tryLoginOnConnection = async (conn, tenantSlug = '') => {
+      if (!conn) return null;
+      const CM = conn.models.CommitteeMember || conn.model('CommitteeMember', CommitteeMember.schema);
+      const U = conn.models.User || conn.model('User', User.schema);
+
+      const cm = await CM.findOne({ email: emailQuery }).select('+password').populate('role_id');
+      if (cm && cm.password) {
+        const isMatch = await bcrypt.compare(password, cm.password);
+        if (isMatch) {
+          if (cm.status === 0) {
+            return { errorStatus: 403, errorMessage: 'Access denied: Your account is inactive.' };
+          }
+          if (cm.role_id && cm.role_id.status === 0) {
+            return { errorStatus: 403, errorMessage: 'Access denied: Your assigned role is inactive.' };
+          }
+          const permissions = getRolePermissions(cm);
+          const token = jwt.sign({ id: cm._id }, JWT_SECRET, { expiresIn: '1d' });
+          const isSuperAdmin = cm.designation === 'President' || cm.role_id?.name?.toLowerCase() === 'admin' || cm.role_id?.name?.toLowerCase() === 'super admin' || (!cm.role_id && cm.designation === 'Admin');
+
+          const userData = {
+            id: String(cm._id),
+            name: `${cm.first_name} ${cm.last_name || ''}`.trim(),
+            email: cm.email,
+            role: isSuperAdmin ? 'admin' : 'committee',
+            is_committee: true,
+            committee_role: cm.designation || 'Committee Member',
+            role_id: cm.role_id?._id ? String(cm.role_id._id) : (cm.role_id || ''),
+            role_name: cm.role_id?.name || '',
+            permissions,
+            is_super_admin: isSuperAdmin,
+            tenant_code: tenantSlug
+          };
+
+          return { token, user: userData, tenant_code: tenantSlug };
+        }
+      }
+
+      // Check User
+      const u = await U.findOne({ email: emailQuery }).populate('role_id');
+      if (u) {
+        const isMatch = await bcrypt.compare(password, u.password);
+        if (isMatch) {
+          if (u.status === 0) {
+            return { errorStatus: 403, errorMessage: 'Access denied: Your account is inactive.' };
+          }
+          if (u.role_id && u.role_id.status === 0) {
+            return { errorStatus: 403, errorMessage: 'Access denied: Your assigned role is inactive.' };
+          }
+          const permissions = getRolePermissions(u);
+          if (!u.is_committee && u.committee_role !== 'Self' && permissions.length === 0) {
+            return { errorStatus: 403, errorMessage: 'Access denied: Insufficient permissions' };
+          }
+          const token = jwt.sign({ id: u._id }, JWT_SECRET, { expiresIn: '1d' });
+          const isSuperAdmin = u.role === 'superadmin' || u.committee_role === 'President' || u.role_id?.name?.toLowerCase() === 'admin' || u.role_id?.name?.toLowerCase() === 'super admin' || (!u.role_id && (u.role === 'admin' || u.committee_role === 'Admin'));
+
+          const userData = {
+            id: u.id || String(u._id),
+            name: fullName(u),
+            email: u.email,
+            role: isSuperAdmin ? 'admin' : (u.is_committee ? 'committee' : 'user'),
+            is_committee: u.is_committee,
+            committee_role: u.committee_role,
+            role_id: u.role_id?._id ? String(u.role_id._id) : '',
+            role_name: u.role_id?.name || '',
+            permissions,
+            is_super_admin: isSuperAdmin,
+            tenant_code: tenantSlug
+          };
+
+          return { token, user: userData, tenant_code: tenantSlug };
+        }
+      }
+
+      return null;
+    };
+
+    // 1. Try on requested tenant connection if provided in header
+    let loginResult = null;
+    const requestedTenantSlug = req.headers['x-tenant-id']?.toLowerCase() || '';
+
+    if (store?.tenantConn) {
+      loginResult = await tryLoginOnConnection(store.tenantConn, requestedTenantSlug);
+      if (loginResult?.errorStatus) {
+        return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
+      }
+      if (loginResult) {
+        return apiResponse(res, 200, 'Login successful', loginResult);
+      }
+    }
+
+    // 2. If not found or header was stale/wrong, search Central Registry
     try {
       const registryConn = await getRegistryConnection();
       const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
-      const tenantIdHeader = req.headers['x-tenant-id']?.toLowerCase();
-      let checkTenant = null;
-      if (tenantIdHeader) {
-        checkTenant = await Tenant.findOne({ slug: tenantIdHeader });
-      } else {
-        checkTenant = await Tenant.findOne({ 'admin.email': emailQuery });
+      
+      const matchedTenant = await Tenant.findOne({ 'admin.email': emailQuery, status: 1 });
+      if (matchedTenant) {
+        const tenantConn = await getTenantConnection(matchedTenant.db_name);
+        loginResult = await tryLoginOnConnection(tenantConn, matchedTenant.slug);
+        if (loginResult?.errorStatus) {
+          return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
+        }
+        if (loginResult) {
+          return apiResponse(res, 200, 'Login successful', loginResult);
+        }
       }
 
-      if (checkTenant && checkTenant.status === 0) {
-        return apiResponse(res, 403, 'Access denied: Your Parivar community account has been suspended.');
+      // Check across all active tenants registered in the system
+      const activeTenants = await Tenant.find({ status: 1 });
+      for (const t of activeTenants) {
+        if (t.slug === requestedTenantSlug) continue;
+        const tenantConn = await getTenantConnection(t.db_name);
+        loginResult = await tryLoginOnConnection(tenantConn, t.slug);
+        if (loginResult?.errorStatus) {
+          return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
+        }
+        if (loginResult) {
+          return apiResponse(res, 200, 'Login successful', loginResult);
+        }
       }
     } catch (err) {
-      console.error('[loginAdmin] Tenant status check failed:', err);
+      console.error('[loginAdmin] Registry tenant lookup error:', err.message);
     }
 
-    if (store?.tenantConn) {
-      // Use directly from tenant connection passed via header
-      const tenantConn = store.tenantConn;
-      UserModel = tenantConn.models.User || tenantConn.model('User', User.schema);
-    } else {
-      // Auto-detect Tenant from Registry by Admin Email
-      try {
-        const registryConn = await getRegistryConnection();
-        const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
-        const tenant = await Tenant.findOne({ 'admin.email': emailQuery });
-        if (tenant) {
-          if (tenant.status === 0) {
-            return apiResponse(res, 403, 'Access denied: Your Parivar community account has been suspended.');
-          }
-          const tenantConn = await getTenantConnection(tenant.db_name);
-          UserModel = tenantConn.models.User || tenantConn.model('User', User.schema);
-          targetTenantSlug = tenant.slug;
-        } else {
-          UserModel = User;
-        }
-      } catch (err) {
-        UserModel = User;
-      }
+    // 3. Fallback: Try on Primary/Default Database (mongoose.connection)
+    loginResult = await tryLoginOnConnection(mongoose.connection, '');
+    if (loginResult?.errorStatus) {
+      return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
     }
-
-    const user = await UserModel.findOne({ email: emailQuery }).populate('role_id');
-
-    if (user) {
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (isMatch) {
-        if (user.status === 0) {
-          return apiResponse(res, 403, 'Access denied: Your account is inactive.');
-        }
-        if (user.role_id && user.role_id.status === 0) {
-          return apiResponse(res, 403, 'Access denied: Your assigned role is inactive.');
-        }
-
-        const permissions = getRolePermissions(user);
-
-        if (!user.is_committee && user.committee_role !== 'Self' && permissions.length === 0) {
-          return apiResponse(res, 403, 'Access denied: Insufficient permissions');
-        }
-
-        const token = jwt.sign(
-          { id: user._id },
-          JWT_SECRET,
-          { expiresIn: '1d' }
-        );
-
-        const isSuperAdmin = user.role === 'superadmin' || user.committee_role === 'President' || user.role_id?.name?.toLowerCase() === 'admin' || user.role_id?.name?.toLowerCase() === 'super admin' || (!user.role_id && (user.role === 'admin' || user.committee_role === 'Admin'));
-
-        const userData = {
-          id: user.id || String(user._id),
-          name: fullName(user),
-          email: user.email,
-          role: isSuperAdmin ? 'admin' : (user.is_committee ? 'committee' : 'user'),
-          is_committee: user.is_committee,
-          committee_role: user.committee_role,
-          role_id: user.role_id?._id ? String(user.role_id._id) : '',
-          role_name: user.role_id?.name || '',
-          permissions,
-          is_super_admin: isSuperAdmin,
-          tenant_code: targetTenantSlug || req.headers['x-tenant-id'] || ''
-        };
-
-        return apiResponse(res, 200, 'Login successful', {
-          token,
-          user: userData,
-          tenant_code: targetTenantSlug || req.headers['x-tenant-id'] || ''
-        });
-      }
+    if (loginResult) {
+      return apiResponse(res, 200, 'Login successful', loginResult);
     }
 
     return apiResponse(res, 400, 'Invalid email or password');
