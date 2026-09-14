@@ -72,7 +72,7 @@ const registerParivar = async (req, res) => {
 
     // ── 3. Check uniqueness in registry DB (slug, db_name, and global admin_email) ──
     const registryConn = await getRegistryConnection();
-    const Tenant = registryConn.model('Tenant', tenantSchema);
+    const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', tenantSchema);
 
     // Check if Parivar name/slug already exists
     const existingName = await Tenant.findOne({ $or: [{ slug }, { db_name }] });
