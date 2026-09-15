@@ -327,6 +327,188 @@ const getUsers = async (req, res) => {
       query.anniversary = { $exists: true, $ne: null };
     }
 
+    // Determine if this is the Family Registry listing request (default view in Users.jsx)
+    const isFamilyRegistryListing =
+      !birthday &&
+      !anniversary &&
+      req.query.is_committee === undefined &&
+      !req.query.family_head_id &&
+      req.query.is_head !== 'true' &&
+      req.query.heads !== 'true' &&
+      req.query.flat !== 'true';
+
+    if (isFamilyRegistryListing) {
+      // Family-based pagination:
+      // 1. Only count & paginate Family Heads (relation: 'Self' or familyHead: true)
+      // 2. Fetch all dependent members under these paginated heads and attach them
+      const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
+      
+      const headCriteria = {
+        $or: [
+          { familyHead: true },
+          { relation: 'Self' }
+        ]
+      };
+
+      const headClauses = [headCriteria];
+
+      // Handle search: if search matches head OR any child member, include their family head
+      if (req.query.search && req.query.search.trim()) {
+        const searchRegex = new RegExp(escapeRegExp(req.query.search.trim()), 'i');
+        const searchOr = searchFields.map(field => ({ [field]: searchRegex }));
+
+        // Search matching non-head members to find their parent head IDs
+        const [matchingChildHeadIds, matchingChildParentMemberIds] = await Promise.all([
+          User.find({
+            $or: searchOr,
+            relation: { $ne: 'Self' },
+            familyHead: { $ne: true }
+          }).distinct('family_head.id'),
+          User.find({
+            $or: searchOr,
+            relation: { $ne: 'Self' },
+            familyHead: { $ne: true },
+            parent_member_id: { $exists: true, $ne: null, $ne: '' }
+          }).distinct('parent_member_id')
+        ]);
+
+        const validHeadObjectIds = (matchingChildHeadIds || [])
+          .filter(id => id && mongoose.isValidObjectId(id))
+          .map(id => new mongoose.Types.ObjectId(id));
+
+        const validParentMemberIds = (matchingChildParentMemberIds || []).filter(Boolean);
+
+        const headSearchOr = [
+          ...searchOr,
+          ...(validHeadObjectIds.length ? [{ _id: { $in: validHeadObjectIds } }] : []),
+          ...(validParentMemberIds.length ? [{ member_id: { $in: validParentMemberIds } }] : [])
+        ];
+
+        headClauses.push({ $or: headSearchOr });
+      }
+
+      // Handle filters
+      if (req.query.gender) {
+        headClauses.push({ gender: req.query.gender });
+      }
+      if (req.query.blood_group) {
+        headClauses.push({ blood_group: req.query.blood_group });
+      }
+      if (req.query.village) {
+        headClauses.push({ $or: [{ village: req.query.village }, { village_id: req.query.village }] });
+      }
+      if (req.query.status !== undefined && req.query.status !== '') {
+        const sVal = Number(req.query.status);
+        if (!isNaN(sVal)) {
+          if (sVal === 1) {
+            headClauses.push({ $or: [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }] });
+          } else {
+            headClauses.push({ $or: [{ status: 0 }, { status: '0' }] });
+          }
+        }
+      }
+
+      const finalHeadQuery = headClauses.length === 1 ? headClauses[0] : { $and: headClauses };
+
+      const requestedPage = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const requestedLimit = parseInt(req.query.limit, 10);
+      const limit = Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 15, 1);
+
+      const totalHeads = await User.countDocuments(finalHeadQuery);
+      const totalPages = Math.max(Math.ceil(totalHeads / limit), 1);
+      const page = Math.min(requestedPage, totalPages);
+
+      const paginatedHeads = await User.find(finalHeadQuery)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('role_id');
+
+      const headObjectIds = paginatedHeads.map(h => h._id);
+      const headIdStrings = paginatedHeads.map(h => String(h._id));
+      const headMemberIds = paginatedHeads.map(h => String(h.member_id)).filter(Boolean);
+
+      let childMembers = [];
+      if (headObjectIds.length > 0) {
+        const childQuery = {
+          _id: { $nin: headObjectIds },
+          $or: [
+            { 'family_head.id': { $in: headObjectIds } },
+            { 'family_head.id': { $in: headIdStrings } },
+            { parent_member_id: { $in: headMemberIds } }
+          ]
+        };
+        childMembers = await User.find(childQuery)
+          .sort({ createdAt: 1, _id: 1 })
+          .populate('role_id');
+      }
+
+      const formatUserObj = (u) => ({
+        id: u.id || String(u._id),
+        _id: u._id,
+        member_id: u.member_id || '',
+        parent_member_id: u.parent_member_id || null,
+        first_name: u.first_name,
+        middle_name: u.middle_name || '',
+        last_name: u.last_name || '',
+        name: fullName(u),
+        email: u.email || '',
+        number: u.number,
+        phone: u.number || '',
+        gender: u.gender || '',
+        dob: u.dob || null,
+        anniversary: u.anniversary || null,
+        blood_group: u.blood_group || '',
+        relation: u.relation || 'Self',
+        is_committee: u.is_committee || false,
+        committee_role: u.committee_role || '',
+        designation: u.designation || '',
+        country_id: u.country_id || '',
+        state_id: u.state_id || '',
+        city_id: u.city_id || '',
+        village: u.village || u.village_id || '',
+        village_id: u.village_id || '',
+        family_head: u.family_head ? {
+          id: u.family_head.id ? String(u.family_head.id) : '',
+          name: u.family_head.name || ''
+        } : null,
+        role_id: u.role_id?._id ? String(u.role_id._id) : '',
+        role_name: u.role_id?.name || '',
+        address: u.address || '',
+        status: Number(u.status ?? 1),
+        familyHead: u.familyHead || u.relation === 'Self' || false,
+        image: publicUrl(req, u.image || u.profile_image || ''),
+        profile_image: u.profile_image || '',
+        role: u.is_committee ? 'admin' : 'user'
+      });
+
+      const formatted = paginatedHeads.map(head => {
+        const headIdStr = String(head._id);
+        const headMemberIdStr = String(head.member_id || '');
+        const matchingChildren = childMembers.filter(m => {
+          const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
+          const mParentId = String(m.parent_member_id || '');
+          return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
+                 (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+        });
+
+        const formattedHead = formatUserObj(head);
+        formattedHead.childrenCount = matchingChildren.length;
+        formattedHead.members = matchingChildren.map(formatUserObj);
+        return formattedHead;
+      });
+
+      return apiResponse(res, 200, 'Users retrieved successfully', formatted, {
+        total: totalHeads,
+        page,
+        limit,
+        totalPages,
+        hasPrevPage: page > 1,
+        hasNextPage: page < totalPages
+      });
+    }
+
     const { data: users, pagination } = await queryHelper(User, req.query, {
       baseQuery: query,
       searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'],
@@ -394,7 +576,6 @@ const getUsers = async (req, res) => {
       } : null,
       role_id: u.role_id?._id ? String(u.role_id._id) : '',
       role_name: u.role_id?.name || '',
-      permissions: getRolePermissions(u),
       address: u.address || '',
       status: Number(u.status ?? 1),
       familyHead: u.familyHead || false,
@@ -492,7 +673,6 @@ const getUserById = async (req, res) => {
       village_id: user.village_id || '',
       role_id: user.role_id?._id ? String(user.role_id._id) : '',
       role_name: user.role_id?.name || '',
-      permissions: getRolePermissions(user),
       address: user.address || '',
       status: Number(user.status ?? 1),
       familyHead: user.familyHead || false,
