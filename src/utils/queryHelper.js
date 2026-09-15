@@ -28,9 +28,18 @@ const queryHelper = async (Model, query = {}, options = {}) => {
 
   const extraQuery = {};
 
-  if (query.search && searchFields.length) {
-    const regex = new RegExp(escapeRegExp(query.search), 'i');
-    extraQuery.$or = searchFields.map((field) => ({ [field]: regex }));
+  if (query.search && String(query.search).trim() && searchFields.length) {
+    const rawSearch = String(query.search).trim();
+    const tokens = rawSearch.split(/\s+/).filter(Boolean);
+    if (tokens.length === 1) {
+      const regex = new RegExp(escapeRegExp(tokens[0]), 'i');
+      extraQuery.$or = searchFields.map((field) => ({ [field]: regex }));
+    } else {
+      extraQuery.$and = tokens.map(token => {
+        const regex = new RegExp(escapeRegExp(token), 'i');
+        return { $or: searchFields.map((field) => ({ [field]: regex })) };
+      });
+    }
   }
 
   filterFields.forEach((field) => {

@@ -4,23 +4,23 @@ const mongoose = require('mongoose');
 const configSchema = new mongoose.Schema({
   primaryColor: {
     type: String,
-    default: "#E65100"
+    default: "#1565C0"
   },
   secondaryColor: {
     type: String,
-    default: "#F4C95D"
+    default: "#42A5F5"
   },
   backgroundColor: {
     type: String,
-    default: "#FFF8F0"
+    default: "#F7FAFD"
   },
   textColor: {
     type: String,
-    default: "#4E342E"
+    default: "#172B4D"
   },
   buttonColor: {
     type: String,
-    default: "#E65100"
+    default: "#1976D2"
   },
   fontColor: {
     type: String,
@@ -28,15 +28,15 @@ const configSchema = new mongoose.Schema({
   },
   borderColor: {
     type: String,
-    default: "#E8D9C8"
+    default: "#D9E7F5"
   },
   gradientStart: {
     type: String,
-    default: "#E65100"
+    default: "#2196F3"
   },
   gradientEnd: {
     type: String,
-    default: "#7B0D1C"
+    default: "#0D47A1"
   },
 
   appLogo: {

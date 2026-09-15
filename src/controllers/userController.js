@@ -354,19 +354,31 @@ const getUsers = async (req, res) => {
       const headClauses = [headCriteria];
 
       // Handle search: if search matches head OR any child member, include their family head
-      if (req.query.search && req.query.search.trim()) {
-        const searchRegex = new RegExp(escapeRegExp(req.query.search.trim()), 'i');
-        const searchOr = searchFields.map(field => ({ [field]: searchRegex }));
+      if (req.query.search && String(req.query.search).trim()) {
+        const rawSearch = String(req.query.search).trim();
+        const tokens = rawSearch.split(/\s+/).filter(Boolean);
+        
+        let searchCondition;
+        if (tokens.length === 1) {
+          const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
+          searchCondition = { $or: searchFields.map(field => ({ [field]: searchRegex })) };
+        } else {
+          const tokenClauses = tokens.map(token => {
+            const tokenRegex = new RegExp(escapeRegExp(token), 'i');
+            return { $or: searchFields.map(field => ({ [field]: tokenRegex })) };
+          });
+          searchCondition = { $and: tokenClauses };
+        }
 
         // Search matching non-head members to find their parent head IDs
         const [matchingChildHeadIds, matchingChildParentMemberIds] = await Promise.all([
           User.find({
-            $or: searchOr,
+            ...searchCondition,
             relation: { $ne: 'Self' },
             familyHead: { $ne: true }
           }).distinct('family_head.id'),
           User.find({
-            $or: searchOr,
+            ...searchCondition,
             relation: { $ne: 'Self' },
             familyHead: { $ne: true },
             parent_member_id: { $exists: true, $ne: null, $ne: '' }
@@ -380,7 +392,7 @@ const getUsers = async (req, res) => {
         const validParentMemberIds = (matchingChildParentMemberIds || []).filter(Boolean);
 
         const headSearchOr = [
-          ...searchOr,
+          searchCondition,
           ...(validHeadObjectIds.length ? [{ _id: { $in: validHeadObjectIds } }] : []),
           ...(validParentMemberIds.length ? [{ member_id: { $in: validParentMemberIds } }] : [])
         ];
