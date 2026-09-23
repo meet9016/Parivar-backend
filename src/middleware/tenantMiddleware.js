@@ -7,6 +7,12 @@ const { getTenantConnection } = require('../config/registryDb');
  */
 const tenantMiddleware = async (req, res, next) => {
   try {
+    // If multi-tenant is disabled or not using custom subdomains/databases,
+    // directly use the main database configured in MONGO_URI (.env)
+    if (process.env.DISABLE_MULTI_TENANT === 'true' || process.env.ENABLE_MULTI_TENANT !== 'true') {
+      return next();
+    }
+
     let tenantSlug = req.headers['x-tenant-id']?.toLowerCase();
     
     // Fallback: Extract tenant slug from subdomain if header is missing
@@ -36,11 +42,8 @@ const tenantMiddleware = async (req, res, next) => {
       tenantSlug = null;
     }
 
-    console.log(tenantSlug, "tenantSlug");
-    
     if (!tenantSlug) {
-      // If no tenant is specified (no header and no subdomain), proceed with default connection
-      // This ensures existing parivar/users are unaffected.
+      // If no tenant is specified, proceed with default connection from MONGO_URI
       return next();
     }
 

@@ -308,61 +308,47 @@ const loginAdmin = async (req, res) => {
       return null;
     };
 
-    // 1. Try on requested tenant connection if provided in header
-    let loginResult = null;
-    const requestedTenantSlug = req.headers['x-tenant-id']?.toLowerCase() || '';
-
-    if (store?.tenantConn) {
-      loginResult = await tryLoginOnConnection(store.tenantConn, requestedTenantSlug);
-      if (loginResult?.errorStatus) {
-        return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
-      }
-      if (loginResult) {
-        return apiResponse(res, 200, 'Login successful', loginResult);
-      }
-    }
-
-    // 2. If not found or header was stale/wrong, search Central Registry
-    try {
-      const registryConn = await getRegistryConnection();
-      const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
-      
-      const matchedTenant = await Tenant.findOne({ 'admin.email': emailQuery, status: 1 });
-      if (matchedTenant) {
-        const tenantConn = await getTenantConnection(matchedTenant.db_name);
-        loginResult = await tryLoginOnConnection(tenantConn, matchedTenant.slug);
-        if (loginResult?.errorStatus) {
-          return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
-        }
-        if (loginResult) {
-          return apiResponse(res, 200, 'Login successful', loginResult);
-        }
-      }
-
-      // Check across all active tenants registered in the system
-      const activeTenants = await Tenant.find({ status: 1 });
-      for (const t of activeTenants) {
-        if (t.slug === requestedTenantSlug) continue;
-        const tenantConn = await getTenantConnection(t.db_name);
-        loginResult = await tryLoginOnConnection(tenantConn, t.slug);
-        if (loginResult?.errorStatus) {
-          return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
-        }
-        if (loginResult) {
-          return apiResponse(res, 200, 'Login successful', loginResult);
-        }
-      }
-    } catch (err) {
-      console.error('[loginAdmin] Registry tenant lookup error:', err.message);
-    }
-
-    // 3. Fallback: Try on Primary/Default Database (mongoose.connection)
-    loginResult = await tryLoginOnConnection(mongoose.connection, '');
+    // 1. Primary/Direct Database Login (directly connects using MONGO_URI from .env)
+    let loginResult = await tryLoginOnConnection(mongoose.connection, '');
     if (loginResult?.errorStatus) {
       return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
     }
     if (loginResult) {
       return apiResponse(res, 200, 'Login successful', loginResult);
+    }
+
+    // 2. If multi-tenant is enabled, check dynamic tenant connection
+    if (process.env.ENABLE_MULTI_TENANT === 'true') {
+      const requestedTenantSlug = req.headers['x-tenant-id']?.toLowerCase() || '';
+
+      if (store?.tenantConn) {
+        loginResult = await tryLoginOnConnection(store.tenantConn, requestedTenantSlug);
+        if (loginResult?.errorStatus) {
+          return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
+        }
+        if (loginResult) {
+          return apiResponse(res, 200, 'Login successful', loginResult);
+        }
+      }
+
+      try {
+        const registryConn = await getRegistryConnection();
+        const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
+        
+        const matchedTenant = await Tenant.findOne({ 'admin.email': emailQuery, status: 1 });
+        if (matchedTenant) {
+          const tenantConn = await getTenantConnection(matchedTenant.db_name);
+          loginResult = await tryLoginOnConnection(tenantConn, matchedTenant.slug);
+          if (loginResult?.errorStatus) {
+            return apiResponse(res, loginResult.errorStatus, loginResult.errorMessage);
+          }
+          if (loginResult) {
+            return apiResponse(res, 200, 'Login successful', loginResult);
+          }
+        }
+      } catch (err) {
+        console.error('[loginAdmin] Registry tenant lookup error:', err.message);
+      }
     }
 
     return apiResponse(res, 400, 'Invalid email or password');
