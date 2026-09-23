@@ -14,7 +14,7 @@ const connectDB = async () => {
         dns.setServers(dnsServers);
       }
     }
-    
+
     const conn = await mongoose.connect(mongoURI);
     console.log(`MongoDB Connected: ${conn.connection.host} 🍃`);
   } catch (error) {
