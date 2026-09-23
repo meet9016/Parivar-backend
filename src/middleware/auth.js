@@ -56,16 +56,15 @@ const getActiveCommitteeModel = (req) => {
   return CommitteeMember;
 };
 
-const findUserFromToken = async (decoded, req) => {
+const findUserInConnection = async (conn, decoded) => {
+  if (!conn) return null;
+  const UserModel = conn.models.User || conn.model('User', User.schema);
+  const CMModel = conn.models.CommitteeMember || conn.model('CommitteeMember', CommitteeMember.schema);
   const userId = decoded.id || decoded._id || decoded.userId;
-  const UserModel = getActiveUserModel(req);
-  const CMModel = getActiveCommitteeModel(req);
 
   if (userId && mongoose.isValidObjectId(userId)) {
     const user = await UserModel.findById(userId).select('-password').populate('role_id');
-    if (user) {
-      return user;
-    }
+    if (user) return user;
 
     const committeeMember = await CMModel.findById(userId).select('-password').populate('role_id');
     if (committeeMember) {
@@ -77,16 +76,12 @@ const findUserFromToken = async (decoded, req) => {
 
   if (userId) {
     const user = await UserModel.findOne({ member_id: String(userId) }).select('-password').populate('role_id');
-    if (user) {
-      return user;
-    }
+    if (user) return user;
   }
 
   if (decoded.member_id) {
     const user = await UserModel.findOne({ member_id: String(decoded.member_id) }).select('-password').populate('role_id');
-    if (user) {
-      return user;
-    }
+    if (user) return user;
   }
 
   if (decoded.number) {
@@ -102,6 +97,38 @@ const findUserFromToken = async (decoded, req) => {
 
   return null;
 };
+
+const findUserFromToken = async (decoded, req) => {
+  const activeConn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
+  
+  // 1. Try in current active tenant connection
+  if (activeConn) {
+    const user = await findUserInConnection(activeConn, decoded);
+    if (user) return user;
+  }
+
+  // 2. If token contains tenant_code and it is different, try that tenant connection
+  if (decoded.tenant_code) {
+    try {
+      const { getTenantConnection } = require('../config/registryDb');
+      const dbName = decoded.tenant_code.startsWith('parivar_') ? decoded.tenant_code : `parivar_${decoded.tenant_code}`;
+      const tokenTenantConn = await getTenantConnection(dbName);
+      if (tokenTenantConn && tokenTenantConn !== activeConn) {
+        const user = await findUserInConnection(tokenTenantConn, decoded);
+        if (user) return user;
+      }
+    } catch (_) {}
+  }
+
+  // 3. Fallback to Primary DB connection
+  if (mongoose.connection && mongoose.connection !== activeConn) {
+    const user = await findUserInConnection(mongoose.connection, decoded);
+    if (user) return user;
+  }
+
+  return null;
+};
+
 
 const protect = async (req, res, next) => {
   const token = getTokenFromRequest(req);
