@@ -55,14 +55,14 @@ const registerParivar = async (req, res) => {
     const actualName = parivar_name || village_name;
 
     // ── 1. Validate required fields ──
-    if (!actualName || !admin_first_name || !admin_email || !admin_mobile) {
+    if (!actualName) {
       return apiResponse(
         res, 400,
-        'parivar_name/village_name, admin_first_name, admin_email and admin_mobile are required'
+        'parivar_name/village_name is required'
       );
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(admin_email)) {
+    if (admin_email && admin_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(admin_email.trim())) {
       return apiResponse(res, 400, 'Invalid email format');
     }
 
@@ -84,13 +84,19 @@ const registerParivar = async (req, res) => {
     }
 
     // Check if Admin Email is already used across any Parivar
-    const existingEmail = await Tenant.findOne({ "admin.email": admin_email.toLowerCase() });
-    if (existingEmail) {
-      return apiResponse(
-        res, 409,
-        `Admin email "${admin_email}" is already registered with "${existingEmail.parivar_name}". Each Parivar must have a unique admin email.`
-      );
+    if (admin_email && admin_email.trim()) {
+      const existingEmail = await Tenant.findOne({ "admin.email": admin_email.toLowerCase().trim() });
+      if (existingEmail) {
+        return apiResponse(
+          res, 409,
+          `Admin email "${admin_email}" is already registered with "${existingEmail.parivar_name}". Each Parivar must have a unique admin email.`
+        );
+      }
     }
+
+    const finalFirstName = (admin_first_name || actualName).trim();
+    const finalEmail = (admin_email ? admin_email.toLowerCase().trim() : `${slug}_admin@parivar.me`);
+    const finalMobile = (admin_mobile ? admin_mobile.trim() : '');
 
     // ── 4. Create tenant record in registry ──
     const tenant = new Tenant({
@@ -99,42 +105,42 @@ const registerParivar = async (req, res) => {
       slug,
       db_name,
       admin: {
-        first_name: admin_first_name,
-        last_name:  admin_last_name,
-        email:      admin_email.toLowerCase(),
-        mobile:     admin_mobile,
+        first_name: finalFirstName,
+        last_name:  (admin_last_name || '').trim(),
+        email:      finalEmail,
+        mobile:     finalMobile,
       },
     });
     await tenant.save();
 
     // ── 5. Connect to tenant DB and seed the admin user ──
-    const tenantConn = await getTenantConnection(db_name);
+    try {
+      const tenantConn = await getTenantConnection(db_name);
+      const userSchema = userSchemaRaw.schema;
+      const TenantUser = tenantConn.models.User || tenantConn.model('User', userSchema);
 
-    // Load the User schema into the tenant connection
-    const mongoose = require('mongoose');
-    // We need the raw schema
-    const userSchema = userSchemaRaw.schema;
-    const TenantUser = tenantConn.models.User || tenantConn.model('User', userSchema);
+      const adminUser = new TenantUser({
+        member_id:    '1',
+        first_name:   finalFirstName,
+        last_name:    (admin_last_name || '').trim(),
+        email:        finalEmail,
+        password:     admin_password, // Pre-save hook will hash this
+        number:       finalMobile,
+        is_committee: true,
+        committee_role: 'Admin',
+        relation:     'Self',
+        status:       1,
+        family_head:  { id: null, name: `${finalFirstName} ${admin_last_name || ''}`.trim() },
+      });
 
-    const adminUser = new TenantUser({
-      member_id:    '1',
-      first_name:   admin_first_name,
-      last_name:    admin_last_name,
-      email:        admin_email.toLowerCase(),
-      password:     admin_password, // Pre-save hook will hash this
-      number:       admin_mobile,
-      is_committee: true,
-      committee_role: 'Admin',
-      relation:     'Self',
-      status:       1,
-      family_head:  { id: null, name: `${admin_first_name} ${admin_last_name}`.trim() },
-    });
+      await adminUser.save();
 
-    await adminUser.save();
-
-    // Mark tenant as seeded
-    tenant.seeded_at = new Date();
-    await tenant.save();
+      // Mark tenant as seeded
+      tenant.seeded_at = new Date();
+      await tenant.save();
+    } catch (e) {
+      console.error('Error seeding admin user in tenant DB:', e);
+    }
 
     // ── 6. Respond ──
     return apiResponse(res, 201, 'Parivar registered successfully!', {
