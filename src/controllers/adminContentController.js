@@ -355,6 +355,43 @@ const saveMaster = async (req, res) => {
     const name = req.body.name || req.body[type] || req.body.business || req.body.country || req.body.state || req.body.city || (existing ? (existing.name || existing.country || existing.state || existing.city || existing.category || existing.business || (config.nameKeys?.map(k => existing[k]).find(Boolean))) : '');
     
     if (!existing && !name) return apiResponse(res, 400, 'Name is required');
+
+    // Prevent duplicate entries with the same name (case-insensitive) for the same master type / parent
+    const trimmedName = String(name).trim();
+    if (trimmedName) {
+      const nameRegex = new RegExp(`^${trimmedName.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i');
+      const duplicateQuery = {
+        _id: { $ne: existing ? existing._id : null }
+      };
+
+      if (config.type) {
+        duplicateQuery.type = config.type;
+        duplicateQuery.name = nameRegex;
+        if (req.body.parent_id) {
+          duplicateQuery.parent_id = req.body.parent_id;
+        }
+      } else {
+        const primaryNameKey = config.nameKeys?.[0] || 'name';
+        duplicateQuery.$or = [
+          { [primaryNameKey]: nameRegex },
+          { name: nameRegex }
+        ];
+        if (config.parentKey && (req.body.parent_id || req.body[config.parentKey])) {
+          duplicateQuery[config.parentKey] = req.body.parent_id || req.body[config.parentKey];
+        }
+      }
+
+      // If existing is null, remove the null check from query
+      if (!existing) {
+        delete duplicateQuery._id;
+      }
+
+      const duplicateDoc = await config.Model.findOne(duplicateQuery);
+      if (duplicateDoc) {
+        return apiResponse(res, 400, `"${trimmedName}" already exists. Duplicate entries are not allowed.`);
+      }
+    }
+
     const doc = existing || new config.Model();
     if (!existing && !config.skipCustomId) doc.id = await nextPublicId(config.Model, `${type.toUpperCase()}_`);
     if (config.type) {
