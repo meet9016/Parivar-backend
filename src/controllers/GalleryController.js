@@ -145,8 +145,19 @@ const saveGallery = async (req, res) => {
       return apiResponse(res, 400, 'Gallery images are required');
     }
 
+    if (payload.category) {
+      const catRegex = new RegExp(`^${String(payload.category).trim().replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i');
+      const duplicate = await Gallery.findOne({
+        category: catRegex,
+        ...(existing ? { _id: { $ne: existing._id } } : {})
+      });
+      if (duplicate) {
+        return apiResponse(res, 400, `"${payload.category}" gallery already exists! Duplicate categories are not allowed.`);
+      }
+    }
+
     const doc = existing || new Gallery({});
-    doc.set({ ...payload,  });
+    doc.set({ ...payload });
 
 
     await doc.save();

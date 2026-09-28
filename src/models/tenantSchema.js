@@ -36,10 +36,10 @@ const tenantSchema = new mongoose.Schema(
 
     // Admin details seeded into the tenant DB on creation
     admin: {
-      first_name: { type: String, required: true },
+      first_name: { type: String, default: '' },
       last_name:  { type: String, default: '' },
-      email:      { type: String, required: true, lowercase: true, trim: true, index: true },
-      mobile:     { type: String, required: true },
+      email:      { type: String, default: '', lowercase: true, trim: true },
+      mobile:     { type: String, default: '' },
     },
 
     // Plan / metadata
