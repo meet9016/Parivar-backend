@@ -65,14 +65,14 @@ const saveCategory = async (req, res) => {
       ? await GalleryCategory.findOne(idQuery(req.params.id))
       : null;
 
+    const nameRegex = new RegExp(`^${categoryText.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}$`, 'i');
     const duplicate = await GalleryCategory.findOne({
-
-      category: categoryText,
+      category: nameRegex,
       ...(existing ? { _id: { $ne: existing._id } } : {})
     });
 
     if (duplicate) {
-      return apiResponse(res, 400, 'Gallery category already exists');
+      return apiResponse(res, 400, `"${categoryText}" category already exists! Duplicate categories are not allowed.`);
     }
 
     const doc = existing || new GalleryCategory();

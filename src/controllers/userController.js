@@ -144,7 +144,7 @@ const register = async (req, res) => {
     }
     const createdMembers = [];
     if (Array.isArray(membersList) && membersList.length > 0) {
-      let currentMemberId = highestId + 1;
+      let currentMemberId = Number(newUser.member_id || nextMemberId || 0);
       for (const m of membersList) {
         if (!m.first_name || !m.first_name.trim()) continue;
         currentMemberId += 1;
