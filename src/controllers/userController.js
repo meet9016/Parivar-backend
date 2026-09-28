@@ -1118,6 +1118,186 @@ const bulkImportUsers = async (req, res) => {
     return apiResponse(res, 500, 'Error importing users', { error: error.message });
   }
 };
+/**
+ * Export all members / family registry as an Excel sheet from backend.
+ * Respects search, gender, status, blood_group, village filters.
+ */
+const exportUsers = async (req, res) => {
+  try {
+    const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
+    
+    const headCriteria = {
+      $or: [
+        { familyHead: true },
+        { relation: 'Self' }
+      ]
+    };
+
+    const headClauses = [headCriteria];
+
+    // Handle search
+    if (req.query.search && String(req.query.search).trim()) {
+      const rawSearch = String(req.query.search).trim();
+      const tokens = rawSearch.split(/\s+/).filter(Boolean);
+      
+      let searchCondition;
+      if (tokens.length === 1) {
+        const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
+        searchCondition = { $or: searchFields.map(field => ({ [field]: searchRegex })) };
+      } else {
+        const tokenClauses = tokens.map(token => {
+          const tokenRegex = new RegExp(escapeRegExp(token), 'i');
+          return { $or: searchFields.map(field => ({ [field]: tokenRegex })) };
+        });
+        searchCondition = { $and: tokenClauses };
+      }
+
+      const [matchingChildHeadIds, matchingChildParentMemberIds] = await Promise.all([
+        User.find({
+          ...searchCondition,
+          relation: { $ne: 'Self' },
+          familyHead: { $ne: true }
+        }).distinct('family_head.id'),
+        User.find({
+          ...searchCondition,
+          relation: { $ne: 'Self' },
+          familyHead: { $ne: true },
+          parent_member_id: { $exists: true, $ne: null, $ne: '' }
+        }).distinct('parent_member_id')
+      ]);
+
+      const validHeadObjectIds = (matchingChildHeadIds || [])
+        .filter(id => id && mongoose.isValidObjectId(id))
+        .map(id => new mongoose.Types.ObjectId(id));
+
+      const validParentMemberIds = (matchingChildParentMemberIds || []).filter(Boolean);
+
+      const headSearchOr = [
+        searchCondition,
+        ...(validHeadObjectIds.length ? [{ _id: { $in: validHeadObjectIds } }] : []),
+        ...(validParentMemberIds.length ? [{ member_id: { $in: validParentMemberIds } }] : [])
+      ];
+
+      headClauses.push({ $or: headSearchOr });
+    }
+
+    // Handle filters
+    if (req.query.gender) {
+      headClauses.push({ gender: req.query.gender });
+    }
+    if (req.query.blood_group) {
+      headClauses.push({ blood_group: req.query.blood_group });
+    }
+    if (req.query.village) {
+      headClauses.push({ $or: [{ village: req.query.village }, { village_id: req.query.village }] });
+    }
+    if (req.query.status !== undefined && req.query.status !== '') {
+      const sVal = Number(req.query.status);
+      if (!isNaN(sVal)) {
+        if (sVal === 1) {
+          headClauses.push({ $or: [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }] });
+        } else {
+          headClauses.push({ $or: [{ status: 0 }, { status: '0' }] });
+        }
+      }
+    }
+
+    const finalHeadQuery = headClauses.length === 1 ? headClauses[0] : { $and: headClauses };
+
+    const heads = await User.find(finalHeadQuery)
+      .sort({ createdAt: -1, _id: -1 })
+      .populate('role_id');
+
+    const headObjectIds = heads.map(h => h._id);
+    const headIdStrings = heads.map(h => String(h._id));
+    const headMemberIds = heads.map(h => String(h.member_id)).filter(Boolean);
+
+    let childMembers = [];
+    if (headObjectIds.length > 0) {
+      const childQuery = {
+        _id: { $nin: headObjectIds },
+        $or: [
+          { 'family_head.id': { $in: headObjectIds } },
+          { 'family_head.id': { $in: headIdStrings } },
+          { parent_member_id: { $in: headMemberIds } }
+        ]
+      };
+      childMembers = await User.find(childQuery)
+        .sort({ createdAt: 1, _id: 1 })
+        .populate('role_id');
+    }
+
+    // Prepare rows for Excel
+    const excelRows = [];
+    for (const head of heads) {
+      const headIdStr = String(head._id);
+      const headMemberIdStr = String(head.member_id || '');
+      const matchingChildren = childMembers.filter(m => {
+        const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
+        const mParentId = String(m.parent_member_id || '');
+        return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
+               (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+      });
+
+      // Add Head row
+      excelRows.push({
+        'Member ID': head.member_id || '',
+        'Name': fullName(head),
+        'Relation': 'Family Head (મુખ્ય)',
+        'Mobile Number': head.number || '',
+        'Email': head.email || 'No Email',
+        'Gender': head.gender || '',
+        'Blood Group': head.blood_group || '',
+        'Village': head.village || '',
+        'Status': Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive'
+      });
+
+      // Add Child members under head
+      for (const child of matchingChildren) {
+        excelRows.push({
+          'Member ID': child.member_id || '',
+          'Name': `  ↳ ${fullName(child)}`,
+          'Relation': child.relation || 'Member',
+          'Mobile Number': child.number || '',
+          'Email': child.email || 'No Email',
+          'Gender': child.gender || '',
+          'Blood Group': child.blood_group || '',
+          'Village': child.village || head.village || '',
+          'Status': Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive'
+        });
+      }
+    }
+
+    // Build worksheet and workbook
+    const worksheet = XLSX.utils.json_to_sheet(excelRows);
+    worksheet['!cols'] = [
+      { wch: 15 }, // Member ID
+      { wch: 35 }, // Name
+      { wch: 25 }, // Relation
+      { wch: 20 }, // Mobile Number
+      { wch: 30 }, // Email
+      { wch: 15 }, // Gender
+      { wch: 15 }, // Blood Group
+      { wch: 20 }, // Village
+      { wch: 15 }  // Status
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Family Registry');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Family_Registry_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.status(200).send(buffer);
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting users', { error: error.message });
+  }
+};
 
 module.exports = {
   register,
@@ -1130,5 +1310,6 @@ module.exports = {
   getFamilyMembers,
   getFamilyMembersByNumber,
   bulkUpdateUsers,
-  bulkImportUsers
+  bulkImportUsers,
+  exportUsers
 };
