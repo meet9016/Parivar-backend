@@ -825,11 +825,13 @@ const updateUser = async (req, res) => {
     }
 
     if (Array.isArray(membersList) && membersList.length > 0) {
-      const usersCountList = await User.find({ member_id: /^\d+$/ }).select('member_id');
-      let currentMaxId = usersCountList.reduce((max, u) => {
-        const num = Number(u.member_id);
-        return Number.isFinite(num) && num > max ? num : max;
-      }, 0);
+      const latestUserWithId = await User.findOne({ member_id: /^\d+$/ })
+        .sort({ createdAt: -1, _id: -1 })
+        .select('member_id')
+        .lean();
+      let currentMaxId = latestUserWithId && !isNaN(Number(latestUserWithId.member_id))
+        ? Number(latestUserWithId.member_id)
+        : 0;
 
       for (const m of membersList) {
         if (!m.first_name || !m.first_name.trim()) continue;
