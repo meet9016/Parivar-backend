@@ -96,7 +96,7 @@ const userSchema = new mongoose.Schema({
   },
   family_head: {
     id: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: 'User',
       index: true
     },
