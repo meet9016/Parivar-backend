@@ -993,10 +993,13 @@ const bulkImportUsers = async (req, res) => {
       return apiResponse(res, 400, 'Excel file is empty or has no data rows');
     }
 
-    // Helper to normalise column header keys (trim + lowercase)
+    // Helper to normalise column header keys (trim + lowercase + remove asterisks)
+    const cleanHeader = (str) => String(str || '').replace(/[\*:]/g, '').replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+
     const getVal = (row, ...keys) => {
       for (const key of keys) {
-        const found = Object.keys(row).find(k => k.trim().toLowerCase() === key.toLowerCase());
+        const target = cleanHeader(key);
+        const found = Object.keys(row).find(k => cleanHeader(k) === target);
         if (found !== undefined && row[found] !== undefined && String(row[found]).trim() !== '') {
           return String(row[found]).trim();
         }
@@ -1041,8 +1044,18 @@ const bulkImportUsers = async (req, res) => {
       const row = rows[i];
       const rowNum = i + 2; // Excel row number (1 = header)
 
+      // Skip template notes/instructions row
+      const firstVal = String(Object.values(row)[0] || '').trim();
+      if (firstVal.startsWith('*') && (firstVal.toLowerCase().includes('required') || firstVal.toLowerCase().includes('note'))) {
+        continue;
+      }
+
       const firstName = getVal(row, 'First Name', 'first_name', 'firstname', 'name');
-      const number    = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone');
+      let number      = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone', 'contact');
+      if (number.endsWith('.0')) {
+        number = number.slice(0, -2);
+      }
+      number = number.replace(/[\s-]/g, '');
 
       if (!firstName) {
         errors.push({ row: rowNum, reason: 'First Name is required' });
