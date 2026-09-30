@@ -1156,6 +1156,9 @@ const bulkImportUsers = async (req, res) => {
       const relation        = getVal(row, 'Relation', 'relation') || 'Self';
       const isFamilyHead    = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
 
+      const pattiVal = getVal(row, 'Patti / Para / Pargana', 'patti_para_pargana', 'patti', 'para', 'pargana') || (currentHead ? (currentHead.patti_para_pargana || currentHead.patti || '') : '');
+      const villageVal = getVal(row, 'Village', 'village', 'village_name') || (currentHead ? (currentHead.village || '') : '');
+
       try {
         const newUser = new User({
           member_id:    String(nextMemberId),
@@ -1169,6 +1172,9 @@ const bulkImportUsers = async (req, res) => {
           dob:          parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
           anniversary:  parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
           blood_group:  getVal(row, 'Blood Group', 'blood group', 'blood_group'),
+          village:      villageVal,
+          patti_para_pargana: pattiVal,
+          patti:        pattiVal,
           address:      getVal(row, 'Address', 'address'),
           relation:     isFamilyHead ? 'Self' : (relation || 'Other'),
           familyHead:   isFamilyHead,
@@ -1286,6 +1292,19 @@ const exportUsers = async (req, res) => {
     if (req.query.village) {
       headClauses.push({ $or: [{ village: req.query.village }, { village_id: req.query.village }] });
     }
+    if (req.query.city_id || req.query.city) {
+      const cityVal = req.query.city_id || req.query.city;
+      headClauses.push({ city_id: cityVal });
+    }
+    if (req.query.patti_para_pargana || req.query.patti) {
+      const pattiVal = req.query.patti_para_pargana || req.query.patti;
+      headClauses.push({
+        $or: [
+          { patti_para_pargana: pattiVal },
+          { patti: pattiVal }
+        ]
+      });
+    }
     if (req.query.status !== undefined && req.query.status !== '') {
       const sVal = Number(req.query.status);
       if (!isNaN(sVal)) {
@@ -1344,6 +1363,7 @@ const exportUsers = async (req, res) => {
         'Gender': head.gender || '',
         'Blood Group': head.blood_group || '',
         'Village': head.village || '',
+        'Patti / Para / Pargana': head.patti_para_pargana || head.patti || '',
         'Status': Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive'
       });
 
@@ -1358,6 +1378,7 @@ const exportUsers = async (req, res) => {
           'Gender': child.gender || '',
           'Blood Group': child.blood_group || '',
           'Village': child.village || head.village || '',
+          'Patti / Para / Pargana': child.patti_para_pargana || child.patti || head.patti_para_pargana || head.patti || '',
           'Status': Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive'
         });
       }
@@ -1374,6 +1395,7 @@ const exportUsers = async (req, res) => {
       { wch: 15 }, // Gender
       { wch: 15 }, // Blood Group
       { wch: 20 }, // Village
+      { wch: 22 }, // Patti / Para / Pargana
       { wch: 15 }  // Status
     ];
 
