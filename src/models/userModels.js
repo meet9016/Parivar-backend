@@ -136,6 +136,11 @@ const userSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  patti_para_pargana: {
+    type: String,
+    default: '',
+    trim: true
+  },
   image: {
     type: String,
     default: ''

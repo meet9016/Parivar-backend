@@ -51,6 +51,8 @@ const register = async (req, res) => {
       city_id,
       village,
       village_id,
+      patti_para_pargana,
+      patti,
       address,
       image,
       family_head_id,
@@ -111,6 +113,7 @@ const register = async (req, res) => {
       city_id,
       village: village || village_id || '',
       village_id: village_id || '',
+      patti_para_pargana: patti_para_pargana || patti || '',
       address,
       image: image || '',
       family_head: familyData.family_head,
@@ -166,6 +169,7 @@ const register = async (req, res) => {
           city_id: newUser.city_id,
           village: newUser.village,
           village_id: newUser.village_id,
+          patti_para_pargana: newUser.patti_para_pargana || '',
           address: newUser.address,
           image: m.image || m.profile_image || '',
           family_head: {
@@ -482,6 +486,8 @@ const getUsers = async (req, res) => {
         city_id: u.city_id || '',
         village: u.village || u.village_id || '',
         village_id: u.village_id || '',
+        patti_para_pargana: u.patti_para_pargana || u.patti || '',
+        patti: u.patti_para_pargana || u.patti || '',
         family_head: u.family_head ? {
           id: u.family_head.id ? String(u.family_head.id) : '',
           name: u.family_head.name || ''
@@ -583,6 +589,8 @@ const getUsers = async (req, res) => {
       city_id: u.city_id || '',
       village: u.village || u.village_id || '',
       village_id: u.village_id || '',
+      patti_para_pargana: u.patti_para_pargana || u.patti || '',
+      patti: u.patti_para_pargana || u.patti || '',
       family_head: u.family_head ? {
         id: u.family_head.id ? String(u.family_head.id) : '',
         name: u.family_head.name || ''
@@ -684,6 +692,8 @@ const getUserById = async (req, res) => {
       city_id: user.city_id || '',
       village: user.village || user.village_id || '',
       village_id: user.village_id || '',
+      patti_para_pargana: user.patti_para_pargana || user.patti || '',
+      patti: user.patti_para_pargana || user.patti || '',
       role_id: user.role_id?._id ? String(user.role_id._id) : '',
       role_name: user.role_id?.name || '',
       address: user.address || '',
@@ -738,6 +748,8 @@ const updateUser = async (req, res) => {
       city_id,
       village,
       village_id,
+      patti_para_pargana,
+      patti,
       address,
       designation,
       image,
@@ -782,6 +794,9 @@ const updateUser = async (req, res) => {
     if (city_id !== undefined) user.city_id = city_id;
     if (village !== undefined) user.village = village;
     if (village_id !== undefined) user.village_id = village_id;
+    if (patti_para_pargana !== undefined || patti !== undefined) {
+      user.patti_para_pargana = patti_para_pargana !== undefined ? patti_para_pargana : patti;
+    }
     if (address !== undefined) user.address = address;
     if (designation !== undefined) user.designation = designation;
     if (status !== undefined) user.status = Number(status);
@@ -858,6 +873,7 @@ const updateUser = async (req, res) => {
                 state_id: user.state_id,
                 city_id: user.city_id,
                 village: user.village,
+                patti_para_pargana: user.patti_para_pargana || '',
                 address: user.address,
                 ...(m.image !== undefined ? { image: m.image } : {}),
                 family_head: {
@@ -889,6 +905,7 @@ const updateUser = async (req, res) => {
             city_id: user.city_id,
             village: user.village,
             village_id: user.village_id,
+            patti_para_pargana: user.patti_para_pargana || '',
             address: user.address,
             image: m.image || m.profile_image || '',
             family_head: {
@@ -922,6 +939,8 @@ const updateUser = async (req, res) => {
       state_id: user.state_id || '',
       city_id: user.city_id || '',
       village: user.village || user.village_id || '',
+      patti_para_pargana: user.patti_para_pargana || user.patti || '',
+      patti: user.patti_para_pargana || user.patti || '',
       address: user.address || '',
       designation: user.designation || '',
       status: Number(user.status ?? 1),

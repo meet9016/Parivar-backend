@@ -168,6 +168,7 @@ const masterConfig = {
   district: { Model: Master, type: 'district' },
   taluka: { Model: Master, type: 'taluka' },
   village: { Model: Master, type: 'village' },
+  'patti-para-pargana': { Model: Master, type: 'patti-para-pargana' },
   area: { Model: Master, type: 'area' },
   'blood-group': { Model: Master, type: 'blood-group' },
   'event-category': { Model: Master, type: 'event-category' },
