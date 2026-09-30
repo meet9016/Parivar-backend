@@ -1,4 +1,5 @@
 const User = require('../models/userModels');
+const City = require('../models/cityModel');
 const mongoose = require('mongoose');
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const { getRolePermissions } = require('../middleware/auth');
@@ -347,7 +348,7 @@ const getUsers = async (req, res) => {
       // 1. Only count & paginate Family Heads (relation: 'Self' or familyHead: true)
       // 2. Fetch all dependent members under these paginated heads and attach them
       const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
+      const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'patti_para_pargana', 'family_head.name', 'address'];
       
       const headCriteria = {
         $or: [
@@ -363,16 +364,32 @@ const getUsers = async (req, res) => {
         const rawSearch = String(req.query.search).trim();
         const tokens = rawSearch.split(/\s+/).filter(Boolean);
         
+        // Find matching cities to include city_id in search
+        let matchingCityIds = [];
+        try {
+          const cityDocs = await City.find({
+            $or: [
+              { name: new RegExp(escapeRegExp(rawSearch), 'i') },
+              { city: new RegExp(escapeRegExp(rawSearch), 'i') }
+            ]
+          }).select('_id id').lean();
+          matchingCityIds = cityDocs.map(c => String(c._id || c.id)).filter(Boolean);
+        } catch (err) {
+          console.warn('City lookup during user search failed:', err);
+        }
+
         let searchCondition;
+        const extraCityClauses = matchingCityIds.length ? [{ city_id: { $in: matchingCityIds } }] : [];
+
         if (tokens.length === 1) {
           const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
-          searchCondition = { $or: searchFields.map(field => ({ [field]: searchRegex })) };
+          searchCondition = { $or: [...searchFields.map(field => ({ [field]: searchRegex })), ...extraCityClauses] };
         } else {
           const tokenClauses = tokens.map(token => {
             const tokenRegex = new RegExp(escapeRegExp(token), 'i');
             return { $or: searchFields.map(field => ({ [field]: tokenRegex })) };
           });
-          searchCondition = { $and: tokenClauses };
+          searchCondition = { $or: [{ $and: tokenClauses }, ...extraCityClauses] };
         }
 
         // Search matching non-head members to find their parent head IDs
@@ -414,6 +431,19 @@ const getUsers = async (req, res) => {
       }
       if (req.query.village) {
         headClauses.push({ $or: [{ village: req.query.village }, { village_id: req.query.village }] });
+      }
+      if (req.query.city_id || req.query.city) {
+        const cityVal = req.query.city_id || req.query.city;
+        headClauses.push({ city_id: cityVal });
+      }
+      if (req.query.patti_para_pargana || req.query.patti) {
+        const pattiVal = req.query.patti_para_pargana || req.query.patti;
+        headClauses.push({
+          $or: [
+            { patti_para_pargana: pattiVal },
+            { patti: pattiVal }
+          ]
+        });
       }
       if (req.query.status !== undefined && req.query.status !== '') {
         const sVal = Number(req.query.status);
