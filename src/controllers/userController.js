@@ -47,6 +47,8 @@ const register = async (req, res) => {
       is_committee,
       committee_role,
       profile_image,
+      pincode,
+      district_id,
       country_id,
       state_id,
       city_id,
@@ -109,6 +111,8 @@ const register = async (req, res) => {
       is_committee,
       committee_role,
       profile_image,
+      pincode: pincode || '',
+      district_id: district_id || '',
       country_id,
       state_id,
       city_id,
@@ -614,6 +618,8 @@ const getUsers = async (req, res) => {
       is_committee: u.is_committee || false,
       committee_role: u.committee_role || '',
       designation: u.designation || '',
+      pincode: u.pincode || '',
+      district_id: u.district_id || '',
       country_id: u.country_id || '',
       state_id: u.state_id || '',
       city_id: u.city_id || '',
@@ -717,6 +723,8 @@ const getUserById = async (req, res) => {
       is_committee: user.is_committee || false,
       committee_role: user.committee_role || '',
       designation: user.designation || '',
+      pincode: user.pincode || '',
+      district_id: user.district_id || '',
       country_id: user.country_id || '',
       state_id: user.state_id || '',
       city_id: user.city_id || '',
@@ -773,6 +781,8 @@ const updateUser = async (req, res) => {
       is_committee,
       committee_role,
       role_id,
+      pincode,
+      district_id,
       country_id,
       state_id,
       city_id,
@@ -819,6 +829,8 @@ const updateUser = async (req, res) => {
     if (is_committee !== undefined) user.is_committee = is_committee === true || is_committee === 'true';
     if (committee_role !== undefined) user.committee_role = committee_role;
     if (role_id !== undefined) user.role_id = role_id && mongoose.isValidObjectId(role_id) ? role_id : null;
+    if (pincode !== undefined) user.pincode = pincode;
+    if (district_id !== undefined) user.district_id = district_id;
     if (country_id !== undefined) user.country_id = country_id;
     if (state_id !== undefined) user.state_id = state_id;
     if (city_id !== undefined) user.city_id = city_id;

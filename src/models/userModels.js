@@ -77,6 +77,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  pincode: {
+    type: String,
+    default: '',
+    trim: true
+  },
   country_id: {
     type: String,
     default: ''

@@ -7,9 +7,16 @@ const citySchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  district_id: {
+    type: String,
+    required: false,
+    default: '',
+    index: true
+  },
   state_id: {
     type: String,
-    required: true,
+    required: false,
+    default: '',
     index: true
   },
   name: {
