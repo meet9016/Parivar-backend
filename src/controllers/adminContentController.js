@@ -210,34 +210,48 @@ const formatMaster = (req, type, item, config, parentMap = {}) => {
   const name = config.nameKeys?.map((key) => item[key]).find(Boolean) || item.name || '';
   const parentVal = String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '');
   const parentName = parentMap[parentVal] || (typeof parentVal === 'object' ? parentVal.name : '') || '';
-  
-  let gujName = item.gujarati_name || '';
-  let hiName = item.hindi_name || '';
-  let desc = item.description || '';
-  const isDefault = type === 'relationship' && FIXED_RELATION_NAMES.includes((name || '').trim().toLowerCase());
 
-  if (type === 'relationship' && (!gujName || !desc || !hiName)) {
-    const defaultMatch = DEFAULT_RELATIONSHIPS.find(d => d.name.toLowerCase() === (name || '').toLowerCase());
-    if (defaultMatch) {
-      if (!gujName) gujName = defaultMatch.gujarati_name;
-      if (!hiName) hiName = defaultMatch.hindi_name || '';
-      if (!desc) desc = defaultMatch.description;
-    }
-  }
-
-  return {
+  const formatted = {
     id: String(item._id),
     type,
     name,
-    gujarati_name: gujName,
-    hindi_name: hiName,
-    description: desc,
-    parent_id: parentVal,
-    parent_name: parentName,
-    status: Number(item.status ?? 1),
-    image: publicUrl(req, item.image || ''),
-    is_default: isDefault
+    status: Number(item.status ?? 1)
   };
+
+  // Include parent fields only for masters that have parent hierarchy
+  if (config.parentKey || ['state', 'city', 'district', 'village', 'taluka', 'area', 'business'].includes(type)) {
+    formatted.parent_id = parentVal;
+    formatted.parent_name = parentName;
+  }
+
+  // Relationship specific fields
+  if (type === 'relationship') {
+    let gujName = item.gujarati_name || '';
+    let hiName = item.hindi_name || '';
+    let desc = item.description || '';
+    const isDefault = FIXED_RELATION_NAMES.includes((name || '').trim().toLowerCase());
+
+    if (!gujName || !desc || !hiName) {
+      const defaultMatch = DEFAULT_RELATIONSHIPS.find(d => d.name.toLowerCase() === (name || '').toLowerCase());
+      if (defaultMatch) {
+        if (!gujName) gujName = defaultMatch.gujarati_name;
+        if (!hiName) hiName = defaultMatch.hindi_name || '';
+        if (!desc) desc = defaultMatch.description;
+      }
+    }
+
+    formatted.gujarati_name = gujName;
+    formatted.hindi_name = hiName;
+    formatted.description = desc;
+    formatted.is_default = isDefault;
+  }
+
+  // Image field for masters that support image (like business category, banner, etc.)
+  if (type === 'business' || item.image) {
+    formatted.image = publicUrl(req, item.image || '');
+  }
+
+  return formatted;
 };
 
 const getMasters = async (req, res) => {
