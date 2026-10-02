@@ -65,7 +65,7 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
   const page = await browser.newPage();
 
   try {
-    // Set viewport to high-res standard A4 aspect
+    // Set viewport to standard high-DPI A4 aspect (794 x 1123 at 2x device scale)
     await page.setViewport({
       width: 794,
       height: 1123,
@@ -95,44 +95,37 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
           html, body {
             margin: 0 !important;
             padding: 0 !important;
-            width: 210mm !important;
             background: #ffffff !important;
             font-family: 'Noto Sans Gujarati', 'Anek Gujarati', 'Plus Jakarta Sans', sans-serif;
             -webkit-font-smoothing: antialiased;
             text-rendering: optimizeLegibility;
           }
-          body {
-            display: block !important;
-          }
-          body > div {
-            display: block !important;
-            gap: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            width: 100% !important;
-          }
-          .certificate-page {
+          .pdf-page-container {
             width: 210mm !important;
-            min-width: 210mm !important;
-            max-width: 210mm !important;
             height: 297mm !important;
-            min-height: 297mm !important;
             max-height: 297mm !important;
-            box-sizing: border-box !important;
-            margin: 0 !important;
-            padding: 5mm !important;
+            overflow: hidden !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
-            overflow: hidden !important;
             position: relative !important;
-            display: flex !important;
-            flex-direction: column !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
-          .certificate-page:last-child {
+          .pdf-page-container:last-child {
             page-break-after: avoid !important;
             break-after: avoid !important;
+          }
+          .pdf-page-scale {
+            width: 650px !important;
+            height: 920px !important;
+            min-height: 920px !important;
+            max-height: 920px !important;
+            transform: scale(1.221078) !important;
+            transform-origin: top left !important;
+            box-sizing: border-box !important;
           }
           /* Strip borders/outlines on inputs so they look like crisp printed official text */
           input, textarea, select {
@@ -159,11 +152,54 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
 
     await page.setContent(fullHtml, {
       waitUntil: 'domcontentloaded',
-      timeout: 10000,
+      timeout: 15000,
     });
 
-    // Wait for fonts without blocking for network idle
-    await page.evaluateHandle('document.fonts.ready');
+    // Wait for fonts to load with a max 2.5s race condition so it never hangs
+    await Promise.race([
+      page.evaluateHandle('document.fonts.ready'),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]).catch(() => {});
+
+    // Dynamic adaptation: wrap each .certificate-page into an exact A4 page container
+    await page.evaluate(() => {
+      const pages = document.querySelectorAll('.certificate-page');
+      if (pages.length > 0) {
+        pages.forEach((el) => {
+          if (!el.parentElement.classList.contains('pdf-page-scale')) {
+            const container = document.createElement('div');
+            container.className = 'pdf-page-container';
+
+            const scaler = document.createElement('div');
+            scaler.className = 'pdf-page-scale';
+
+            // Preserve exact 650px preview width and standard 920px height
+            el.style.width = '650px';
+            el.style.maxWidth = '650px';
+            el.style.minWidth = '650px';
+            el.style.height = '920px';
+            el.style.minHeight = '920px';
+            el.style.maxHeight = '920px';
+            el.style.boxSizing = 'border-box';
+            el.style.margin = '0 auto';
+
+            el.parentNode.insertBefore(container, el);
+            scaler.appendChild(el);
+            container.appendChild(scaler);
+          }
+        });
+
+        // Clear layout gap from original preview wrapper
+        document.querySelectorAll('body > div').forEach((d) => {
+          if (!d.classList.contains('pdf-page-container')) {
+            d.style.display = 'contents';
+            d.style.margin = '0';
+            d.style.padding = '0';
+            d.style.gap = '0';
+          }
+        });
+      }
+    });
 
     const pdfOptions = {
       format: 'A4',
@@ -172,16 +208,28 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
     };
 
-    if (options.pageRanges) {
-      pdfOptions.pageRanges = options.pageRanges;
+    if (options.pageRanges && typeof options.pageRanges === 'string' && options.pageRanges.trim()) {
+      pdfOptions.pageRanges = options.pageRanges.trim();
     }
 
-    // Generate high resolution PDF buffer
-    const pdfBuffer = await page.pdf(pdfOptions);
+    // Generate high resolution vector PDF buffer with safe fallback if pageRanges fails
+    let pdfBuffer;
+    try {
+      pdfBuffer = await page.pdf(pdfOptions);
+    } catch (pdfErr) {
+      if (pdfOptions.pageRanges) {
+        delete pdfOptions.pageRanges;
+        pdfBuffer = await page.pdf(pdfOptions);
+      } else {
+        throw pdfErr;
+      }
+    }
 
     return pdfBuffer;
   } finally {
-    await page.close();
+    try {
+      await page.close();
+    } catch (_) {}
   }
 }
 

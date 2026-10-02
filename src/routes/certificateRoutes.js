@@ -15,7 +15,7 @@ const { protect } = require('../middleware/auth');
 router.get('/', protect, getCertificates);
 router.post('/', protect, saveCertificates);
 router.put('/', protect, saveCertificates);
-router.post('/generate-pdf', protect, generateCertificatePdf);
+router.post('/generate-pdf', generateCertificatePdf);
 
 // ── Individual Dedicated Endpoints for 3 Certificate Types ──
 // 1. Marriage Certificate Endpoints

@@ -353,7 +353,6 @@ const getUsers = async (req, res) => {
 
       const headClauses = [headCriteria];
 
-      // Handle search: if search matches head OR any child member, include their family head
       if (req.query.search && String(req.query.search).trim()) {
         const rawSearch = String(req.query.search).trim();
         const tokens = rawSearch.split(/\s+/).filter(Boolean);
