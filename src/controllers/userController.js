@@ -1,4 +1,5 @@
 const User = require('../models/userModels');
+const Role = require('../models/roleModel');
 const City = require('../models/cityModel');
 const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
@@ -306,7 +307,10 @@ const buildLocationMaps = async (usersList = []) => {
     const list = Array.from(set).filter(Boolean);
     if (!list.length) return null;
     const objIds = list.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
-    const orClauses = [{ id: { $in: list } }, { name: { $in: list } }];
+    const orClauses = [
+      { id: { $in: list } },
+      { name: { $in: list } }
+    ];
     if (objIds.length > 0) {
       orClauses.push({ _id: { $in: objIds } });
     }
@@ -833,6 +837,7 @@ const getUsers = async (req, res) => {
 
     return apiResponse(res, 200, 'Users retrieved successfully', formatted, pagination);
   } catch (error) {
+    console.error("getUsers Error:", error);
     return apiResponse(res, 500, 'Error retrieving users', { error: error.message });
   }
 };
