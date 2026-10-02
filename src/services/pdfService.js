@@ -158,9 +158,12 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
     `;
 
     await page.setContent(fullHtml, {
-      waitUntil: ['load', 'networkidle0'],
-      timeout: 30000,
+      waitUntil: 'domcontentloaded',
+      timeout: 10000,
     });
+
+    // Wait for fonts without blocking for network idle
+    await page.evaluateHandle('document.fonts.ready');
 
     const pdfOptions = {
       format: 'A4',

@@ -8,23 +8,32 @@ exports.getCertificates = async (req, res) => {
     const filter = {};
     if (type) filter.type = type;
 
-    const list = await Certificate.find(filter).sort({ createdAt: -1 });
-
-    // Also build latest active map for fast form prefill
-    const latestMap = { marriage: {}, letterhead: {}, noc: {} };
-    for (const item of list) {
-      if (!latestMap[item.type] || Object.keys(latestMap[item.type]).length === 0) {
-        latestMap[item.type] = item.data || {};
-      }
-    }
+    // Fast lean query with projection (exclude large base64 image strings from table list to prevent 30MB payload locks)
+    const list = await Certificate.find(filter)
+      .select('type certificateNumber primaryName secondaryName issuedDate title createdAt updatedAt data.number data.regNumber data.dateDay data.dateMonth data.dateYear data.hijriYear data.hijriMonth data.dulhaName data.dulhanFullName data.memberName data.dikraDikri data.refNumber data.letterTitle')
+      .sort({ createdAt: -1 })
+      .lean();
 
     return apiResponse(res, 200, 'Certificates fetched successfully', {
-      list,
-      latestMap,
-      data: latestMap
+      list: list || [],
     });
   } catch (error) {
     console.error('Error in getCertificates:', error);
+    return apiResponse(res, 500, error.message || 'Server error');
+  }
+};
+
+// Get single certificate record by ID (with complete data)
+exports.getCertificateRecordById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await Certificate.findById(id).lean();
+    if (!record) {
+      return apiResponse(res, 404, 'Certificate record not found');
+    }
+    return apiResponse(res, 200, 'Certificate record fetched successfully', record);
+  } catch (error) {
+    console.error('Error in getCertificateRecordById:', error);
     return apiResponse(res, 500, error.message || 'Server error');
   }
 };
