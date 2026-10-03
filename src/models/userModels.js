@@ -26,6 +26,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  peta_jati: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   email: {
     type: String,
     trim: true,

@@ -7,8 +7,8 @@ const router = express.Router();
 
 const masterPermission = (action) => (req) => `masters.${action}`;
 
-// Allow open creation for location masters used during member registration without token
-const publicRegisterMasterTypes = ['country', 'state', 'district', 'city', 'village', 'taluka', 'patti-para-pargana', 'area'];
+// Allow open creation for location & registration masters used during member registration without token
+const publicRegisterMasterTypes = ['country', 'state', 'district', 'city', 'village', 'taluka', 'patti-para-pargana', 'area', 'sub-caste'];
 
 const optionalProtectForMasterAdd = (req, res, next) => {
   const type = (req.params.type || '').toLowerCase();

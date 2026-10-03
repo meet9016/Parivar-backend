@@ -174,8 +174,16 @@ const masterConfig = {
   'event-category': { Model: Master, type: 'event-category' },
   'gallery-category': { Model: GalleryCategory, nameKeys: ['category'], skipCustomId: true },
   'expense-category': { Model: Master, type: 'expense-category' },
-  'relationship': { Model: Master, type: 'relationship' }
+  'relationship': { Model: Master, type: 'relationship' },
+  'sub-caste': { Model: Master, type: 'sub-caste' }
 };
+
+const DEFAULT_SUB_CASTES = [
+  { name: 'પાયા', english_name: 'Paya' },
+  { name: 'ખાગડા', english_name: 'Khagda' },
+  { name: 'વાઘડા', english_name: 'Vaghda' },
+  { name: 'કાળની', english_name: 'Kalni' }
+];
 
 const DEFAULT_RELATIONSHIPS = [
   { name: 'Wife', gujarati_name: 'પત્ની', hindi_name: 'पत्नी', description: 'પરિવારના વડાની ધર્મપત્ની' },
@@ -298,6 +306,23 @@ const getMasters = async (req, res) => {
             updated = true;
           }
           if (updated) await relDoc.save();
+        }
+      }
+    }
+
+    // Auto seed default sub-castes if none exist
+    if (type === 'sub-caste') {
+      const existingCastes = await config.Model.find({ type: 'sub-caste' });
+      const existingNames = new Set(existingCastes.map(c => (c.name || '').toLowerCase().trim()));
+
+      for (const caste of DEFAULT_SUB_CASTES) {
+        if (!existingNames.has(caste.name.toLowerCase()) && !existingNames.has(caste.english_name.toLowerCase())) {
+          await config.Model.create({
+            id: `SUB_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            type: 'sub-caste',
+            name: caste.name,
+            status: 1
+          });
         }
       }
     }

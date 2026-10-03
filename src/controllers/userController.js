@@ -40,6 +40,7 @@ const register = async (req, res) => {
       first_name,
       middle_name,
       last_name,
+      peta_jati,
       email,
       password,
       number,
@@ -103,6 +104,7 @@ const register = async (req, res) => {
       first_name,
       middle_name,
       last_name,
+      peta_jati: (peta_jati || '').trim(),
 
       email: email ? email.toLowerCase() : '',
       password: password || '12345',
@@ -165,6 +167,7 @@ const register = async (req, res) => {
           first_name: m.first_name.trim(),
           middle_name: m.middle_name ? m.middle_name.trim() : (newUser.first_name || ''),
           last_name: m.last_name ? m.last_name.trim() : (newUser.last_name || ''),
+          peta_jati: m.peta_jati !== undefined ? (m.peta_jati || '').trim() : (newUser.peta_jati || ''),
           email: m.email ? m.email.toLowerCase().trim() : '',
           password: m.password || '12345',
           number: m.number ? m.number.trim() : (newUser.number || ''),
@@ -404,6 +407,7 @@ const formatUserWithLocation = (req, u, locMaps = {}) => {
     first_name: u.first_name,
     middle_name: u.middle_name || '',
     last_name: u.last_name || '',
+    peta_jati: u.peta_jati || '',
     name: fullName(u),
     email: u.email || '',
     number: u.number,
@@ -421,30 +425,20 @@ const formatUserWithLocation = (req, u, locMaps = {}) => {
     // Location fields with resolved names and original IDs
     country_id: u.country_id || '',
     country_name: countryName,
-    country: countryName,
 
     state_id: u.state_id || '',
     state_name: stateName,
-    state: stateName,
 
     district_id: u.district_id || '',
     district_name: districtName,
-    district: districtName,
-
-    taluka_id: u.taluka_id || '',
-    taluka_name: talukaName,
-    taluka: talukaName,
 
     city_id: u.city_id || '',
     city_name: cityName,
-    city: cityName,
 
     village_id: u.village_id || '',
     village_name: villageName,
-    village: villageName,
 
     patti_para_pargana: pattiName,
-    patti: pattiName,
     patti_name: pattiName,
 
     family_head: u.family_head ? {
@@ -918,6 +912,7 @@ const updateUser = async (req, res) => {
       first_name,
       middle_name,
       last_name,
+      peta_jati,
       email,
       number,
       gender,
@@ -966,6 +961,7 @@ const updateUser = async (req, res) => {
     if (first_name) user.first_name = first_name;
     if (middle_name !== undefined) user.middle_name = middle_name;
     if (last_name !== undefined) user.last_name = last_name;
+    if (peta_jati !== undefined) user.peta_jati = (peta_jati || '').trim();
     if (email !== undefined) user.email = email.toLowerCase();
     if (number !== undefined) user.number = number;
     if (gender !== undefined) user.gender = gender;
@@ -1050,6 +1046,7 @@ const updateUser = async (req, res) => {
                 first_name: m.first_name.trim(),
                 middle_name: m.middle_name !== undefined ? m.middle_name.trim() : (user.first_name || ''),
                 last_name: m.last_name !== undefined ? m.last_name.trim() : (user.last_name || ''),
+                peta_jati: m.peta_jati !== undefined ? (m.peta_jati || '').trim() : (user.peta_jati || ''),
                 email: m.email ? m.email.toLowerCase().trim() : '',
                 number: m.number ? m.number.trim() : (user.number || ''),
                 gender: m.gender || 'Male',
@@ -1081,6 +1078,7 @@ const updateUser = async (req, res) => {
             first_name: m.first_name.trim(),
             middle_name: m.middle_name ? m.middle_name.trim() : (user.first_name || ''),
             last_name: m.last_name ? m.last_name.trim() : (user.last_name || ''),
+            peta_jati: m.peta_jati !== undefined ? (m.peta_jati || '').trim() : (user.peta_jati || ''),
             email: m.email ? m.email.toLowerCase().trim() : '',
             password: m.password || '12345',
             number: m.number ? m.number.trim() : (user.number || ''),
@@ -1324,6 +1322,7 @@ const bulkImportUsers = async (req, res) => {
           first_name:   firstName,
           middle_name:  getVal(row, 'Middle Name', 'middle_name', 'middlename'),
           last_name:    getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
+          peta_jati:    getVal(row, 'Peta Jati', 'peta_jati', 'petajati', 'sub_caste', 'subcaste', 'પેટા જાતિ', 'પેટાજાતિ'),
           email:        getVal(row, 'Email', 'email').toLowerCase() || '',
           password:     '12345',
           number,
@@ -1384,7 +1383,7 @@ const bulkImportUsers = async (req, res) => {
 const exportUsers = async (req, res) => {
   try {
     const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
+    const searchFields = ['first_name', 'middle_name', 'last_name', 'peta_jati', 'number', 'email', 'village', 'family_head.name'];
     
     const headCriteria = {
       $or: [
@@ -1520,6 +1519,7 @@ const exportUsers = async (req, res) => {
       excelRows.push({
         'Member ID': head.member_id || '',
         'Name': head.name || fullName(rawHead),
+        'Peta Jati': head.peta_jati || rawHead.peta_jati || '',
         'Relation': 'Family Head (મુખ્ય)',
         'Mobile Number': head.number || '',
         'Email': head.email || 'No Email',
@@ -1540,6 +1540,7 @@ const exportUsers = async (req, res) => {
         excelRows.push({
           'Member ID': child.member_id || '',
           'Name': `  ↳ ${child.name || fullName(rawChild)}`,
+          'Peta Jati': child.peta_jati || rawChild.peta_jati || head.peta_jati || rawHead.peta_jati || '',
           'Relation': child.relation || 'Member',
           'Mobile Number': child.number || '',
           'Email': child.email || 'No Email',
@@ -1561,6 +1562,7 @@ const exportUsers = async (req, res) => {
     worksheet['!cols'] = [
       { wch: 15 }, // Member ID
       { wch: 35 }, // Name
+      { wch: 20 }, // Peta Jati
       { wch: 25 }, // Relation
       { wch: 20 }, // Mobile Number
       { wch: 30 }, // Email
