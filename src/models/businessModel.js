@@ -55,6 +55,11 @@ const businessSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  pincode: {
+    type: String,
+    default: '',
+    trim: true
+  },
   address: {
     type: String,
     required: true,
