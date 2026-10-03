@@ -277,16 +277,17 @@ const getUsers = async (req, res) => {
       query.familyHead = req.query.familyHead === 'true';
     }
     if (req.query.family_head_id) {
-      const headId = mongooseQueryForUser(req.query.family_head_id)._id;
-      if (mongoose.isValidObjectId(headId)) {
+      const rawHeadId = req.query.family_head_id;
+      if (mongoose.isValidObjectId(rawHeadId)) {
         query.$or = [
-          { 'family_head.id': new mongoose.Types.ObjectId(headId) },
-          { _id: new mongoose.Types.ObjectId(headId) }
+          { 'family_head.id': new mongoose.Types.ObjectId(rawHeadId) },
+          { 'family_head.id': String(rawHeadId) },
+          { _id: new mongoose.Types.ObjectId(rawHeadId) }
         ];
       } else {
         query.$or = [
-          { 'family_head.id': headId },
-          { _id: headId }
+          { parent_member_id: String(rawHeadId) },
+          { member_id: String(rawHeadId) }
         ];
       }
     }
@@ -940,14 +941,43 @@ const deleteUser = async (req, res) => {
       return apiResponse(res, 404, 'User not found');
     }
 
-    // Delete user's image from external service
+    // 1. Delete user's image from external service
     const userImage = user.image || user.profile_image || '';
     if (userImage) {
       deleteFileFromExternalService(userImage).catch(() => { });
     }
 
+    // 2. Cascade delete all family members under this head
+    const childConditions = [
+      { 'family_head.id': user._id },
+      { 'family_head.id': String(user._id) },
+      { parent_id: user._id },
+      { parent_id: String(user._id) }
+    ];
+    if (user.member_id) {
+      childConditions.push({ parent_member_id: String(user.member_id) });
+    }
+
+    const linkedMembers = await User.find({
+      _id: { $ne: user._id },
+      $or: childConditions
+    });
+
+    for (const m of linkedMembers) {
+      const img = m.image || m.profile_image || '';
+      if (img) {
+        deleteFileFromExternalService(img).catch(() => { });
+      }
+    }
+
+    if (linkedMembers.length > 0) {
+      const linkedIds = linkedMembers.map(m => m._id);
+      await User.deleteMany({ _id: { $in: linkedIds } });
+    }
+
+    // 3. Delete the head user
     await User.deleteOne({ _id: id });
-    return apiResponse(res, 200, 'User deleted successfully');
+    return apiResponse(res, 200, 'User and all linked family members deleted successfully');
   } catch (error) {
     return apiResponse(res, 500, 'Error deleting user', { error: error.message });
   }
@@ -992,10 +1022,13 @@ const bulkImportUsers = async (req, res) => {
       return apiResponse(res, 400, 'Excel file is empty or has no data rows');
     }
 
-    // Helper to normalise column header keys (trim + lowercase)
+    // Helper to normalise column header keys (trim + lowercase + remove asterisks)
+    const cleanHeader = (str) => String(str || '').replace(/[\*:]/g, '').replace(/[\s_-]+/g, ' ').trim().toLowerCase();
+
     const getVal = (row, ...keys) => {
       for (const key of keys) {
-        const found = Object.keys(row).find(k => k.trim().toLowerCase() === key.toLowerCase());
+        const target = cleanHeader(key);
+        const found = Object.keys(row).find(k => cleanHeader(k) === target);
         if (found !== undefined && row[found] !== undefined && String(row[found]).trim() !== '') {
           return String(row[found]).trim();
         }
@@ -1040,8 +1073,18 @@ const bulkImportUsers = async (req, res) => {
       const row = rows[i];
       const rowNum = i + 2; // Excel row number (1 = header)
 
+      // Skip template notes/instructions row
+      const firstVal = String(Object.values(row)[0] || '').trim();
+      if (firstVal.startsWith('*') && (firstVal.toLowerCase().includes('required') || firstVal.toLowerCase().includes('note'))) {
+        continue;
+      }
+
       const firstName = getVal(row, 'First Name', 'first_name', 'firstname', 'name');
-      const number    = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone');
+      let number      = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone', 'contact');
+      if (number.endsWith('.0')) {
+        number = number.slice(0, -2);
+      }
+      number = number.replace(/[\s-]/g, '');
 
       if (!firstName) {
         errors.push({ row: rowNum, reason: 'First Name is required' });

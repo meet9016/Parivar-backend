@@ -88,13 +88,26 @@ const configSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
-
-  
-
-
+  android_app_link: {
+    type: String,
+    default: "",
+  },
+  ios_app_link: {
+    type: String,
+    default: "",
+  },
+  playstore_url: {
+    type: String,
+    default: "",
+  },
+  appstore_url: {
+    type: String,
+    default: "",
+  },
 }, {
   timestamps: true,
-  strict: false, id: false
+  strict: false,
+  id: false
 });
 
 module.exports = createTenantProxy('Config', configSchema);

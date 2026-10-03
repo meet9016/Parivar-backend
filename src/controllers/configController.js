@@ -84,6 +84,17 @@ const updateConfig = async (req, res) => {
       config.set({ ...req.body });
     }
 
+    if (req.body.android_app_link !== undefined || req.body.playstore_url !== undefined) {
+      const androidLink = req.body.android_app_link !== undefined ? req.body.android_app_link : req.body.playstore_url;
+      config.android_app_link = androidLink;
+      config.playstore_url = androidLink;
+    }
+    if (req.body.ios_app_link !== undefined || req.body.appstore_url !== undefined) {
+      const iosLink = req.body.ios_app_link !== undefined ? req.body.ios_app_link : req.body.appstore_url;
+      config.ios_app_link = iosLink;
+      config.appstore_url = iosLink;
+    }
+
     if (req.body.bannerImages !== undefined) {
       config.bannerImages = Array.isArray(req.body.bannerImages)
         ? req.body.bannerImages
