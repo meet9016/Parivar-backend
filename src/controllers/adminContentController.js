@@ -175,7 +175,11 @@ const masterConfig = {
   'gallery-category': { Model: GalleryCategory, nameKeys: ['category'], skipCustomId: true },
   'expense-category': { Model: Master, type: 'expense-category' },
   'relationship': { Model: Master, type: 'relationship' },
-  'sub-caste': { Model: Master, type: 'sub-caste' }
+  'sub-caste': { Model: Master, type: 'sub-caste' },
+  'standard': { Model: Master, type: 'standard' },
+  'degree': { Model: Master, type: 'degree' },
+  'bachelor-degree': { Model: Master, type: 'bachelor-degree' },
+  'master-degree': { Model: Master, type: 'master-degree' }
 };
 
 const DEFAULT_SUB_CASTES = [

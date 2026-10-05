@@ -77,10 +77,45 @@ const matrimonySchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  state: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  state_id: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  district: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  district_id: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   city: {
     type: String,
-    required: true,
-    trim: true
+    trim: true,
+    default: ''
+  },
+  city_id: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  village: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  village_id: {
+    type: String,
+    trim: true,
+    default: ''
   },
   about: {
     type: String,
