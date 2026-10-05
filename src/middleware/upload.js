@@ -113,27 +113,7 @@ const parseForm = (req, res, next) => {
     return runWithTenant(req, () => next());
   }
 
-  return upload.fields([
-    { name: 'image', maxCount: 1 },
-    { name: 'images', maxCount: 20 },
-
-    { name: 'gallery_image_1', maxCount: 1 },
-    { name: 'gallery_image_2', maxCount: 1 },
-    { name: 'gallery_image_3', maxCount: 1 },
-    { name: 'gallery_image_4', maxCount: 1 },
-    { name: 'gallery_image_5', maxCount: 1 },
-    { name: 'result_image', maxCount: 1 },
-    { name: 'biodata', maxCount: 1 },
-    { name: 'person_image', maxCount: 1 },
-    { name: 'qr_code', maxCount: 1 },
-    { name: 'student_image', maxCount: 1 },
-
-    { name: 'bannerImages', maxCount: 20 },
-    { name: 'appLogo', maxCount: 1 },
-    { name: 'webLogo', maxCount: 1 },
-    { name: 'favicon', maxCount: 1 },
-
-  ])(req, res, async (error) => {
+  return upload.any()(req, res, async (error) => {
     if (error) return runWithTenant(req, () => next(error));
 
     try {
