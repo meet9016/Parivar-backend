@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-
+ 
 const { loginAdmin, updateAdminRecovery, createAdmin, getAdmins, changePassword } = require('../controllers/adminController');
 const { parseForm } = require('../middleware/upload');
 const { protect, requirePermission } = require('../middleware/auth');
