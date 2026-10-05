@@ -10,9 +10,33 @@ const requestData = (req) => ({
 
 const getStudents = async (req, res) => {
   try {
-    const { data: students, pagination } = await queryHelper(Student, requestData(req), {
-      searchFields: ['surname', 'student_name', 'father_name', 'school_name', 'standard', 'mobile_number','year'],
-      filterFields: ['standard', 'student_name', 'school_name', 'status','year','user_id']
+    const rawReq = requestData(req);
+    const options = {
+      searchFields: ['surname', 'student_name', 'father_name', 'school_name', 'standard', 'mobile_number', 'year'],
+      filterFields: ['student_name', 'school_name', 'status', 'year', 'user_id']
+    };
+
+    // If standard filter is present, handle regex matching for 11, 12, Graduation, etc.
+    let baseQuery = {};
+    if (rawReq.standard) {
+      const std = String(rawReq.standard).trim();
+      if (std === '11' || std === 'Std 11') {
+        baseQuery.standard = { $regex: '^Std 11|^11', $options: 'i' };
+      } else if (std === '12' || std === 'Std 12') {
+        baseQuery.standard = { $regex: '^Std 12|^12', $options: 'i' };
+      } else if (std === 'Graduation') {
+        baseQuery.standard = { $regex: '^Graduation', $options: 'i' };
+      } else if (std === 'Post Graduation') {
+        baseQuery.standard = { $regex: '^Post Graduation', $options: 'i' };
+      } else {
+        baseQuery.standard = { $regex: `^${std}$`, $options: 'i' };
+      }
+      delete rawReq.standard;
+    }
+
+    const { data: students, pagination } = await queryHelper(Student, rawReq, {
+      ...options,
+      baseQuery
     });
     
     return res.status(200).json({
