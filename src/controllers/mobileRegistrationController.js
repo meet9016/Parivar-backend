@@ -764,17 +764,23 @@ const getRegistrationsList = async (req, res) => {
   try {
     const { page = 1, limit = 15, search = '', status = '', step = '' } = req.query;
     const query = {
-      familyHead: true
+      $or: [
+        { parent_member_id: null },
+        { parent_member_id: { $exists: false } },
+        { parent_member_id: '' },
+        { familyHead: true },
+        { relation: 'Self' }
+      ]
     };
 
     if (status) {
-      query.registration_status = status;
-    } else {
-      query.$or = [
-        { registration_status: { $in: ['pending_review', 'in_progress', 'needs_correction', 'approved', 'rejected'] } },
-        { registration_step: { $exists: true, $ne: null } },
-        { status: 0 }
-      ];
+      if (status === 'active' || status === 'approved') {
+        query.$and = [{ $or: [{ registration_status: 'approved' }, { status: 1 }] }];
+      } else if (status === 'pending' || status === 'pending_review') {
+        query.$and = [{ $or: [{ registration_status: 'pending_review' }, { status: 0 }] }];
+      } else {
+        query.registration_status = status;
+      }
     }
 
     if (step) {
