@@ -230,6 +230,16 @@ const formatMaster = (req, type, item, config, parentMap = {}) => {
     status: Number(item.status ?? 1)
   };
 
+  if (item.category !== undefined) {
+    formatted.category = item.category;
+  } else if (type === 'bachelor-degree') {
+    formatted.category = 'bachelor-degree';
+  } else if (type === 'master-degree') {
+    formatted.category = 'master-degree';
+  } else if (type === 'standard') {
+    formatted.category = 'standard';
+  }
+
   // Include parent fields only for masters that have parent hierarchy
   if (config.parentKey || ['state', 'city', 'district', 'village', 'taluka', 'area', 'business'].includes(type)) {
     formatted.parent_id = parentVal;
@@ -334,9 +344,24 @@ const getMasters = async (req, res) => {
     const query = { ...(config.type ? { type: config.type } : {}) };
     if (req.query.parent_id && config.parentKey) query[config.parentKey] = String(req.query.parent_id);
     if (req.query.parent_id && config.type) query.parent_id = String(req.query.parent_id);
+    if (req.query.category) {
+      if (req.query.category === 'standard') {
+        query.$or = [{ category: 'standard' }, { category: { $exists: false } }, { category: '' }, { category: null }];
+      } else {
+        query.category = String(req.query.category);
+      }
+    }
     if (req.query.status !== undefined && req.query.status !== null && req.query.status !== '') {
       const statusNum = Number(req.query.status);
-      query.$or = [{ status: statusNum }, { status: String(statusNum) }];
+      if (query.$or) {
+        query.$and = [
+          { $or: query.$or },
+          { $or: [{ status: statusNum }, { status: String(statusNum) }] }
+        ];
+        delete query.$or;
+      } else {
+        query.$or = [{ status: statusNum }, { status: String(statusNum) }];
+      }
     }
 
     const { data, pagination } = await queryHelper(config.Model, req.query, {
@@ -414,6 +439,9 @@ const saveMaster = async (req, res) => {
         if (req.body.parent_id) {
           duplicateQuery.parent_id = req.body.parent_id;
         }
+        if (req.body.category) {
+          duplicateQuery.category = req.body.category;
+        }
       } else {
         const primaryNameKey = config.nameKeys?.[0] || 'name';
         duplicateQuery.$or = [
@@ -442,6 +470,7 @@ const saveMaster = async (req, res) => {
       doc.type = config.type;
       doc.name = name;
       doc.parent_id = req.body.parent_id || '';
+      if (req.body.category !== undefined) doc.set('category', req.body.category);
       if (req.body.gujarati_name !== undefined) doc.set('gujarati_name', req.body.gujarati_name);
       if (req.body.description !== undefined) doc.set('description', req.body.description);
     } else {
