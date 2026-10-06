@@ -155,6 +155,47 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  occupation: {
+    type: String,
+    default: ''
+  },
+  occupation_type: {
+    type: String,
+    default: ''
+  },
+  occupation_details: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({})
+  },
+  documents: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({})
+  },
+  registration_step: {
+    type: Number,
+    default: 1
+  },
+  registration_status: {
+    type: String,
+    default: 'in_progress',
+    enum: ['in_progress', 'pending_review', 'approved', 'rejected', 'needs_correction']
+  },
+  father_husband_name: {
+    type: String,
+    default: ''
+  },
+  marital_status: {
+    type: String,
+    default: ''
+  },
+  rejection_reason: {
+    type: String,
+    default: ''
+  },
+  correction_remarks: {
+    type: String,
+    default: ''
+  },
   status: {
     type: Number,
     default: 0,
@@ -169,10 +210,8 @@ const userSchema = new mongoose.Schema({
   otp_last_sent: { type: Date, default: null },
   otp_count: { type: Number, default: 0 },
   otp_reset_day: { type: Date, default: null },
-  fcm_token: { type: String, default: '' },
   birthday_notification_year: { type: Number, default: null, index: true },
   anniversary_notification_year: { type: Number, default: null, index: true }
-
 }, {
   timestamps: true,
   strict: false, id: false
