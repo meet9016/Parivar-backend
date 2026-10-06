@@ -51,6 +51,10 @@ const businessSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  district_id: {
+    type: String,
+    default: ''
+  },
   city_id: {
     type: String,
     required: true

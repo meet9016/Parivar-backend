@@ -11,13 +11,11 @@ const idQuery = (id) => ({
     ...(mongoose.isValidObjectId(id) ? [{ _id: id }] : [])
   ]
 });
-
 let legacyIndexChecked = false;
 
 const dropLegacyUniqueCategoryIndex = async () => {
   if (legacyIndexChecked) return;
   legacyIndexChecked = true;
-
   try {
     const indexes = await GalleryCategory.collection.indexes();
     const legacyIndex = indexes.find((index) => index.name === 'category_1' && index.unique);
@@ -48,7 +46,6 @@ const getCategories = async (req, res) => {
     return apiResponse(res, 500, 'Error retrieving gallery categories', { error: error.message });
   }
 };
-
 const saveCategory = async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
@@ -70,15 +67,12 @@ const saveCategory = async (req, res) => {
       category: nameRegex,
       ...(existing ? { _id: { $ne: existing._id } } : {})
     });
-
     if (duplicate) {
-      return apiResponse(res, 400, `"${categoryText}" category already exists! Duplicate categories are not allowed.`);
+      return apiResponse(res, 400, `"${categoryText}"category already exists! Duplicate categories are not allowed.`);
     }
-
     const doc = existing || new GalleryCategory();
     doc.category = categoryText;
     await doc.save();
-
     return apiResponse(res, existing ? 200 : 201, 'Gallery category saved successfully', formatCategory(doc.toObject()));
   } catch (error) {
     if (error.code === 11000) {
@@ -87,7 +81,6 @@ const saveCategory = async (req, res) => {
     return apiResponse(res, 500, 'Error saving gallery category', { error: error.message });
   }
 };
-
 const deleteCategory = async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
@@ -104,7 +97,6 @@ const deleteCategory = async (req, res) => {
     return apiResponse(res, 500, 'Error deleting gallery category', { error: error.message });
   }
 };
-
 module.exports = {
   getCategories,
   saveCategory,
