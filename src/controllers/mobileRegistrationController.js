@@ -9,16 +9,12 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
 
 // Generate next unique member_id sequence
 const getNextMemberId = async () => {
-  const latestUser = await User.findOne({ member_id: /^\d+$/ })
-    .sort({ createdAt: -1, _id: -1 })
-    .select('member_id')
-    .lean();
-
-  if (latestUser && !isNaN(Number(latestUser.member_id))) {
-    return String(Number(latestUser.member_id) + 1);
-  }
-  const count = await User.countDocuments();
-  return String(count + 1);
+  const allUsers = await User.find({}).select('member_id').lean();
+  const maxId = allUsers.reduce((max, u) => {
+    const num = Number(u.member_id);
+    return (!isNaN(num) && num > max) ? num : max;
+  }, 0);
+  return String(maxId + 1);
 };
 
 // Map & format response helper
@@ -88,13 +84,27 @@ const saveStep1 = async (req, res) => {
     if (targetUserId) {
       user = await User.findById(targetUserId);
     } else if (cleanNumber) {
-      user = await User.findOne({
+      // Find matching user by phone
+      const existingUser = await User.findOne({
         $or: [
           { number: cleanNumber },
           { number: `+91${cleanNumber}` },
           { number: `91${cleanNumber}` }
         ]
       });
+
+      // If user exists, check if name matches; if name is changed/different, treat as a new member registration
+      if (existingUser) {
+        const reqFirstName = (first_name || '').trim().toLowerCase();
+        const existingFirstName = (existingUser.first_name || '').trim().toLowerCase();
+        
+        // If first_name is provided and doesn't match the existing registered name, treat as a new member
+        if (reqFirstName && existingFirstName && reqFirstName !== existingFirstName && existingFirstName !== 'member') {
+          user = null; // Create a fresh user document with a new member_id
+        } else {
+          user = existingUser;
+        }
+      }
     }
 
     const extractSingleUrl = (val) => {
