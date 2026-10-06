@@ -4,6 +4,7 @@ const User = require('../models/userModels');
 const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
 const City = require('../models/cityModel');
+const Master = require('../models/masterModel');
 const { getRolePermissions } = require('../middleware/auth');
 const { apiResponse, memberPublicId, publicUrl, fullName } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
@@ -66,6 +67,8 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {
   country_name: extra.country_name || '',
   state_id: b.state_id || '',
   state_name: extra.state_name || '',
+  district_id: b.district_id || '',
+  district_name: extra.district_name || '',
   city_id: b.city_id || '',
   city_name: extra.city_name || '',
   address: b.address || '',
@@ -121,15 +124,16 @@ const getBusinesses = async (req, res) => {
         }
       }
     }
-    const [{ data: businesses, pagination }, categories, countries, states, cities] = await Promise.all([
+    const [{ data: businesses, pagination }, categories, countries, states, districts, cities] = await Promise.all([
       queryHelper(Business, req.query, {
         baseQuery,
         searchFields: ['business_name', 'number', 'whatsapp_number', 'GST_number', 'email', 'address', 'about_us', 'website'],
-        filterFields: ['member_id', 'business_category_id', 'country_id', 'state_id', 'city_id', 'status']
+        filterFields: ['member_id', 'business_category_id', 'country_id', 'state_id', 'district_id', 'city_id', 'status']
       }),
       BusinessCategory.find({}).lean(),
       Country.find({}).lean(),
       State.find({}).lean(),
+      Master.find({ type: 'district' }).lean(),
       City.find({}).lean()
     ]);
 
@@ -171,6 +175,12 @@ const getBusinesses = async (req, res) => {
       if (s.id) stateMap.set(String(s.id), s.name || s.title || '');
     });
 
+    const districtMap = new Map();
+    districts.forEach(d => {
+      if (d._id) districtMap.set(String(d._id), d.name || d.district || '');
+      if (d.id) districtMap.set(String(d.id), d.name || d.district || '');
+    });
+
     const cityMap = new Map();
     cities.forEach(c => {
       if (c._id) cityMap.set(String(c._id), c.name || c.title || '');
@@ -187,6 +197,7 @@ const getBusinesses = async (req, res) => {
         owner_image: owner.image || '',
         country_name: countryMap.get(String(b.country_id)) || '',
         state_name: stateMap.get(String(b.state_id)) || '',
+        district_name: districtMap.get(String(b.district_id)) || '',
         city_name: cityMap.get(String(b.city_id)) || ''
       };
       return formatBusiness(req, b, categoryName, extra);
@@ -206,7 +217,7 @@ const getBusinessById = async (req, res) => {
       return apiResponse(res, 404, 'Business not found');
     }
 
-    const [category, country, state, city, owner] = await Promise.all([
+    const [category, country, state, district, city, owner] = await Promise.all([
       BusinessCategory.findOne({
         $or: [
           { id: String(business.business_category_id) },
@@ -223,6 +234,13 @@ const getBusinessById = async (req, res) => {
         $or: [
           { id: String(business.state_id) },
           ...(mongoose.isValidObjectId(business.state_id) ? [{ _id: business.state_id }] : [])
+        ]
+      }).lean(),
+      Master.findOne({
+        type: 'district',
+        $or: [
+          { id: String(business.district_id) },
+          ...(mongoose.isValidObjectId(business.district_id) ? [{ _id: business.district_id }] : [])
         ]
       }).lean(),
       City.findOne({
@@ -247,6 +265,7 @@ const getBusinessById = async (req, res) => {
       owner_image: owner ? publicUrl(req, owner.image || '') : '',
       country_name: country ? (country.name || country.title || '') : '',
       state_name: state ? (state.name || state.title || '') : '',
+      district_name: district ? (district.name || district.district || '') : '',
       city_name: city ? (city.name || city.title || '') : ''
     };
 
@@ -255,7 +274,6 @@ const getBusinessById = async (req, res) => {
     return apiResponse(res, 500, 'Error retrieving business', { error: error.message });
   }
 };
-
 
 const getBusinessCategoryList = async (req, res) => {
   try {
@@ -299,7 +317,7 @@ const galleryPath = (req, key) => {
 const addBusinessDetails = async (req, res) => {
   try {
     const { id } = req.params || req.body;
-    const { business_category_id, business_name, number, whatsapp_number, GST_number, email, country_id, state_id, city_id, address, location_link, about_us, facebook, instagram, pinterest, youtube, website, status } = requestData(req);
+    const { business_category_id, business_name, number, whatsapp_number, GST_number, email, country_id, state_id, district_id, city_id, address, location_link, about_us, facebook, instagram, pinterest, youtube, website, status } = requestData(req);
 
     if (!business_category_id || !business_name || !number || !email || !country_id || !state_id || !city_id) {
       return apiResponse(res, 400, 'All required fields must be provided');
@@ -330,6 +348,7 @@ const addBusinessDetails = async (req, res) => {
       email,
       country_id,
       state_id,
+      district_id: district_id || '',
       city_id,
       address: address || '',
       location_link: location_link || '',
