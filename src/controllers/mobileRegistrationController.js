@@ -309,24 +309,45 @@ const saveStep2 = async (req, res) => {
 const saveStep3 = async (req, res) => {
   try {
     const data = parseRequestBody(req);
-    const { user_id, state_id, district_id, city_id, village_id, village, address, complete_address, pincode } = data;
+    const {
+      user_id,
+      state_id,
+      state,
+      district_id,
+      district,
+      city_id,
+      city,
+      village_id,
+      village,
+      address,
+      complete_address,
+      residential_address,
+      pincode
+    } = data;
     const targetUserId = user_id || (req.user && req.user._id);
 
-    if (!targetUserId) {
-      return apiResponse(res, 400, 'User ID is required');
+    let user;
+    if (targetUserId) {
+      user = await User.findById(targetUserId);
+    }
+    if (!user && (data.number || data.phone || data.mobile)) {
+      const cleanNum = String(data.number || data.phone || data.mobile).trim().replace(/\D/g, '').slice(-10);
+      user = await User.findOne({
+        $or: [{ number: cleanNum }, { number: `+91${cleanNum}` }, { number: `91${cleanNum}` }]
+      });
     }
 
-    const user = await User.findById(targetUserId);
     if (!user) {
       return apiResponse(res, 404, 'User not found');
     }
 
-    if (state_id !== undefined) user.state_id = state_id;
-    if (district_id !== undefined) user.district_id = district_id;
-    if (city_id !== undefined) user.city_id = city_id;
-    if (village_id !== undefined) user.village_id = village_id;
-    if (village !== undefined) user.village = village;
-    if (complete_address || address) user.address = complete_address || address;
+    if (state_id !== undefined || state !== undefined) user.state_id = state_id || state || '';
+    if (district_id !== undefined || district !== undefined) user.district_id = district_id || district || '';
+    if (city_id !== undefined || city !== undefined) user.city_id = city_id || city || '';
+    if (village_id !== undefined || village !== undefined) user.village = village_id || village || '';
+    if (complete_address || address || residential_address) {
+      user.address = complete_address || address || residential_address || '';
+    }
     if (pincode !== undefined) user.pincode = String(pincode).trim();
 
     user.registration_step = Math.max(user.registration_step || 1, 3);
@@ -349,11 +370,11 @@ const saveStep3 = async (req, res) => {
       user_id: String(user._id),
       step: 3,
       address_details: {
-        state_id: user.state_id,
-        district_id: user.district_id,
-        city_id: user.city_id,
+        state: user.state_id,
+        district: user.district_id,
+        city: user.city_id,
         village: user.village,
-        complete_address: user.address,
+        address: user.address,
         pincode: user.pincode
       }
     });
@@ -374,8 +395,14 @@ const saveStep4 = async (req, res) => {
       user_id,
       occupation,
       occupation_type,
+      company_name,
       business_name,
+      business_category,
       business_type,
+      designation,
+      income_range,
+      annual_income,
+      work_address,
       business_address,
       business_mobile,
       business_email,
@@ -384,25 +411,35 @@ const saveStep4 = async (req, res) => {
     } = data;
 
     const targetUserId = user_id || (req.user && req.user._id);
-    if (!targetUserId) {
-      return apiResponse(res, 400, 'User ID is required');
+    let user;
+    if (targetUserId) {
+      user = await User.findById(targetUserId);
+    }
+    if (!user && (data.number || data.phone || data.mobile)) {
+      const cleanNum = String(data.number || data.phone || data.mobile).trim().replace(/\D/g, '').slice(-10);
+      user = await User.findOne({
+        $or: [{ number: cleanNum }, { number: `+91${cleanNum}` }, { number: `91${cleanNum}` }]
+      });
     }
 
-    const user = await User.findById(targetUserId);
     if (!user) {
       return apiResponse(res, 404, 'User not found');
     }
 
     const occType = occupation || occupation_type || '';
-    user.occupation = occType;
-    user.occupation_type = occType;
+    if (occType) {
+      user.occupation = occType;
+      user.occupation_type = occType;
+    }
 
     user.occupation_details = {
-      business_name: business_name || user.occupation_details?.business_name || '',
-      business_type: business_type || user.occupation_details?.business_type || '',
-      business_address: business_address || user.occupation_details?.business_address || '',
+      business_name: business_name || company_name || user.occupation_details?.business_name || '',
+      business_type: business_type || business_category || user.occupation_details?.business_type || '',
+      business_address: business_address || work_address || user.occupation_details?.business_address || '',
       business_mobile: business_mobile || user.occupation_details?.business_mobile || '',
       business_email: business_email || user.occupation_details?.business_email || '',
+      designation: designation || user.occupation_details?.designation || '',
+      income_range: income_range || annual_income || user.occupation_details?.income_range || '',
       gst_number: gst_number || user.occupation_details?.gst_number || '',
       website: website || user.occupation_details?.website || ''
     };
@@ -432,20 +469,30 @@ const saveStep5 = async (req, res) => {
     const {
       user_id,
       aadhaar_card,
+      aadhaar_number,
       pan_card,
+      pan_number,
       voter_id,
+      voter_id_number,
       driving_license,
       passport,
+      passport_number,
       document,
       file
     } = data;
 
     const targetUserId = user_id || (req.user && req.user._id);
-    if (!targetUserId) {
-      return apiResponse(res, 400, 'User ID is required');
+    let user;
+    if (targetUserId) {
+      user = await User.findById(targetUserId);
+    }
+    if (!user && (data.number || data.phone || data.mobile)) {
+      const cleanNum = String(data.number || data.phone || data.mobile).trim().replace(/\D/g, '').slice(-10);
+      user = await User.findOne({
+        $or: [{ number: cleanNum }, { number: `+91${cleanNum}` }, { number: `91${cleanNum}` }]
+      });
     }
 
-    const user = await User.findById(targetUserId);
     if (!user) {
       return apiResponse(res, 404, 'User not found');
     }
@@ -458,11 +505,11 @@ const saveStep5 = async (req, res) => {
     };
 
     user.documents = {
-      aadhaar_card: extractSingleUrl(aadhaar_card) || user.documents?.aadhaar_card || '',
-      pan_card: extractSingleUrl(pan_card) || user.documents?.pan_card || '',
-      voter_id: extractSingleUrl(voter_id) || user.documents?.voter_id || '',
+      aadhaar_card: extractSingleUrl(aadhaar_card) || aadhaar_number || user.documents?.aadhaar_card || '',
+      pan_card: extractSingleUrl(pan_card) || pan_number || user.documents?.pan_card || '',
+      voter_id: extractSingleUrl(voter_id) || voter_id_number || user.documents?.voter_id || '',
       driving_license: extractSingleUrl(driving_license) || user.documents?.driving_license || '',
-      passport: extractSingleUrl(passport) || extractSingleUrl(document) || extractSingleUrl(file) || user.documents?.passport || ''
+      passport: extractSingleUrl(passport) || passport_number || extractSingleUrl(document) || extractSingleUrl(file) || user.documents?.passport || ''
     };
 
     user.registration_step = Math.max(user.registration_step || 1, 5);
