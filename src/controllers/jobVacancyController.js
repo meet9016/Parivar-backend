@@ -43,8 +43,40 @@ const buildSearchQuery = ({ search, job_type }) => {
 };
 
 const extractVacancyData = (data) => {
-  const { title, description, qualifications, company_name, location, job_type, salary, contact_email, contact_number, status } = data;
-  return { title, description, qualifications, company_name, location, job_type, salary, contact_email, contact_number, status };
+  const {
+    title,
+    description,
+    qualifications,
+    company_name,
+    state,
+    district,
+    city,
+    village,
+    location,
+    job_type,
+    salary,
+    contact_email,
+    contact_number,
+    status
+  } = data;
+
+  const locationValue = location || [village, city, district, state].filter(Boolean).join(', ');
+  return {
+    title,
+    description,
+    qualifications,
+    company_name,
+    state,
+    district,
+    city,
+    village,
+    location: locationValue,
+    job_type,
+    salary,
+    contact_email,
+    contact_number,
+    status
+  };
 };
 
 const checkIsOwn = (item, user) => {
@@ -144,12 +176,31 @@ const postJobVacancy = async (req, res) => {
       if (!existing) return apiResponse(res, 404, "Job Vacancy not found");
 
       // Merge only provided fields for update (allows single field updates like status)
-      const allowedFields = ['title', 'description', 'qualifications', 'company_name', 'location', 'job_type', 'salary', 'contact_email', 'contact_number', 'status'];
+      const allowedFields = [
+        'title',
+        'description',
+        'qualifications',
+        'company_name',
+        'state',
+        'district',
+        'city',
+        'village',
+        'location',
+        'job_type',
+        'salary',
+        'contact_email',
+        'contact_number',
+        'status'
+      ];
       allowedFields.forEach((field) => {
         if (body[field] !== undefined && body[field] !== null) {
           existing.set(field, body[field]);
         }
       });
+
+      if (body.state || body.district || body.city || body.village) {
+        existing.set('location', body.location || [body.village, body.city, body.district, body.state].filter(Boolean).join(', '));
+      }
 
       if (req.file || body.image || body.remove_image === 'true') {
         existing.set('image', imageFromRequest(req, existing.image));

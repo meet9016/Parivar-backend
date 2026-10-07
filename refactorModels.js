@@ -10,7 +10,7 @@ fs.readdirSync(modelsDir).forEach(file => {
   if (!file.endsWith('.js')) return;
   
   const filePath = path.join(modelsDir, file);
-  let content = fs.readFileSync(filePath, 'utf8');
+  let content = fs.readFileSync(filePath, 'utf8'); 
   
   // Example target: module.exports = mongoose.model('BankDetail', bankDetailSchema);
   const regex = /module\.exports\s*=\s*mongoose\.model\(['"]([^'"]+)['"]\s*,\s*([^)]+)\);/;
