@@ -47,5 +47,6 @@ router.get('/admin/:id', protect, mobileReg.getRegistrationDetails);
 router.post('/admin/:id/approve', protect, mobileReg.approveRegistration);
 router.post('/admin/:id/reject', protect, parseForm, mobileReg.rejectRegistration);
 router.post('/admin/:id/request-correction', protect, parseForm, mobileReg.requestCorrectionRegistration);
+router.post('/admin/:id/status', protect, parseForm, mobileReg.updateRegistrationStatus);
 
 module.exports = router;

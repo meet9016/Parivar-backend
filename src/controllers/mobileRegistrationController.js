@@ -2,6 +2,9 @@ const User = require('../models/userModels');
 const Role = require('../models/roleModel');
 const RegistrationRequest = require('../models/registrationRequestModel');
 const Master = require('../models/masterModel');
+const City = require('../models/cityModel');
+const State = require('../models/stateModel');
+const Country = require('../models/countryModel');
 const { apiResponse } = require('../utils/apiResponse');
 const jwt = require('jsonwebtoken');
 
@@ -65,9 +68,9 @@ const SYSTEM_FIELDS = new Set([
 
 // Allowed fields per step to prevent cross-step pollution
 const STEP1_KEYS = new Set([
-  'first_name', 'middle_name', 'last_name', 'father_husband_name', 'gender',
-  'blood_group', 'dob', 'anniversary', 'marital_status', 'patti_para_pargana',
-  'peta_jati', 'email', 'profile_image', 'image', 'photo', 'avatar'
+  'first_name', 'middle_name', 'last_name', 'number', 'gender',
+  'blood_group', 'dob', 'marital_status', 'patti_para_pargana',
+  'peta_jati', 'profile_image', 'image', 'photo', 'avatar'
 ]);
 
 // Helper to sanitize strings (trim and remove trailing commas)
@@ -171,90 +174,68 @@ const formatRegistrationResponse = (reg) => {
     first_name: sanitizeVal(r.first_name || s1.first_name || ''),
     middle_name: sanitizeVal(r.middle_name || s1.middle_name || ''),
     last_name: sanitizeVal(r.last_name || s1.last_name || ''),
-    father_husband_name: sanitizeVal(r.father_husband_name || s1.father_husband_name || ''),
+    number: r.number || s1.number || '',
     gender: s1.gender || r.gender || '',
     blood_group: sanitizeVal(s1.blood_group || r.blood_group || ''),
     dob: s1.dob || r.dob,
-    anniversary: s1.anniversary || r.anniversary,
     marital_status: sanitizeVal(s1.marital_status || r.marital_status || ''),
     patti_para_pargana: sanitizeVal(s1.patti_para_pargana || r.patti_para_pargana || ''),
     peta_jati: sanitizeVal(s1.peta_jati || r.peta_jati || ''),
-    email: sanitizeVal(s1.email || r.email || ''),
     profile_image: s1.profile_image || r.profile_image || '',
     ...filterByAllowedKeys(s1, STEP1_KEYS)
   };
 
   const step3Data = {
-    country_id: r.country_id || s3.country_id || '',
     state_id: r.state_id || s3.state_id || '',
+    state: s3.state || '',
     district_id: r.district_id || s3.district_id || '',
-    taluka_id: r.taluka_id || s3.taluka_id || '',
+    district: s3.district || '',
     city_id: r.city_id || s3.city_id || '',
-    village_id: r.village_id || s3.village_id || '',
+    city: s3.city || '',
     village: r.village || s3.village || '',
-    address: r.address || s3.address || '',
     pincode: r.pincode || s3.pincode || '',
     ...s3
   };
 
+  if (!step3Data.country_id) delete step3Data.country_id;
+  if (!step3Data.taluka_id) delete step3Data.taluka_id;
+  if (!step3Data.village_id) delete step3Data.village_id;
+  if (!step3Data.address) delete step3Data.address;
+
+  // Remove unwanted ID fields from response as requested by user
+  delete step3Data.state_id;
+  delete step3Data.district_id;
+  delete step3Data.city_id;
+
   const step4Data = {
-    occupation: r.occupation || s4.occupation || '',
-    occupation_type: r.occupation_type || s4.occupation_type || '',
     ...r.occupation_details,
     ...s4
   };
+  if (r.occupation || s4.occupation) step4Data.occupation = r.occupation || s4.occupation;
+  
+  delete step4Data.occupation_type;
+
+  for (const key in step4Data) {
+    if (step4Data[key] === '' || step4Data[key] === null || step4Data[key] === undefined) {
+      delete step4Data[key];
+    }
+  }
 
   const step5Data = {
     ...r.documents,
     ...s5
   };
 
-  return {
+  for (const key in step5Data) {
+    if (step5Data[key] === '' || step5Data[key] === null || step5Data[key] === undefined) {
+      delete step5Data[key];
+    }
+  }
+
+  const responsePayload = {
     _id: r._id,
-    id: r._id,
-    number: r.number,
     status: r.status,
-    is_approved: r.is_approved || false,
-    current_step: r.current_step || 1,
-    registration_step: r.current_step || 1,
-    registration_status: r.status,
-    first_name: step1Data.first_name,
-    middle_name: step1Data.middle_name,
-    last_name: step1Data.last_name,
-    father_husband_name: step1Data.father_husband_name,
-    gender: step1Data.gender,
-    dob: step1Data.dob,
-    anniversary: step1Data.anniversary,
-    blood_group: step1Data.blood_group,
-    marital_status: step1Data.marital_status,
-    patti_para_pargana: step1Data.patti_para_pargana,
-    peta_jati: step1Data.peta_jati,
-    profile_image: step1Data.profile_image,
-    image: step1Data.profile_image,
-    email: step1Data.email,
-    country_id: step3Data.country_id,
-    state_id: step3Data.state_id,
-    district_id: step3Data.district_id,
-    taluka_id: step3Data.taluka_id,
-    city_id: step3Data.city_id,
-    village_id: step3Data.village_id,
-    village: step3Data.village,
-    address: step3Data.address,
-    pincode: step3Data.pincode,
-    occupation: step4Data.occupation,
-    occupation_type: step4Data.occupation_type,
-    occupation_details: step4Data,
-    documents: step5Data,
-    family_members_count: s2.length,
-    family_members: s2,
-    rejection_reason: r.rejection_reason || '',
-    correction_remarks: r.correction_remarks || '',
-    fields_to_correct: r.fields_to_correct || [],
-    user_id: r.user_id,
-    member_id: r.member_id,
-    approved_at: r.approved_at,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
+    is_approved: r.is_approved,
     // Step-wise structure: step1: [{data}], step2: [{data}], step3: [{data}], etc.
     step1: [step1Data],
     step2: s2,
@@ -262,6 +243,17 @@ const formatRegistrationResponse = (reg) => {
     step4: [step4Data],
     step5: [step5Data]
   };
+
+  // Only include rejection or correction reasons if they exist
+  if (r.rejection_reason && r.rejection_reason.trim() !== '') {
+    responsePayload.rejection_reason = r.rejection_reason;
+  }
+  
+  if (r.correction_remarks && r.correction_remarks.trim() !== '') {
+    responsePayload.correction_remarks = r.correction_remarks;
+  }
+
+  return responsePayload;
 };
 
 /**
@@ -286,18 +278,16 @@ const saveStep1 = async (req, res) => {
     const step1Payload = {
       ...existingStep1,
       ...cleanStep1Incoming,
-      first_name: sanitizeVal(data.first_name || regRequest.first_name || data.father_husband_name || 'Member'),
+      first_name: sanitizeVal(data.first_name || regRequest.first_name || 'Member'),
       middle_name: data.middle_name !== undefined ? sanitizeVal(data.middle_name) : (existingStep1.middle_name || ''),
       last_name: data.last_name !== undefined ? sanitizeVal(data.last_name) : (existingStep1.last_name || ''),
-      father_husband_name: data.father_husband_name !== undefined ? sanitizeVal(data.father_husband_name) : (existingStep1.father_husband_name || ''),
+      number: cleanNumber || regRequest.number || '',
       patti_para_pargana: data.patti_para_pargana !== undefined ? sanitizeVal(data.patti_para_pargana) : (existingStep1.patti_para_pargana || ''),
       peta_jati: data.peta_jati !== undefined ? sanitizeVal(data.peta_jati) : (existingStep1.peta_jati || ''),
       gender: cleanGender || existingStep1.gender || '',
       blood_group: data.blood_group !== undefined ? sanitizeVal(data.blood_group) : (existingStep1.blood_group || ''),
       dob: data.dob ? new Date(data.dob) : existingStep1.dob,
-      anniversary: data.anniversary ? new Date(data.anniversary) : existingStep1.anniversary,
       marital_status: data.marital_status !== undefined ? sanitizeVal(data.marital_status) : (existingStep1.marital_status || ''),
-      email: data.email !== undefined ? sanitizeVal(data.email) : (existingStep1.email || ''),
       profile_image: imgUrl || existingStep1.profile_image || ''
     };
 
@@ -305,15 +295,12 @@ const saveStep1 = async (req, res) => {
     regRequest.first_name = step1Payload.first_name;
     regRequest.middle_name = step1Payload.middle_name;
     regRequest.last_name = step1Payload.last_name;
-    regRequest.father_husband_name = step1Payload.father_husband_name;
     regRequest.patti_para_pargana = step1Payload.patti_para_pargana;
     regRequest.peta_jati = step1Payload.peta_jati;
     regRequest.gender = step1Payload.gender;
     regRequest.blood_group = step1Payload.blood_group;
     regRequest.dob = step1Payload.dob;
-    regRequest.anniversary = step1Payload.anniversary;
     regRequest.marital_status = step1Payload.marital_status;
-    regRequest.email = step1Payload.email;
     regRequest.profile_image = step1Payload.profile_image;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 1);
     regRequest.status = regRequest.status === 'approved' ? 'approved' : 'in_progress';
@@ -322,11 +309,8 @@ const saveStep1 = async (req, res) => {
 
     return apiResponse(res, 200, 'Step 1: Personal details saved successfully', {
       registration_id: String(regRequest._id),
-      user_id: String(regRequest._id),
       step: 1,
-      current_step: regRequest.current_step,
-      step1: [step1Payload],
-      personal_details: step1Payload
+      step1: [step1Payload]
     });
   } catch (error) {
     console.error('Error saving step 1:', error);
@@ -349,7 +333,11 @@ const saveStep2 = async (req, res) => {
     let rawMembers = data.family_members || data.members || data['family_members[]'] || data['members[]'] || [];
     rawMembers = parseJsonIfNeeded(rawMembers);
     if (typeof rawMembers === 'string') {
-      try { rawMembers = JSON.parse(rawMembers); } catch (e) { }
+      try { 
+        rawMembers = JSON.parse(rawMembers); 
+      } catch (e) {
+        return apiResponse(res, 400, 'Invalid JSON format in family_members. Please ensure all strings are quoted (e.g. "dob": "2001-05-15")');
+      }
     }
     const membersList = Array.isArray(rawMembers) ? rawMembers : (rawMembers ? [rawMembers] : []);
 
@@ -357,7 +345,11 @@ const saveStep2 = async (req, res) => {
     for (let mem of membersList) {
       let item = parseJsonIfNeeded(mem);
       if (typeof item === 'string') {
-        try { item = JSON.parse(item); } catch (e) { }
+        try { 
+          item = JSON.parse(item); 
+        } catch (e) {
+          return apiResponse(res, 400, 'Invalid JSON format in family member object.');
+        }
       }
       if (!item || typeof item !== 'object') continue;
       const memName = String(item.name || `${item.first_name || ''} ${item.last_name || ''}` || '').trim();
@@ -376,25 +368,18 @@ const saveStep2 = async (req, res) => {
         calculatedDob = now;
       }
 
-      // Clean system fields from each family member item before storing
       const cleanedItem = cleanForStep(item);
-      cleanedMembers.push({
-        ...cleanedItem,
-        first_name: fName,
-        middle_name: item.middle_name || '',
-        last_name: lName,
-        name: memName || `${fName} ${lName}`.trim(),
-        relation: item.relation || 'Other',
-        mobile: item.mobile || item.number || '',
-        gender: normalizeGender(item.gender),
-        dob: calculatedDob,
-        age: item.age || (calculatedDob ? (new Date().getFullYear() - calculatedDob.getFullYear()) : ''),
-        marital_status: item.marital_status || '',
-        education: item.education || '',
-        occupation: item.occupation || '',
-        blood_group: item.blood_group || '',
-        image: item.image || item.profile_image || ''
-      });
+      
+      if (calculatedDob) {
+        cleanedItem.dob = calculatedDob.toISOString();
+      }
+      delete cleanedItem.age;
+
+      if (item.number) cleanedItem.number = item.number;
+      if (item.mobile) cleanedItem.mobile = item.mobile;
+      if (item.phone) cleanedItem.phone = item.phone;
+      
+      cleanedMembers.push(cleanedItem);
     }
 
     regRequest.step2 = cleanedMembers;
@@ -403,12 +388,8 @@ const saveStep2 = async (req, res) => {
 
     return apiResponse(res, 200, 'Step 2: Family details saved successfully', {
       registration_id: String(regRequest._id),
-      user_id: String(regRequest._id),
       step: 2,
-      current_step: regRequest.current_step,
-      count: cleanedMembers.length,
-      step2: cleanedMembers,
-      family_members: cleanedMembers
+      step2: cleanedMembers
     });
   } catch (error) {
     console.error('Error saving step 2:', error);
@@ -437,9 +418,65 @@ const saveStep3 = async (req, res) => {
       city_id: data.city_id !== undefined ? data.city_id : (data.city !== undefined ? data.city : (regRequest.city_id || '')),
       village_id: data.village_id !== undefined ? data.village_id : (regRequest.village_id || ''),
       village: data.village_id !== undefined ? data.village_id : (data.village !== undefined ? data.village : (regRequest.village || '')),
-      address: data.complete_address || data.address || data.residential_address || regRequest.address || '',
+      address: data.address || data.residential_address || regRequest.address || '',
       pincode: data.pincode !== undefined ? String(data.pincode).trim() : (regRequest.pincode || '')
     };
+
+    const masterIds = [step3Payload.country_id, step3Payload.state_id, step3Payload.district_id, step3Payload.taluka_id, step3Payload.city_id].filter(Boolean);
+    if (masterIds.length > 0) {
+      const validObjectIds = masterIds.filter(id => /^[0-9a-fA-F]{24}$/.test(String(id)));
+      const idQuery = {
+        $or: [
+          { _id: { $in: validObjectIds } },
+          { id: { $in: masterIds } }
+        ]
+      };
+
+      const [masters, cities, states, countries] = await Promise.all([
+        Master.find(idQuery).select('_id id name').lean(),
+        City.find(idQuery).select('_id id name city').lean(),
+        State.find(idQuery).select('_id id name state').lean(),
+        Country.find(idQuery).select('_id id name country').lean()
+      ]);
+      
+      const getVal = (docs, id, fallbackKey) => {
+        if (!id) return null;
+        const doc = docs.find(d => String(d._id) === String(id) || String(d.id) === String(id));
+        return doc ? (doc.name || doc[fallbackKey] || '') : null;
+      };
+
+      const cName = getVal(countries, step3Payload.country_id, 'country');
+      if (cName) step3Payload.country = cName;
+
+      const sName = getVal(states, step3Payload.state_id, 'state');
+      if (sName) step3Payload.state = sName;
+
+      const cityName = getVal(cities, step3Payload.city_id, 'city');
+      if (cityName) step3Payload.city = cityName;
+
+      const dName = getVal(masters, step3Payload.district_id, 'name');
+      if (dName) step3Payload.district = dName;
+
+      const tName = getVal(masters, step3Payload.taluka_id, 'name');
+      if (tName) step3Payload.taluka = tName;
+    }
+    
+    // Ensure name keys exist even if lookup failed
+    if (step3Payload.city_id && !step3Payload.city) step3Payload.city = '';
+    if (step3Payload.state_id && !step3Payload.state) step3Payload.state = '';
+    if (step3Payload.district_id && !step3Payload.district) step3Payload.district = '';
+
+    // Remove unwanted empty keys from payload
+    if (!step3Payload.country_id) delete step3Payload.country_id;
+    if (!step3Payload.taluka_id) delete step3Payload.taluka_id;
+    if (!step3Payload.village_id) delete step3Payload.village_id;
+    if (!step3Payload.address) delete step3Payload.address;
+
+    // Remove unwanted ID fields from response
+    const responsePayload = { ...step3Payload };
+    delete responsePayload.state_id;
+    delete responsePayload.district_id;
+    delete responsePayload.city_id;
 
     regRequest.step3 = step3Payload;
     regRequest.country_id = step3Payload.country_id;
@@ -457,11 +494,8 @@ const saveStep3 = async (req, res) => {
 
     return apiResponse(res, 200, 'Step 3: Address details saved successfully', {
       registration_id: String(regRequest._id),
-      user_id: String(regRequest._id),
       step: 3,
-      current_step: regRequest.current_step,
-      step3: [step3Payload],
-      address_details: step3Payload
+      step3: [responsePayload]
     });
   } catch (error) {
     console.error('Error saving step 3:', error);
@@ -481,41 +515,41 @@ const saveStep4 = async (req, res) => {
     }
 
     const occType = data.occupation || data.occupation_type || regRequest.occupation || '';
-    const occupationDetails = {
+    const step4Payload = {
+      ...cleanForStep(regRequest.step4 || {}),
       ...cleanForStep(regRequest.occupation_details || {}),
-      ...cleanForStep(data),
-      business_name: data.business_name || data.company_name || regRequest.occupation_details?.business_name || '',
-      business_type: data.business_type || data.business_category || regRequest.occupation_details?.business_type || '',
-      business_address: data.business_address || data.work_address || regRequest.occupation_details?.business_address || '',
-      business_mobile: data.business_mobile || regRequest.occupation_details?.business_mobile || '',
-      business_email: data.business_email || regRequest.occupation_details?.business_email || '',
-      designation: data.designation || regRequest.occupation_details?.designation || '',
-      income_range: data.income_range || data.annual_income || regRequest.occupation_details?.income_range || '',
-      gst_number: data.gst_number || regRequest.occupation_details?.gst_number || '',
-      website: data.website || regRequest.occupation_details?.website || ''
+      ...cleanForStep(data)
     };
 
-    const step4Payload = {
-      ...occupationDetails,
-      occupation: occType,
-      occupation_type: occType
-    };
+    if (occType) {
+      step4Payload.occupation = occType;
+      step4Payload.occupation_type = occType;
+    }
+
+    // Only return fields that have actual values
+    for (const key in step4Payload) {
+      if (step4Payload[key] === '' || step4Payload[key] === null || step4Payload[key] === undefined) {
+        delete step4Payload[key];
+      }
+    }
 
     regRequest.step4 = step4Payload;
-    regRequest.occupation = occType;
-    regRequest.occupation_type = occType;
-    regRequest.occupation_details = occupationDetails;
+    if (step4Payload.occupation) {
+      regRequest.occupation = step4Payload.occupation;
+      regRequest.occupation_type = step4Payload.occupation;
+    }
+    regRequest.occupation_details = { ...step4Payload };
     regRequest.current_step = Math.max(regRequest.current_step || 1, 4);
 
     await regRequest.save();
 
+    const responsePayload = { ...step4Payload };
+    delete responsePayload.occupation_type;
+
     return apiResponse(res, 200, 'Step 4: Occupation details saved successfully', {
       registration_id: String(regRequest._id),
-      user_id: String(regRequest._id),
       step: 4,
-      current_step: regRequest.current_step,
-      step4: [step4Payload],
-      occupation_details: step4Payload
+      step4: [responsePayload]
     });
   } catch (error) {
     console.error('Error saving step 4:', error);
@@ -556,6 +590,12 @@ const saveStep5 = async (req, res) => {
       passport: extractSingleUrl(data.passport) || data.passport_number || extractSingleUrl(data.document) || extractSingleUrl(data.file) || regRequest.documents?.passport || ''
     };
 
+    for (const key in step5Payload) {
+      if (step5Payload[key] === '' || step5Payload[key] === null || step5Payload[key] === undefined) {
+        delete step5Payload[key];
+      }
+    }
+
     regRequest.step5 = step5Payload;
     regRequest.documents = step5Payload;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 5);
@@ -564,11 +604,8 @@ const saveStep5 = async (req, res) => {
 
     return apiResponse(res, 200, 'Step 5: Documents saved successfully', {
       registration_id: String(regRequest._id),
-      user_id: String(regRequest._id),
       step: 5,
-      current_step: regRequest.current_step,
-      step5: [step5Payload],
-      documents: step5Payload
+      step5: [step5Payload]
     });
   } catch (error) {
     console.error('Error saving step 5:', error);
@@ -642,19 +679,16 @@ const completeFullRegistration = async (req, res) => {
 
     const step1Data = {
       ...data,
-      first_name: data.first_name || data.father_husband_name || 'Member',
+      first_name: data.first_name || 'Member',
       middle_name: data.middle_name || '',
       last_name: data.last_name || '',
-      father_husband_name: data.father_husband_name || '',
       number: cleanNumber,
       patti_para_pargana: data.patti_para_pargana || '',
       peta_jati: data.peta_jati || '',
       gender: normalizeGender(data.gender),
       blood_group: data.blood_group || '',
       dob: data.dob ? new Date(data.dob) : undefined,
-      anniversary: data.anniversary ? new Date(data.anniversary) : undefined,
       marital_status: data.marital_status || '',
-      email: data.email || '',
       profile_image: imgUrl || ''
     };
 
@@ -691,7 +725,7 @@ const completeFullRegistration = async (req, res) => {
       city_id: data.city_id || '',
       village_id: data.village_id || '',
       village: data.village_id || data.village || '',
-      address: data.complete_address || data.address || '',
+      address: data.address || '',
       pincode: data.pincode ? String(data.pincode).trim() : ''
     };
 
@@ -727,15 +761,12 @@ const completeFullRegistration = async (req, res) => {
     regRequest.first_name = step1Data.first_name;
     regRequest.middle_name = step1Data.middle_name;
     regRequest.last_name = step1Data.last_name;
-    regRequest.father_husband_name = step1Data.father_husband_name;
     regRequest.patti_para_pargana = step1Data.patti_para_pargana;
     regRequest.peta_jati = step1Data.peta_jati;
     regRequest.gender = step1Data.gender;
     regRequest.blood_group = step1Data.blood_group;
     regRequest.dob = step1Data.dob;
-    regRequest.anniversary = step1Data.anniversary;
     regRequest.marital_status = step1Data.marital_status;
-    regRequest.email = step1Data.email;
     regRequest.profile_image = step1Data.profile_image;
 
     regRequest.country_id = step3Data.country_id;
@@ -847,16 +878,7 @@ const getRegistrationDetails = async (req, res) => {
 
     const formatted = formatRegistrationResponse(regRequest);
 
-    return apiResponse(res, 200, 'Registration details fetched successfully', {
-      registration: formatted,
-      user: formatted,
-      family_members: formatted.family_members || [],
-      step1: formatted.step1,
-      step2: formatted.step2,
-      step3: formatted.step3,
-      step4: formatted.step4,
-      step5: formatted.step5
-    });
+    return apiResponse(res, 200, 'Registration details fetched successfully', formatted);
   } catch (error) {
     console.error('Error fetching registration details:', error);
     return apiResponse(res, 500, error.message || 'Error fetching registration details');
@@ -1064,8 +1086,7 @@ const approveRegistration = async (req, res) => {
       user_id: headUser._id,
       member_id: headUser.member_id,
       is_approved: true,
-      status: 'approved',
-      user: headUser
+      status: 'approved'
     });
   } catch (error) {
     console.error('Error approving registration:', error);
@@ -1152,6 +1173,43 @@ const requestCorrectionRegistration = async (req, res) => {
   }
 };
 
+/**
+ * ADMIN: Unified Status Update API
+ * Accepts status ('approved' | 'rejected' | 'needs_correction') and reason
+ */
+const updateRegistrationStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let { status, reason } = req.body;
+
+    if (!status) {
+      return apiResponse(res, 400, 'Status is required');
+    }
+
+    status = status.toLowerCase().trim();
+
+    if (status === 'approved' || status === 'approval' || status === 'approve') {
+      return approveRegistration(req, res);
+    } 
+    
+    if (status === 'rejected' || status === 'reject') {
+      if (!req.body.reason) req.body.reason = reason || 'Application Rejected';
+      return rejectRegistration(req, res);
+    } 
+    
+    if (status === 'needs_correction' || status === 'correction') {
+      if (!req.body.remarks) req.body.remarks = reason || 'Please correct your details';
+      return requestCorrectionRegistration(req, res);
+    }
+
+    return apiResponse(res, 400, 'Invalid status provided. Use: approved, rejected, or needs_correction');
+
+  } catch (error) {
+    console.error('Error updating registration status:', error);
+    return apiResponse(res, 500, error.message || 'Error updating status');
+  }
+};
+
 module.exports = {
   saveStep1,
   saveStep2,
@@ -1165,5 +1223,6 @@ module.exports = {
   getRegistrationDetails,
   approveRegistration,
   rejectRegistration,
-  requestCorrectionRegistration
+  requestCorrectionRegistration,
+  updateRegistrationStatus
 };
