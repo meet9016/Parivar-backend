@@ -282,6 +282,19 @@ const getMasters = async (req, res) => {
     const config = masterConfig[type];
     if (!config) return apiResponse(res, 404, 'Master type not found');
 
+    // Auto-seed India if country collection is empty
+    if (type === 'country') {
+      const countryCount = await config.Model.countDocuments();
+      if (countryCount === 0) {
+        await config.Model.create({
+          _id: new mongoose.Types.ObjectId(),
+          name: 'India',
+          country: 'India',
+          status: 1
+        });
+      }
+    }
+
     // Auto seed or backfill default relationships
     if (type === 'relationship') {
       const existingRels = await config.Model.find({ type: 'relationship' });

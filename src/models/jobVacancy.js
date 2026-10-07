@@ -24,9 +24,25 @@ const jobVacancySchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    state: {
+        type: String,
+        default: ''
+    },
+    district: {
+        type: String,
+        default: ''
+    },
+    city: {
+        type: String,
+        default: ''
+    },
+    village: {
+        type: String,
+        default: ''
+    },
     location: {
         type: String,
-        required: true
+        default: ''
     },
     job_type: {
         type: String,
