@@ -1,5 +1,6 @@
 const Event = require('../models/eventModel');
 const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
+const { getRolePermissions } = require('../middleware/auth');
 const queryHelper = require('../utils/queryHelper');
 const { createAndBroadcast } = require('./notificationController');
 
@@ -218,6 +219,16 @@ const updateEvent = async (req, res) => {
     if (!event) {
       return apiResponse(res, 404, 'Event not found');
     }
+
+    const permissions = getRolePermissions(req.user);
+    const isAdmin = req.user?.committee_role === 'President' || permissions.includes('events.edit') || !!req.user?.role_id;
+    const currentUserId = String(req.user?.id || req.user?._id || '');
+    const eventCreatedById = String(event.created_by?.id || event.created_by?._id || (typeof event.created_by === 'string' ? event.created_by : ''));
+
+    if (!isAdmin && eventCreatedById && eventCreatedById !== currentUserId) {
+      return apiResponse(res, 403, 'Unauthorized - You can only edit your own events');
+    }
+
     event.set(eventPayload(req, event));
     await event.save();
     return apiResponse(res, 200, 'Event saved successfully', formatEvent(req, event.toObject()));
@@ -232,6 +243,16 @@ const deleteEvent = async (req, res) => {
     if (!event) {
       return apiResponse(res, 404, 'Event not found');
     }
+
+    const permissions = getRolePermissions(req.user);
+    const isAdmin = req.user?.committee_role === 'President' || permissions.includes('events.delete') || !!req.user?.role_id;
+    const currentUserId = String(req.user?.id || req.user?._id || '');
+    const eventCreatedById = String(event.created_by?.id || event.created_by?._id || (typeof event.created_by === 'string' ? event.created_by : ''));
+
+    if (!isAdmin && eventCreatedById && eventCreatedById !== currentUserId) {
+      return apiResponse(res, 403, 'Unauthorized - You can only delete your own events');
+    }
+
     await event.deleteOne();
     return apiResponse(res, 200, 'Event deleted successfully');
   } catch (error) {
