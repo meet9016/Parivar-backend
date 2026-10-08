@@ -418,7 +418,7 @@ const addBusinessDetails = async (req, res) => {
 
     // Create
     businessData.id = `BUS${Date.now()}`;
-    businessData.member_id = currentMemberId;
+    businessData.member_id = String(req.body.member_id || currentMemberId || req.user?._id || '');
     businessData.status = Number(status ?? 0);
     businessData.cdate = new Date().toISOString().slice(0, 10);
     businessData.created_by = createdBy(req);
@@ -447,6 +447,14 @@ const deleteBusiness = async (req, res) => {
 
     if (!business) {
       return apiResponse(res, 404, 'Business not found');
+    }
+
+    const currentMemberId = memberPublicId(req.user || {});
+    const permissions = getRolePermissions(req.user);
+    const isAdmin = req.user?.committee_role === 'President' || permissions.includes('businesses.delete') || !!req.user?.role_id;
+
+    if (!isAdmin && business.member_id !== currentMemberId) {
+      return apiResponse(res, 403, 'Unauthorized - You can only delete your own business');
     }
 
     await Business.deleteOne({ _id: business._id });
