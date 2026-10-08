@@ -318,7 +318,7 @@ const galleryPath = (req, key) => {
 const addBusinessDetails = async (req, res) => {
   try {
     const { id } = req.params || req.body;
-    const { business_category_id, business_name, number, whatsapp_number, GST_number, email, country_id, state_id, district_id, city_id, address, location_link, about_us, facebook, instagram, pinterest, youtube, website, status } = requestData(req);
+    const { business_category_id, business_name, number, whatsapp_number, GST_number, email, country_id, state_id, district_id, city_id, pincode, address, location_link, about_us, facebook, instagram, pinterest, youtube, website, status } = requestData(req);
 
     if (!business_category_id || !business_name || !number || !email || !country_id || !state_id || !city_id) {
       return apiResponse(res, 400, 'All required fields must be provided');
