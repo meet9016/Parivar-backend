@@ -43,15 +43,15 @@ const eventSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  state_id: {
-    type: String,
-    default: ''
-  },
-  city_id: {
-    type: String,
-    default: ''
-  },
   country: {
+    type: String,
+    default: ''
+  },
+  country_name: {
+    type: String,
+    default: ''
+  },
+  state_id: {
     type: String,
     default: ''
   },
@@ -59,7 +59,31 @@ const eventSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  state_name: {
+    type: String,
+    default: ''
+  },
+  district_id: {
+    type: String,
+    default: ''
+  },
+  district: {
+    type: String,
+    default: ''
+  },
+  district_name: {
+    type: String,
+    default: ''
+  },
+  city_id: {
+    type: String,
+    default: ''
+  },
   city: {
+    type: String,
+    default: ''
+  },
+  city_name: {
     type: String,
     default: ''
   },

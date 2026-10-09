@@ -1,4 +1,8 @@
 const Event = require('../models/eventModel');
+const Country = require('../models/countryModel');
+const State = require('../models/stateModel');
+const City = require('../models/cityModel');
+const Master = require('../models/masterModel');
 const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const { getRolePermissions } = require('../middleware/auth');
 const queryHelper = require('../utils/queryHelper');
@@ -25,23 +29,88 @@ const findEvent = (req, id) => {
 const getCreatedByPayload = (req) => ({
   id: String(req.user?.id || req.user?._id || ''),
   name: fullName(req.user) || '',
-  
 });
 
-const formatEvent = (req, item = {}) => {
+const resolveLocationMaps = async (events = []) => {
+  const countryIds = new Set();
+  const stateIds = new Set();
+  const districtIds = new Set();
+  const cityIds = new Set();
+
+  events.forEach(e => {
+    if (e.country_id) countryIds.add(String(e.country_id));
+    if (e.state_id) stateIds.add(String(e.state_id));
+    if (e.district_id) districtIds.add(String(e.district_id));
+    if (e.city_id) cityIds.add(String(e.city_id));
+  });
+
+  const mongoose = require('mongoose');
+  const toQuery = (ids) => {
+    const arr = Array.from(ids);
+    const objIds = arr.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
+    return { $or: [{ _id: { $in: [...objIds, ...arr] } }, { id: { $in: arr } }] };
+  };
+
+  const [countries, states, districts, cities] = await Promise.all([
+    countryIds.size ? Country.find(toQuery(countryIds)).lean().catch(() => []) : [],
+    stateIds.size ? State.find(toQuery(stateIds)).lean().catch(() => []) : [],
+    districtIds.size ? Master.find({ ...toQuery(districtIds), type: 'district' }).lean().catch(() => []) : [],
+    cityIds.size ? City.find(toQuery(cityIds)).lean().catch(() => []) : []
+  ]);
+
+  const countryMap = new Map();
+  countries.forEach(c => {
+    const val = c.name || c.country || c.title || '';
+    if (c._id) countryMap.set(String(c._id), val);
+    if (c.id) countryMap.set(String(c.id), val);
+  });
+
+  const stateMap = new Map();
+  states.forEach(s => {
+    const val = s.name || s.state || s.title || '';
+    if (s._id) stateMap.set(String(s._id), val);
+    if (s.id) stateMap.set(String(s.id), val);
+  });
+
+  const districtMap = new Map();
+  districts.forEach(d => {
+    const val = d.name || d.district || d.title || '';
+    if (d._id) districtMap.set(String(d._id), val);
+    if (d.id) districtMap.set(String(d.id), val);
+  });
+
+  const cityMap = new Map();
+  cities.forEach(c => {
+    const val = c.name || c.city || c.title || '';
+    if (c._id) cityMap.set(String(c._id), val);
+    if (c.id) cityMap.set(String(c.id), val);
+  });
+
+  return { countryMap, stateMap, districtMap, cityMap };
+};
+
+const formatEvent = (req, item = {}, extra = {}) => {
   const image = item.image || '';
   const createdBy = item.created_by || {};
   const normalizedCreatedBy = typeof createdBy === 'string'
     ? {
       id: '',
       name: createdBy,
-     
     }
     : {
       id: String(createdBy.id || createdBy._id || ''),
       name: createdBy.name || fullName(req.user) || '',
-     
     };
+
+  const countryId = String(item.country_id || '');
+  const stateId = String(item.state_id || '');
+  const districtId = String(item.district_id || '');
+  const cityId = String(item.city_id || '');
+
+  const countryName = extra.country_name || (extra.countryMap && extra.countryMap.get(countryId)) || item.country_name || item.country || '';
+  const stateName = extra.state_name || (extra.stateMap && extra.stateMap.get(stateId)) || item.state_name || item.state || '';
+  const districtName = extra.district_name || (extra.districtMap && extra.districtMap.get(districtId)) || item.district_name || item.district || '';
+  const cityName = extra.city_name || (extra.cityMap && extra.cityMap.get(cityId)) || item.city_name || item.city || '';
 
   return {
     id: item.id || String(item._id),
@@ -57,12 +126,18 @@ const formatEvent = (req, item = {}) => {
     start_time: item.start_time || '',
     end_time: item.end_time || '',
     entry_type: item.entry_type || '',
-    country_id: item.country_id || '',
-    state_id: item.state_id || '',
-    city_id: item.city_id || '',
-    country: item.country || '',
-    state: item.state || '',
-    city: item.city || '',
+    country_id: countryId,
+    country: countryName,
+    country_name: countryName,
+    state_id: stateId,
+    state: stateName,
+    state_name: stateName,
+    district_id: districtId,
+    district: districtName,
+    district_name: districtName,
+    city_id: cityId,
+    city: cityName,
+    city_name: cityName,
     status: Number(item.status ?? 1),
     send_notification: item.send_notification !== false,
     target_type: item.target_type || 'all',
@@ -94,6 +169,16 @@ const eventPayload = (req, existing = {}) => {
 
   const target_type = req.body.target_type || req.body.target_audience || existing.target_type || 'all';
 
+  const country_id = req.body.country_id || existing.country_id || '';
+  const state_id = req.body.state_id || existing.state_id || '';
+  const district_id = req.body.district_id || existing.district_id || '';
+  const city_id = req.body.city_id || existing.city_id || '';
+
+  const country = req.body.country || req.body.country_name || existing.country || existing.country_name || '';
+  const state = req.body.state || req.body.state_name || existing.state || existing.state_name || '';
+  const district = req.body.district || req.body.district_name || existing.district || existing.district_name || '';
+  const city = req.body.city || req.body.city_name || existing.city || existing.city_name || '';
+
   return {
     ...req.body,
     title,
@@ -106,12 +191,18 @@ const eventPayload = (req, existing = {}) => {
     start_time: req.body.start_time || existing.start_time || '',
     end_time: req.body.end_time || existing.end_time || '',
     entry_type: req.body.entry_type || existing.entry_type || '',
-    country_id: req.body.country_id || existing.country_id || '',
-    state_id: req.body.state_id || existing.state_id || '',
-    city_id: req.body.city_id || existing.city_id || '',
-    country: req.body.country || existing.country || '',
-    state: req.body.state || existing.state || '',
-    city: req.body.city || existing.city || '',
+    country_id,
+    country,
+    country_name: country,
+    state_id,
+    state,
+    state_name: state,
+    district_id,
+    district,
+    district_name: district,
+    city_id,
+    city,
+    city_name: city,
     status: Number(req.body.status ?? existing.status ?? 1),
     send_notification,
     target_type,
@@ -127,8 +218,8 @@ const EventRegistration = require('../models/eventRegistration');
 const getEventsList = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(Event, req.query, {
-      searchFields: ['title', 'description', 'event_category_name', 'event_name', 'event_location', 'entry_type'],
-      filterFields: ['event_category_id', 'event_category_name', 'entry_type', 'status']
+      searchFields: ['title', 'description', 'event_category_name', 'event_name', 'event_location', 'entry_type', 'city', 'district', 'state', 'country'],
+      filterFields: ['event_category_id', 'event_category_name', 'entry_type', 'status', 'country_id', 'state_id', 'district_id', 'city_id']
     });
 
     const mongoose = require('mongoose');
@@ -137,20 +228,23 @@ const getEventsList = async (req, res) => {
     const stringIds = eventIds.map(id => String(id));
 
     // Aggregate attendees count per event
-    const registrationStats = await EventRegistration.aggregate([
-      { 
-        $match: { 
-          event_id: { $in: [...objectIds, ...stringIds] },
-          status: { $ne: 'cancelled' }
-        } 
-      },
-      {
-        $group: {
-          _id: { $toString: '$event_id' },
-          total_registrations: { $sum: 1 },
-          total_attendees: { $sum: { $ifNull: ['$total_attendee', 1] } }
+    const [registrationStats, maps] = await Promise.all([
+      EventRegistration.aggregate([
+        { 
+          $match: { 
+            event_id: { $in: [...objectIds, ...stringIds] },
+            status: { $ne: 'cancelled' }
+          } 
+        },
+        {
+          $group: {
+            _id: { $toString: '$event_id' },
+            total_registrations: { $sum: 1 },
+            total_attendees: { $sum: { $ifNull: ['$total_attendee', 1] } }
+          }
         }
-      }
+      ]),
+      resolveLocationMaps(data)
     ]);
 
     const statsMap = {};
@@ -164,7 +258,7 @@ const getEventsList = async (req, res) => {
     const formatted = data.map((item) => {
       const idStr = String(item._id || item.id);
       const stats = statsMap[idStr] || { total_registrations: 0, total_attendees: 0 };
-      const formattedItem = formatEvent(req, item);
+      const formattedItem = formatEvent(req, item, maps);
       const attendeeCount = Number(stats.total_attendees || stats.total_registrations || 0);
       return {
         ...formattedItem,
@@ -206,12 +300,12 @@ const addEvent = async (req, res) => {
       });
     }
 
-    return apiResponse(res, 201, 'Event saved successfully', formatEvent(req, event.toObject()));
+    const maps = await resolveLocationMaps([event.toObject()]);
+    return apiResponse(res, 201, 'Event saved successfully', formatEvent(req, event.toObject(), maps));
   } catch (error) {
     return apiResponse(res, 400, error.message || 'Error saving event');
   }
 };
-
 
 const updateEvent = async (req, res) => {
   try {
@@ -231,7 +325,8 @@ const updateEvent = async (req, res) => {
 
     event.set(eventPayload(req, event));
     await event.save();
-    return apiResponse(res, 200, 'Event saved successfully', formatEvent(req, event.toObject()));
+    const maps = await resolveLocationMaps([event.toObject()]);
+    return apiResponse(res, 200, 'Event saved successfully', formatEvent(req, event.toObject(), maps));
   } catch (error) {
     return apiResponse(res, 400, error.message || 'Error saving event');
   }
@@ -266,7 +361,8 @@ const getEventById = async (req, res) => {
     if (!event) {
       return apiResponse(res, 404, 'Event not found');
     }
-    return apiResponse(res, 200, 'Event retrieved successfully', formatEvent(req, event.toObject()));
+    const maps = await resolveLocationMaps([event.toObject()]);
+    return apiResponse(res, 200, 'Event retrieved successfully', formatEvent(req, event.toObject(), maps));
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving event', { error: error.message });
   }
