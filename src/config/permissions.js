@@ -23,7 +23,8 @@ const PERMISSION_MODULES = [
   { key: 'job-vacancy', label: 'Job Vacancies' },
   { key: 'posts', label: 'Posts' },
   { key: 'feedback', label: 'Feedback' },
-  { key: 'contact-inquiries', label: 'Contact Inquiries' }
+  { key: 'contact-inquiries', label: 'Contact Inquiries' },
+  { key: 'polls', label: 'Polls' }
 ];
 
 const PERMISSIONS = [
@@ -57,7 +58,8 @@ const LEGACY_PERMISSION_KEYS = [
   'settings.manage',
   'donations.manage',
   'expenses.manage',
-  'expense-category.manage'
+  'expense-category.manage',
+  'polls.manage'
 ];
 
 const ALL_PERMISSION_KEYS = [
