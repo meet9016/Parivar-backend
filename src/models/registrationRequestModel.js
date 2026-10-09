@@ -11,7 +11,7 @@ const registrationRequestSchema = new mongoose.Schema({
   // Key status flag
   status: {
     type: String,
-    enum: ['pending_review', 'in_progress', 'approved', 'rejected', 'needs_correction'],
+    enum: ['pending_review', 'in_progress', 'resubmit', 'resubmitted', 'approved', 'rejected', 'needs_correction'],
     default: 'in_progress',
     index: true
   },
@@ -19,6 +19,14 @@ const registrationRequestSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
     index: true
+  },
+  status_check: {
+    type: Boolean,
+    default: false
+  },
+  is_resubmitted: {
+    type: Boolean,
+    default: false
   },
   current_step: {
     type: Number,

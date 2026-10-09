@@ -196,6 +196,8 @@ const formatRegistrationResponse = (reg) => {
   const s4 = r.step4 || {};
   const s5 = r.step5 || r.documents || {};
 
+  const isStatusCheck = r.status_check !== undefined ? Boolean(r.status_check) : false;
+
   const step1Data = {
     first_name: sanitizeVal(r.first_name || s1.first_name || ''),
     middle_name: sanitizeVal(r.middle_name || s1.middle_name || ''),
@@ -208,8 +210,15 @@ const formatRegistrationResponse = (reg) => {
     patti_para_pargana: sanitizeVal(s1.patti_para_pargana || r.patti_para_pargana || ''),
     peta_jati: sanitizeVal(s1.peta_jati || r.peta_jati || ''),
     profile_image: s1.profile_image || r.profile_image || '',
+    status_check: s1.status_check !== undefined ? Boolean(s1.status_check) : isStatusCheck,
     ...filterByAllowedKeys(s1, STEP1_KEYS)
   };
+  if (step1Data.status_check === undefined) step1Data.status_check = isStatusCheck;
+
+  const step2Data = s2.map(mem => ({
+    ...mem,
+    status_check: mem.status_check !== undefined ? Boolean(mem.status_check) : isStatusCheck
+  }));
 
   const step3Data = {
     country_id: r.country_id || s3.country_id || '',
@@ -226,48 +235,58 @@ const formatRegistrationResponse = (reg) => {
     village: s3.village || r.village || '',
     pincode: r.pincode || s3.pincode || '',
     address: r.address || s3.address || '',
-    ...s3
+    ...s3,
+    status_check: s3.status_check !== undefined ? Boolean(s3.status_check) : isStatusCheck
   };
 
-  // Only remove empty/null/undefined keys
+  // Only remove empty/null/undefined keys (preserve boolean status_check)
   for (const key in step3Data) {
-    if (step3Data[key] === '' || step3Data[key] === null || step3Data[key] === undefined) {
+    if (key !== 'status_check' && (step3Data[key] === '' || step3Data[key] === null || step3Data[key] === undefined)) {
       delete step3Data[key];
     }
   }
 
   const step4Data = {
     ...r.occupation_details,
-    ...s4
+    ...s4,
+    status_check: s4.status_check !== undefined ? Boolean(s4.status_check) : isStatusCheck
   };
   if (r.occupation || s4.occupation) step4Data.occupation = r.occupation || s4.occupation;
   
   delete step4Data.occupation_type;
 
   for (const key in step4Data) {
-    if (step4Data[key] === '' || step4Data[key] === null || step4Data[key] === undefined) {
+    if (key !== 'status_check' && (step4Data[key] === '' || step4Data[key] === null || step4Data[key] === undefined)) {
       delete step4Data[key];
     }
   }
 
   const step5Data = {
     ...r.documents,
-    ...s5
+    ...s5,
+    status_check: s5.status_check !== undefined ? Boolean(s5.status_check) : isStatusCheck
   };
 
   for (const key in step5Data) {
-    if (step5Data[key] === '' || step5Data[key] === null || step5Data[key] === undefined) {
+    if (key !== 'status_check' && (step5Data[key] === '' || step5Data[key] === null || step5Data[key] === undefined)) {
       delete step5Data[key];
     }
   }
 
   const responsePayload = {
     _id: r._id,
+    number: r.number,
     status: r.status,
-    is_approved: r.is_approved,
+    is_approved: Boolean(r.is_approved),
+    status_check: isStatusCheck,
+    is_resubmitted: Boolean(r.is_resubmitted || r.status === 'resubmitted' || r.status === 'resubmit'),
+    current_step: r.current_step || 1,
+    registration_step: r.current_step || 1,
+    member_id: r.member_id || '',
+    user_id: r.user_id || null,
     // Step-wise structure: step1: [{data}], step2: [{data}], step3: [{data}], etc.
     step1: [step1Data],
-    step2: s2,
+    step2: step2Data,
     step3: [step3Data],
     step4: [step4Data],
     step5: [step5Data]
@@ -304,6 +323,10 @@ const saveStep1 = async (req, res) => {
     const cleanStep1Incoming = filterByAllowedKeys(data, STEP1_KEYS);
     const existingStep1 = filterByAllowedKeys(regRequest.step1 || {}, STEP1_KEYS);
 
+    const isStatusCheckStep1 = data.status_check !== undefined 
+      ? (data.status_check === true || data.status_check === 'true' || data.status_check === 1 || data.status_check === '1')
+      : (regRequest.status_check || false);
+
     const step1Payload = {
       ...existingStep1,
       ...cleanStep1Incoming,
@@ -317,7 +340,8 @@ const saveStep1 = async (req, res) => {
       blood_group: data.blood_group !== undefined ? sanitizeVal(data.blood_group) : (existingStep1.blood_group || ''),
       dob: data.dob ? new Date(data.dob) : existingStep1.dob,
       marital_status: data.marital_status !== undefined ? sanitizeVal(data.marital_status) : (existingStep1.marital_status || ''),
-      profile_image: imgUrl || existingStep1.profile_image || ''
+      profile_image: imgUrl || existingStep1.profile_image || '',
+      status_check: isStatusCheckStep1
     };
 
     regRequest.step1 = step1Payload;
@@ -332,7 +356,14 @@ const saveStep1 = async (req, res) => {
     regRequest.marital_status = step1Payload.marital_status;
     regRequest.profile_image = step1Payload.profile_image;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 1);
-    regRequest.status = regRequest.status === 'approved' ? 'approved' : 'in_progress';
+    
+    if (isStatusCheckStep1) {
+      regRequest.status_check = true;
+      regRequest.is_resubmitted = true;
+      regRequest.status = 'resubmitted';
+    } else {
+      regRequest.status = regRequest.status === 'approved' ? 'approved' : (regRequest.status === 'resubmitted' ? 'resubmitted' : 'in_progress');
+    }
 
     await regRequest.save();
 
@@ -404,15 +435,29 @@ const saveStep2 = async (req, res) => {
       }
       delete cleanedItem.age;
 
-      if (item.number) cleanedItem.number = item.number;
-      if (item.mobile) cleanedItem.mobile = item.mobile;
-      if (item.phone) cleanedItem.phone = item.phone;
-      
-      cleanedMembers.push(cleanedItem);
+      const isStatusCheckItem = item.status_check !== undefined 
+        ? (item.status_check === true || item.status_check === 'true' || item.status_check === 1 || item.status_check === '1')
+        : false;
+
+      cleanedMembers.push({
+        ...cleanedItem,
+        status_check: isStatusCheckItem
+      });
     }
+
+    const isStatusCheckStep2 = data.status_check !== undefined
+      ? (data.status_check === true || data.status_check === 'true' || data.status_check === 1 || data.status_check === '1')
+      : (regRequest.status_check || false);
 
     regRequest.step2 = cleanedMembers;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 2);
+
+    if (isStatusCheckStep2) {
+      regRequest.status_check = true;
+      regRequest.is_resubmitted = true;
+      regRequest.status = 'resubmitted';
+    }
+
     await regRequest.save();
 
     return apiResponse(res, 200, 'Step 2: Family details saved successfully', {
@@ -598,6 +643,10 @@ const saveStep3 = async (req, res) => {
       } catch (e) {}
     }
 
+    const isStatusCheckStep3 = data.status_check !== undefined
+      ? (data.status_check === true || data.status_check === 'true' || data.status_check === 1 || data.status_check === '1')
+      : (regRequest.status_check || false);
+
     const step3Payload = {
       ...cleanForStep(regRequest.step3 || {}),
       ...cleanForStep(data),
@@ -614,12 +663,13 @@ const saveStep3 = async (req, res) => {
       village_id: villageId,
       village: villageName,
       address,
-      pincode
+      pincode,
+      status_check: isStatusCheckStep3
     };
 
-    // Remove empty/null/undefined keys from step3Payload
+    // Remove empty/null/undefined keys from step3Payload (preserve status_check boolean)
     for (const key of Object.keys(step3Payload)) {
-      if (step3Payload[key] === '' || step3Payload[key] === null || step3Payload[key] === undefined) {
+      if (key !== 'status_check' && (step3Payload[key] === '' || step3Payload[key] === null || step3Payload[key] === undefined)) {
         delete step3Payload[key];
       }
     }
@@ -641,6 +691,12 @@ const saveStep3 = async (req, res) => {
     regRequest.address = address;
     regRequest.pincode = pincode;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 3);
+
+    if (isStatusCheckStep3) {
+      regRequest.status_check = true;
+      regRequest.is_resubmitted = true;
+      regRequest.status = 'resubmitted';
+    }
 
     await regRequest.save();
 
@@ -684,11 +740,16 @@ const saveStep4 = async (req, res) => {
       return apiResponse(res, 404, 'Registration request not found. Complete Step 1 first.');
     }
 
+    const isStatusCheckStep4 = data.status_check !== undefined
+      ? (data.status_check === true || data.status_check === 'true' || data.status_check === 1 || data.status_check === '1')
+      : (regRequest.status_check || false);
+
     const occType = data.occupation || data.occupation_type || regRequest.occupation || '';
     const step4Payload = {
       ...cleanForStep(regRequest.step4 || {}),
       ...cleanForStep(regRequest.occupation_details || {}),
-      ...cleanForStep(data)
+      ...cleanForStep(data),
+      status_check: isStatusCheckStep4
     };
 
     if (occType) {
@@ -696,9 +757,9 @@ const saveStep4 = async (req, res) => {
       step4Payload.occupation_type = occType;
     }
 
-    // Only return fields that have actual values
+    // Only return fields that have actual values (preserve status_check boolean)
     for (const key in step4Payload) {
-      if (step4Payload[key] === '' || step4Payload[key] === null || step4Payload[key] === undefined) {
+      if (key !== 'status_check' && (step4Payload[key] === '' || step4Payload[key] === null || step4Payload[key] === undefined)) {
         delete step4Payload[key];
       }
     }
@@ -710,6 +771,12 @@ const saveStep4 = async (req, res) => {
     }
     regRequest.occupation_details = { ...step4Payload };
     regRequest.current_step = Math.max(regRequest.current_step || 1, 4);
+
+    if (isStatusCheckStep4) {
+      regRequest.status_check = true;
+      regRequest.is_resubmitted = true;
+      regRequest.status = 'resubmitted';
+    }
 
     await regRequest.save();
 
@@ -750,10 +817,13 @@ const saveStep5 = async (req, res) => {
       });
     }
 
+    const isStatusCheckTrue = data.status_check === true || data.status_check === 'true' || data.status_check === 1 || data.status_check === '1';
+
     const step5Payload = {
       ...cleanForStep(regRequest.step5 || {}),
       ...cleanForStep(regRequest.documents || {}),
       ...cleanForStep(data),
+      status_check: isStatusCheckTrue ? true : (regRequest.status_check || false),
       aadhaar_card: extractSingleUrl(data.aadhaar_card || data.aadhaar_front) || data.aadhaar_number || regRequest.documents?.aadhaar_card || '',
       aadhaar_back: extractSingleUrl(data.aadhaar_back || data.aadhar_back) || regRequest.documents?.aadhaar_back || '',
       pan_card: extractSingleUrl(data.pan_card) || data.pan_number || regRequest.documents?.pan_card || '',
@@ -763,7 +833,7 @@ const saveStep5 = async (req, res) => {
     };
 
     for (const key in step5Payload) {
-      if (step5Payload[key] === '' || step5Payload[key] === null || step5Payload[key] === undefined) {
+      if (key !== 'status_check' && (step5Payload[key] === '' || step5Payload[key] === null || step5Payload[key] === undefined)) {
         delete step5Payload[key];
       }
     }
@@ -771,6 +841,12 @@ const saveStep5 = async (req, res) => {
     regRequest.step5 = step5Payload;
     regRequest.documents = step5Payload;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 5);
+
+    if (isStatusCheckTrue) {
+      regRequest.status_check = true;
+      regRequest.is_resubmitted = true;
+      regRequest.status = 'resubmitted';
+    }
 
     await regRequest.save();
 
@@ -1001,9 +1077,20 @@ const getRegistrationsList = async (req, res) => {
         query.is_approved = true;
       } else if (status === 'pending' || status === 'pending_review') {
         query.status = 'pending_review';
+        query.is_approved = { $ne: true };
+      } else if (status === 'resubmit' || status === 'resubmitted') {
+        query.$or = [{ status: 'resubmitted' }, { status: 'resubmit' }, { is_resubmitted: true }, { status_check: true }];
+        query.is_approved = { $ne: true };
+      } else if (status === 'rejected') {
+        query.status = 'rejected';
+        query.is_approved = { $ne: true };
       } else {
         query.status = status;
+        query.is_approved = { $ne: true };
       }
+    } else {
+      // By default: Show all pending/in_progress/rejected/resubmitted registrations (hide already approved records that moved to Member directory)
+      query.is_approved = { $ne: true };
     }
 
     if (step) {
