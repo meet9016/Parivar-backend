@@ -91,13 +91,28 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  country: {
+    type: String,
+    default: '',
+    trim: true
+  },
   state_id: {
     type: String,
     default: ''
   },
+  state: {
+    type: String,
+    default: '',
+    trim: true
+  },
   city_id: {
     type: String,
     default: ''
+  },
+  city: {
+    type: String,
+    default: '',
+    trim: true
   },
   address: {
     type: String,
@@ -133,9 +148,19 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  district: {
+    type: String,
+    default: '',
+    trim: true
+  },
   taluka_id: {
     type: String,
     default: ''
+  },
+  taluka: {
+    type: String,
+    default: '',
+    trim: true
   },
   village_id: {
     type: String,
