@@ -741,7 +741,8 @@ const saveStep5 = async (req, res) => {
     if (req.files && Array.isArray(req.files)) {
       req.files.forEach(f => {
         const url = `/uploads/${f.filename}`;
-        if (f.fieldname === 'aadhaar_card') data.aadhaar_card = url;
+        if (f.fieldname === 'aadhaar_card' || f.fieldname === 'aadhaar_front') data.aadhaar_card = url;
+        if (f.fieldname === 'aadhaar_back' || f.fieldname === 'aadhar_back') data.aadhaar_back = url;
         if (f.fieldname === 'pan_card') data.pan_card = url;
         if (f.fieldname === 'voter_id') data.voter_id = url;
         if (f.fieldname === 'driving_license') data.driving_license = url;
@@ -753,7 +754,8 @@ const saveStep5 = async (req, res) => {
       ...cleanForStep(regRequest.step5 || {}),
       ...cleanForStep(regRequest.documents || {}),
       ...cleanForStep(data),
-      aadhaar_card: extractSingleUrl(data.aadhaar_card) || data.aadhaar_number || regRequest.documents?.aadhaar_card || '',
+      aadhaar_card: extractSingleUrl(data.aadhaar_card || data.aadhaar_front) || data.aadhaar_number || regRequest.documents?.aadhaar_card || '',
+      aadhaar_back: extractSingleUrl(data.aadhaar_back || data.aadhar_back) || regRequest.documents?.aadhaar_back || '',
       pan_card: extractSingleUrl(data.pan_card) || data.pan_number || regRequest.documents?.pan_card || '',
       voter_id: extractSingleUrl(data.voter_id) || data.voter_id_number || regRequest.documents?.voter_id || '',
       driving_license: extractSingleUrl(data.driving_license) || regRequest.documents?.driving_license || '',
@@ -927,7 +929,8 @@ const completeFullRegistration = async (req, res) => {
 
     const step5Data = {
       ...data,
-      aadhaar_card: data.aadhaar_card || '',
+      aadhaar_card: data.aadhaar_card || data.aadhaar_front || '',
+      aadhaar_back: data.aadhaar_back || data.aadhar_back || '',
       pan_card: data.pan_card || '',
       voter_id: data.voter_id || '',
       driving_license: data.driving_license || '',
@@ -1182,7 +1185,8 @@ const approveRegistration = async (req, res) => {
     headUser.documents = {
       ...regRequest.documents,
       ...s5,
-      aadhaar_card: s5.aadhaar_card || regRequest.documents?.aadhaar_card || '',
+      aadhaar_card: s5.aadhaar_card || s5.aadhaar_front || regRequest.documents?.aadhaar_card || '',
+      aadhaar_back: s5.aadhaar_back || s5.aadhar_back || regRequest.documents?.aadhaar_back || '',
       pan_card: s5.pan_card || regRequest.documents?.pan_card || '',
       voter_id: s5.voter_id || regRequest.documents?.voter_id || '',
       driving_license: s5.driving_license || regRequest.documents?.driving_license || '',
