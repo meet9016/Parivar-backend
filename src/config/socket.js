@@ -152,28 +152,48 @@ module.exports = {
             populatedMessage.clientTempId = data.clientTempId;
           }
 
+          // Determine initial delivered status based on whether recipient is currently online
+          const members = await ConversationMember.find({ conversationId, isActive: true }).select('userId').lean();
+          const recipientIds = members.map(m => String(m.userId)).filter(id => !linkedIds.includes(id));
+          
+          let anyRecipientOnline = false;
+          recipientIds.forEach(mId => {
+            if (onlineUsers.has(mId) && onlineUsers.get(mId)?.size > 0) {
+              anyRecipientOnline = true;
+            }
+          });
+
+          if (anyRecipientOnline) {
+            const deliveredEntries = recipientIds
+              .filter(mId => onlineUsers.has(mId) && onlineUsers.get(mId)?.size > 0)
+              .map(mId => ({ userId: mongoose.isValidObjectId(mId) ? new mongoose.Types.ObjectId(mId) : mId, deliveredAt: new Date() }));
+            
+            if (deliveredEntries.length > 0) {
+              await Message.findByIdAndUpdate(newMessage._id, {
+                $addToSet: { deliveredTo: { $each: deliveredEntries } }
+              });
+              populatedMessage.deliveredTo = deliveredEntries;
+            }
+          }
+
           // If the sender has other tabs/windows open, notify their other sockets across all linked IDs
           linkedIds.forEach(id => {
             socket.broadcast.to(`user_${id}`).emit('receive_message', populatedMessage);
           });
 
           // Notify each recipient member once (to their personal room user_mId)
-          const members = await ConversationMember.find({ conversationId, isActive: true }).select('userId').lean();
-          members.forEach(m => {
-            const mId = String(m.userId);
-            if (!linkedIds.includes(mId)) {
-              _io.to(`user_${mId}`).emit('receive_message', populatedMessage);
-              _io.to(`user_${mId}`).emit('conversation_updated', {
-                conversationId,
-                lastMessage: populatedMessage,
-                lastMessageAt: populatedMessage.createdAt,
-                senderId: userId
-              });
-              _io.to(`user_${mId}`).emit('unread_count_updated', {
-                conversationId,
-                senderId: userId
-              });
-            }
+          recipientIds.forEach(mId => {
+            _io.to(`user_${mId}`).emit('receive_message', populatedMessage);
+            _io.to(`user_${mId}`).emit('conversation_updated', {
+              conversationId,
+              lastMessage: populatedMessage,
+              lastMessageAt: populatedMessage.createdAt,
+              senderId: userId
+            });
+            _io.to(`user_${mId}`).emit('unread_count_updated', {
+              conversationId,
+              senderId: userId
+            });
           });
           
           if (typeof callback === 'function') {
@@ -184,6 +204,37 @@ module.exports = {
           if (typeof callback === 'function') {
             callback({ success: false, error: err.message });
           }
+        }
+      });
+
+      // Confirm message delivery from recipient client
+      socket.on('message_delivered', async ({ messageId, conversationId } = {}) => {
+        try {
+          if (!messageId) return;
+          const userObj = mongoose.isValidObjectId(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+          const updatedMsg = await Message.findByIdAndUpdate(
+            messageId,
+            { $addToSet: { deliveredTo: { userId: userObj, deliveredAt: new Date() } } },
+            { new: true }
+          );
+          if (updatedMsg) {
+            _io.to(`conv_${conversationId}`).emit('message_status_updated', {
+              messageId,
+              conversationId,
+              deliveredTo: updatedMsg.deliveredTo,
+              readBy: updatedMsg.readBy
+            });
+            if (updatedMsg.senderId) {
+              _io.to(`user_${String(updatedMsg.senderId)}`).emit('message_status_updated', {
+                messageId,
+                conversationId,
+                deliveredTo: updatedMsg.deliveredTo,
+                readBy: updatedMsg.readBy
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error recording message delivery:', err);
         }
       });
 
@@ -213,9 +264,19 @@ module.exports = {
           );
           await Message.updateMany(
             { conversationId, 'readBy.userId': { $nin: userMatches } },
-            { $push: { readBy: { userId: userObj, readAt: new Date() } } }
+            { 
+              $push: { readBy: { userId: userObj, readAt: new Date() } },
+              $addToSet: { deliveredTo: { userId: userObj, deliveredAt: new Date() } }
+            }
           );
-          socket.to(`conv_${conversationId}`).emit('messages_read', { conversationId, userId });
+          _io.to(`conv_${conversationId}`).emit('messages_read', { conversationId, userId, readByUserId: userId });
+          
+          // Also notify individual members in case they aren't actively in room
+          const convMembers = await ConversationMember.find({ conversationId, isActive: true }).select('userId').lean();
+          convMembers.forEach(m => {
+            _io.to(`user_${String(m.userId)}`).emit('messages_read', { conversationId, userId, readByUserId: userId });
+          });
+
           linkedIds.forEach(id => {
             _io.to(`user_${id}`).emit('unread_count_updated', { conversationId });
           });

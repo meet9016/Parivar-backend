@@ -390,8 +390,16 @@ exports.sendMessage = async (req, res) => {
 // Create Group
 exports.createGroup = async (req, res) => {
   try {
-    const { name, image, memberIds } = req.body;
+    let { name, image, memberIds } = req.body;
     const userId = getReqUserId(req);
+
+    if (typeof memberIds === 'string') {
+      try {
+        memberIds = JSON.parse(memberIds);
+      } catch (_) {
+        memberIds = memberIds.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
 
     if (!name) return apiResponse(res, 400, 'Group name is required');
 
@@ -399,7 +407,7 @@ exports.createGroup = async (req, res) => {
 
     const newGroup = await Conversation.create({
       type: 'group',
-      name: name.trim(),
+      name: String(name).trim(),
       image: image || null,
       createdBy: primaryId
     });
@@ -419,6 +427,17 @@ exports.createGroup = async (req, res) => {
 
     await ConversationMember.create(membersToCreate);
 
+    // Notify all members via Socket
+    try {
+      const io = socketManager.getIO();
+      for (const m of membersToCreate) {
+        io.to(`user_${String(m.userId)}`).emit('conversation_updated', {
+          conversationId: newGroup._id,
+          lastMessageAt: newGroup.createdAt
+        });
+      }
+    } catch (_) {}
+
     return apiResponse(res, 201, 'Group created successfully', newGroup);
   } catch (err) {
     return apiResponse(res, 500, err.message);
@@ -432,17 +451,21 @@ exports.getGroupMembers = async (req, res) => {
     const rawMembers = await ConversationMember.find({ conversationId, isActive: true }).lean();
 
     const userIds = rawMembers.map(m => m.userId);
-    const users = await User.find({ _id: { $in: userIds } }).select('first_name last_name number image profile_image').lean();
+    const users = await User.find({ _id: { $in: userIds } }).select('first_name last_name number image profile_image occupation designation').lean();
     const cms = await CommitteeMember.find({ _id: { $in: userIds } }).select('first_name last_name number image profile_image designation').lean();
 
     const userMap = new Map();
     users.forEach(u => userMap.set(String(u._id), u));
     cms.forEach(c => userMap.set(String(c._id), c));
 
-    const members = rawMembers.map(m => ({
-      ...m,
-      userId: userMap.get(String(m.userId)) || { _id: m.userId, first_name: 'Member' }
-    }));
+    const members = rawMembers.map(m => {
+      const userObj = userMap.get(String(m.userId)) || { _id: m.userId, first_name: 'Member', number: '' };
+      return {
+        ...m,
+        userId: userObj,
+        role: m.role || 'member'
+      };
+    });
 
     return apiResponse(res, 200, 'Group members fetched', members);
   } catch (err) {
@@ -454,24 +477,59 @@ exports.getGroupMembers = async (req, res) => {
 exports.addMembers = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { memberIds } = req.body;
+    let { memberIds } = req.body;
+    const userId = getReqUserId(req);
 
-    if (!Array.isArray(memberIds)) return apiResponse(res, 400, 'memberIds must be an array');
+    if (typeof memberIds === 'string') {
+      try {
+        memberIds = JSON.parse(memberIds);
+      } catch (_) {
+        memberIds = memberIds.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
 
-    const existingMembers = await ConversationMember.find({ conversationId }).select('userId').lean();
-    const existingIds = existingMembers.map(m => String(m.userId));
+    if (!Array.isArray(memberIds) || memberIds.length === 0) {
+      return apiResponse(res, 400, 'memberIds must be a non-empty array');
+    }
+
+    const { allIds: myIds } = await getLinkedUserIds(userId);
+    const myMembership = await ConversationMember.findOne({
+      conversationId,
+      userId: { $in: myIds },
+      isActive: true
+    }).lean();
+
+    if (!myMembership) {
+      return apiResponse(res, 403, 'You are not a member of this group');
+    }
+
+    const existingMembers = await ConversationMember.find({ conversationId }).select('userId isActive').lean();
+    const existingMap = new Map();
+    existingMembers.forEach(m => existingMap.set(String(m.userId), m));
 
     const newMembers = [];
     for (const id of memberIds) {
       const { primaryId } = await getLinkedUserIds(id);
-      if (!existingIds.includes(String(primaryId))) {
-        newMembers.push({ conversationId, userId: primaryId, role: 'member' });
+      const primStr = String(primaryId);
+      if (existingMap.has(primStr)) {
+        // Re-activate if was removed earlier
+        await ConversationMember.findOneAndUpdate(
+          { conversationId, userId: primaryId },
+          { isActive: true, role: 'member' }
+        );
+      } else {
+        newMembers.push({ conversationId, userId: primaryId, role: 'member', isActive: true });
       }
     }
 
     if (newMembers.length > 0) {
       await ConversationMember.create(newMembers);
     }
+
+    try {
+      const io = socketManager.getIO();
+      _io.to(`conv_${conversationId}`).emit('group_members_updated', { conversationId });
+    } catch (_) {}
 
     return apiResponse(res, 200, 'Members added successfully');
   } catch (err) {
@@ -482,13 +540,35 @@ exports.addMembers = async (req, res) => {
 // Remove Member
 exports.removeMember = async (req, res) => {
   try {
-    const { conversationId, userId } = req.params;
-    const { allIds } = await getLinkedUserIds(userId);
+    const { conversationId, userId: targetUserId } = req.params;
+    const currentUserId = getReqUserId(req);
+
+    const { allIds: myIds } = await getLinkedUserIds(currentUserId);
+    const myMembership = await ConversationMember.findOne({
+      conversationId,
+      userId: { $in: myIds },
+      isActive: true
+    }).lean();
+
+    if (!myMembership || myMembership.role !== 'admin') {
+      return apiResponse(res, 403, 'Only group admins can remove members');
+    }
+
+    const { allIds: targetIds } = await getLinkedUserIds(targetUserId);
     await ConversationMember.findOneAndUpdate(
-      { conversationId, userId: { $in: allIds } },
+      { conversationId, userId: { $in: targetIds } },
       { isActive: false }
     );
-    return apiResponse(res, 200, 'Member removed');
+
+    try {
+      const io = socketManager.getIO();
+      _io.to(`conv_${conversationId}`).emit('group_members_updated', { conversationId });
+      targetIds.forEach(id => {
+        io.to(`user_${String(id)}`).emit('removed_from_group', { conversationId });
+      });
+    } catch (_) {}
+
+    return apiResponse(res, 200, 'Member removed successfully');
   } catch (err) {
     return apiResponse(res, 500, err.message);
   }
@@ -504,6 +584,12 @@ exports.leaveGroup = async (req, res) => {
       { conversationId, userId: { $in: allIds } },
       { isActive: false }
     );
+
+    try {
+      const io = socketManager.getIO();
+      _io.to(`conv_${conversationId}`).emit('group_members_updated', { conversationId });
+    } catch (_) {}
+
     return apiResponse(res, 200, 'Left group successfully');
   } catch (err) {
     return apiResponse(res, 500, err.message);
@@ -515,12 +601,30 @@ exports.updateGroup = async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { name, image } = req.body;
+    const userId = getReqUserId(req);
+
+    const { allIds: myIds } = await getLinkedUserIds(userId);
+    const myMembership = await ConversationMember.findOne({
+      conversationId,
+      userId: { $in: myIds },
+      isActive: true
+    }).lean();
+
+    if (!myMembership || myMembership.role !== 'admin') {
+      return apiResponse(res, 403, 'Only group admins can update group info');
+    }
 
     const updated = await Conversation.findByIdAndUpdate(
       conversationId,
-      { $set: { ...(name && { name }), ...(image !== undefined && { image }) } },
+      { $set: { ...(name && { name: String(name).trim() }), ...(image !== undefined && { image }) } },
       { new: true }
     );
+
+    try {
+      const io = socketManager.getIO();
+      _io.to(`conv_${conversationId}`).emit('group_updated', { conversationId, updated });
+    } catch (_) {}
+
     return apiResponse(res, 200, 'Group updated successfully', updated);
   } catch (err) {
     return apiResponse(res, 500, err.message);
