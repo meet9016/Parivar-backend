@@ -11,3 +11,10 @@ archive
 *.log
 dist
 
+# Uploaded files and media
+uploads/
+public/uploads/
+
+# Migration snapshots & backups
+scripts/backups/
+

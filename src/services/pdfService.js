@@ -225,7 +225,7 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
       }
     }
 
-    return pdfBuffer;
+    return Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
   } finally {
     try {
       await page.close();
@@ -233,7 +233,37 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
   }
 }
 
+// In-memory mutex to prevent concurrent thundering-herd renders for the same record/key
+const pendingRenders = new Map();
+
+async function synchronizedGeneratePdf(lockKey, renderFn) {
+  if (!lockKey) return renderFn();
+  if (pendingRenders.has(lockKey)) {
+    return pendingRenders.get(lockKey);
+  }
+  const promise = (async () => {
+    try {
+      return await renderFn();
+    } finally {
+      pendingRenders.delete(lockKey);
+    }
+  })();
+  pendingRenders.set(lockKey, promise);
+  return promise;
+}
+
+async function closeBrowser() {
+  if (browserInstance) {
+    try {
+      await browserInstance.close();
+    } catch (_) {}
+    browserInstance = null;
+  }
+}
+
 module.exports = {
   getBrowser,
   generatePdfFromHtml,
+  synchronizedGeneratePdf,
+  closeBrowser,
 };

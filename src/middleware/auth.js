@@ -24,7 +24,7 @@ const isInvalidTokenValue = (token) => {
 const getTokenFromRequest = (req) => {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   const tokenHeader = req.headers.token || req.headers['x-auth-token'] || req.headers['x-access-token'];
-  const headerValue = authHeader || tokenHeader;
+  const headerValue = authHeader || tokenHeader || req.query?.token;
 
   if (!headerValue || typeof headerValue !== 'string') {
     return null;
