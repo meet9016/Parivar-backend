@@ -192,22 +192,36 @@ const parseStatusCheck = (val, defaultVal = false) => {
   return val === true || val === 'true' || val === 1 || val === '1';
 };
 
-// Check if all 5 steps have status_check === true
-const checkAllStepsTrue = (r) => {
-  const s1 = r.step1 || {};
+// Check if ANY step has status_check === true (or if registration is already marked resubmitted)
+const checkAnyStepTrue = (r) => {
+  if (!r) return false;
+  const s1 = (Array.isArray(r.step1) ? r.step1[0] : r.step1) || {};
   const s2 = Array.isArray(r.step2) ? r.step2 : [];
-  const s3 = r.step3 || {};
-  const s4 = r.step4 || {};
-  const s5 = r.step5 || r.documents || {};
+  const s3 = (Array.isArray(r.step3) ? r.step3[0] : r.step3) || {};
+  const s4 = (Array.isArray(r.step4) ? r.step4[0] : r.step4) || {};
+  const s5 = (Array.isArray(r.step5) ? r.step5[0] : r.step5) || r.documents || {};
 
   const step1Ok = parseStatusCheck(s1.status_check, false);
-  const step2Ok = s2.length > 0 ? s2.every(m => parseStatusCheck(m?.status_check, false)) : parseStatusCheck(r.step2_status_check, false);
+  const step2Ok = s2.length > 0
+    ? s2.some(m => parseStatusCheck(m?.status_check, false))
+    : parseStatusCheck(r.step2_status_check, false);
   const step3Ok = parseStatusCheck(s3.status_check, false);
   const step4Ok = parseStatusCheck(s4.status_check, false);
   const step5Ok = parseStatusCheck(s5.status_check, false);
 
-  return Boolean(step1Ok && step2Ok && step3Ok && step4Ok && step5Ok);
+  return Boolean(
+    step1Ok ||
+    step2Ok ||
+    step3Ok ||
+    step4Ok ||
+    step5Ok ||
+    parseStatusCheck(r.status_check, false) ||
+    parseStatusCheck(r.is_resubmitted, false) ||
+    r.status === 'resubmitted' ||
+    r.status === 'resubmit'
+  );
 };
+const checkAllStepsTrue = checkAnyStepTrue;
 
 // Format Registration Request for Response (Structured with step1, step2, step3, step4, step5)
 const formatRegistrationResponse = (reg) => {
@@ -228,10 +242,20 @@ const formatRegistrationResponse = (reg) => {
     ...mem,
     status_check: parseStatusCheck(mem?.status_check, false)
   }));
-  const s2Check = step2Data.length > 0 ? step2Data.every(m => m.status_check === true) : parseStatusCheck(r.step2_status_check, false);
+  const s2Check = step2Data.length > 0 ? step2Data.some(m => m.status_check === true) : parseStatusCheck(r.step2_status_check, false);
 
-  // Overall status_check: TRUE only if ALL 5 steps are true! Otherwise false.
-  const overallStatusCheck = Boolean(s1Check && s2Check && s3Check && s4Check && s5Check);
+  // Overall status_check: TRUE if AT LEAST ONE step is true!
+  const overallStatusCheck = Boolean(
+    s1Check || 
+    s2Check || 
+    s3Check || 
+    s4Check || 
+    s5Check || 
+    parseStatusCheck(r.status_check, false) ||
+    parseStatusCheck(r.is_resubmitted, false) ||
+    r.status === 'resubmitted' ||
+    r.status === 'resubmit'
+  );
 
   const step1Data = {
     first_name: sanitizeVal(r.first_name || s1.first_name || ''),
@@ -303,13 +327,21 @@ const formatRegistrationResponse = (reg) => {
     }
   }
 
+  const isApproved = Boolean(r.is_approved || r.status === 'approved');
+  const isRejected = Boolean(r.status === 'rejected');
+  const computedStatus = isApproved 
+    ? 'approved' 
+    : (isRejected 
+      ? 'rejected' 
+      : (overallStatusCheck ? 'resubmitted' : (r.status || 'pending_review')));
+
   const responsePayload = {
     _id: r._id,
     number: r.number,
-    status: overallStatusCheck ? 'resubmitted' : (r.status === 'approved' ? 'approved' : (r.status === 'rejected' ? 'rejected' : 'pending_review')),
-    is_approved: Boolean(r.is_approved),
+    status: computedStatus,
+    is_approved: isApproved,
     status_check: overallStatusCheck,
-    is_pending: !overallStatusCheck && !r.is_approved && r.status !== 'rejected',
+    is_pending: !overallStatusCheck && !isApproved && !isRejected,
     is_resubmitted: overallStatusCheck,
     current_step: r.current_step || 1,
     registration_step: r.current_step || 1,
@@ -388,11 +420,13 @@ const saveStep1 = async (req, res) => {
     regRequest.profile_image = step1Payload.profile_image;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 1);
     
-    // Overall status_check: true only if ALL 5 steps are true
-    regRequest.status_check = checkAllStepsTrue(regRequest);
+    // Overall status_check: true if ANY step is true
+    regRequest.status_check = checkAnyStepTrue(regRequest);
     if (regRequest.status_check) {
       regRequest.is_resubmitted = true;
-      regRequest.status = 'resubmitted';
+      if (regRequest.status !== 'approved' && regRequest.status !== 'rejected') {
+        regRequest.status = 'resubmitted';
+      }
     } else {
       regRequest.is_resubmitted = false;
       regRequest.status = regRequest.status === 'approved' ? 'approved' : (regRequest.status === 'rejected' ? 'rejected' : 'pending_review');
@@ -483,13 +517,18 @@ const saveStep2 = async (req, res) => {
       : (regRequest.status_check || false);
 
     regRequest.step2 = cleanedMembers;
+    if (isStatusCheckStep2) {
+      regRequest.step2_status_check = true;
+    }
     regRequest.current_step = Math.max(regRequest.current_step || 1, 2);
 
-    // Overall status_check: true only if ALL 5 steps are true
-    regRequest.status_check = checkAllStepsTrue(regRequest);
+    // Overall status_check: true if ANY step is true
+    regRequest.status_check = checkAnyStepTrue(regRequest);
     if (regRequest.status_check) {
       regRequest.is_resubmitted = true;
-      regRequest.status = 'resubmitted';
+      if (regRequest.status !== 'approved' && regRequest.status !== 'rejected') {
+        regRequest.status = 'resubmitted';
+      }
     } else {
       regRequest.is_resubmitted = false;
       regRequest.status = regRequest.status === 'approved' ? 'approved' : (regRequest.status === 'rejected' ? 'rejected' : 'pending_review');
@@ -729,11 +768,13 @@ const saveStep3 = async (req, res) => {
     regRequest.pincode = pincode;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 3);
 
-    // Update overall status_check on regRequest (true only if all 5 steps are true)
-    regRequest.status_check = checkAllStepsTrue(regRequest);
+    // Update overall status_check on regRequest (true if ANY step is true)
+    regRequest.status_check = checkAnyStepTrue(regRequest);
     if (regRequest.status_check) {
       regRequest.is_resubmitted = true;
-      regRequest.status = 'resubmitted';
+      if (regRequest.status !== 'approved' && regRequest.status !== 'rejected') {
+        regRequest.status = 'resubmitted';
+      }
     } else {
       regRequest.is_resubmitted = false;
       regRequest.status = regRequest.status === 'approved' ? 'approved' : (regRequest.status === 'rejected' ? 'rejected' : 'pending_review');
@@ -814,11 +855,13 @@ const saveStep4 = async (req, res) => {
     regRequest.occupation_details = { ...step4Payload };
     regRequest.current_step = Math.max(regRequest.current_step || 1, 4);
 
-    // Overall status_check: true only if ALL 5 steps are true
-    regRequest.status_check = checkAllStepsTrue(regRequest);
+    // Overall status_check: true if ANY step is true
+    regRequest.status_check = checkAnyStepTrue(regRequest);
     if (regRequest.status_check) {
       regRequest.is_resubmitted = true;
-      regRequest.status = 'resubmitted';
+      if (regRequest.status !== 'approved' && regRequest.status !== 'rejected') {
+        regRequest.status = 'resubmitted';
+      }
     } else {
       regRequest.is_resubmitted = false;
       regRequest.status = regRequest.status === 'approved' ? 'approved' : (regRequest.status === 'rejected' ? 'rejected' : 'pending_review');
@@ -888,11 +931,13 @@ const saveStep5 = async (req, res) => {
     regRequest.documents = step5Payload;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 5);
 
-    // Overall status_check: true only if ALL 5 steps are true
-    regRequest.status_check = checkAllStepsTrue(regRequest);
+    // Overall status_check: true if ANY step is true
+    regRequest.status_check = checkAnyStepTrue(regRequest);
     if (regRequest.status_check) {
       regRequest.is_resubmitted = true;
-      regRequest.status = 'resubmitted';
+      if (regRequest.status !== 'approved' && regRequest.status !== 'rejected') {
+        regRequest.status = 'resubmitted';
+      }
     } else {
       regRequest.is_resubmitted = false;
       regRequest.status = regRequest.status === 'approved' ? 'approved' : (regRequest.status === 'rejected' ? 'rejected' : 'pending_review');
@@ -1126,11 +1171,43 @@ const getRegistrationsList = async (req, res) => {
       if (status === 'active' || status === 'approved') {
         query.is_approved = true;
       } else if (status === 'pending' || status === 'pending_review') {
-        query.status = 'pending_review';
+        query.status = { $in: ['pending_review', 'in_progress', 'pending'] };
         query.is_approved = { $ne: true };
+        query.is_resubmitted = { $ne: true };
+        query.status_check = { $ne: true };
+        query['step1.status_check'] = { $nin: [true, 'true', 1] };
+        query['step2.status_check'] = { $nin: [true, 'true', 1] };
+        query['step3.status_check'] = { $nin: [true, 'true', 1] };
+        query['step4.status_check'] = { $nin: [true, 'true', 1] };
+        query['step5.status_check'] = { $nin: [true, 'true', 1] };
+        query['documents.status_check'] = { $nin: [true, 'true', 1] };
       } else if (status === 'resubmit' || status === 'resubmitted') {
-        query.$or = [{ status: 'resubmitted' }, { status: 'resubmit' }, { is_resubmitted: true }, { status_check: true }];
+        query.$or = [
+          { status: 'resubmitted' },
+          { status: 'resubmit' },
+          { is_resubmitted: true },
+          { status_check: true },
+          { 'step1.status_check': true },
+          { 'step1.status_check': 'true' },
+          { 'step1.status_check': 1 },
+          { 'step2.status_check': true },
+          { 'step2.status_check': 'true' },
+          { 'step2.status_check': 1 },
+          { 'step3.status_check': true },
+          { 'step3.status_check': 'true' },
+          { 'step3.status_check': 1 },
+          { 'step4.status_check': true },
+          { 'step4.status_check': 'true' },
+          { 'step4.status_check': 1 },
+          { 'step5.status_check': true },
+          { 'step5.status_check': 'true' },
+          { 'step5.status_check': 1 },
+          { 'documents.status_check': true },
+          { 'documents.status_check': 'true' },
+          { 'documents.status_check': 1 }
+        ];
         query.is_approved = { $ne: true };
+        query.status = { $nin: ['approved', 'rejected'] };
       } else if (status === 'rejected') {
         query.status = 'rejected';
         query.is_approved = { $ne: true };
