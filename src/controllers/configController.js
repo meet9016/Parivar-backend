@@ -21,6 +21,16 @@ const formatConfig = (req, config) => {
     obj.bannerImages = [];
   }
 
+  const playLink = obj.playStoreUrl || obj.playstore_url || obj.android_app_link || '';
+  const appLink = obj.appStoreUrl || obj.appstore_url || obj.ios_app_link || '';
+
+  obj.playStoreUrl = playLink;
+  obj.playstore_url = playLink;
+  obj.android_app_link = playLink;
+  obj.appStoreUrl = appLink;
+  obj.appstore_url = appLink;
+  obj.ios_app_link = appLink;
+
   return obj;
 };
 
@@ -89,6 +99,17 @@ const updateConfig = async (req, res) => {
         ? req.body.bannerImages
         : (req.body.bannerImages ? [req.body.bannerImages] : []);
       config.markModified('bannerImages');
+    }
+
+    const playLink = req.body.playStoreUrl !== undefined ? req.body.playStoreUrl : req.body.playstore_url;
+    if (playLink !== undefined) {
+      config.playStoreUrl = playLink;
+      config.playstore_url = playLink;
+    }
+    const appLink = req.body.appStoreUrl !== undefined ? req.body.appStoreUrl : req.body.appstore_url;
+    if (appLink !== undefined) {
+      config.appStoreUrl = appLink;
+      config.appstore_url = appLink;
     }
 
     await config.save();

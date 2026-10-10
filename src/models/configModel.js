@@ -88,10 +88,22 @@ const configSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
-
-  
-
-
+  playStoreUrl: {
+    type: String,
+    default: "",
+  },
+  playstore_url: {
+    type: String,
+    default: "",
+  },
+  appStoreUrl: {
+    type: String,
+    default: "",
+  },
+  appstore_url: {
+    type: String,
+    default: "",
+  },
 }, {
   timestamps: true,
   strict: false, id: false
