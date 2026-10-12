@@ -31,18 +31,24 @@ const getFamilyHeadFromParent = async (parentUser) => {
   return null;
 };
 
-const resolveFamilyHead = async ({ relation, family_head_id }) => {
-  if (relation === 'Self') {
+const resolveFamilyHead = async ({ relation, family_head_id, is_deceased = false }) => {
+  if (relation === 'Self' || is_deceased) {
     return { family_head: null, head: null };
   }
 
   const cleanId = String(family_head_id || '').trim();
   if (!cleanId || cleanId === 'undefined' || cleanId === 'null') {
+    if (is_deceased) {
+      return { family_head: null, head: null };
+    }
     throw new Error('Family head information is required for non-self members');
   }
 
   const head = await findUserByIdOrMemberId(cleanId);
   if (!head) {
+    if (is_deceased) {
+      return { family_head: null, head: null };
+    }
     throw new Error('Invalid family_head_id');
   }
 
@@ -62,8 +68,8 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
     relation = relation.find(r => typeof r === 'string' && r.trim() !== '') || relation[0] || 'Self';
   }
 
-
   const isSelf = relation === 'Self';
+  const isDeceased = payload.is_deceased === true || payload.is_deceased === 'true' || existing.is_deceased === true;
 
   const result = {
     relation,
@@ -73,10 +79,10 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
 
   const isHead = payload.familyHead !== undefined 
     ? (payload.familyHead === true || payload.familyHead === 'true') 
-    : (existing.familyHead === true || isSelf);
+    : (existing.familyHead === true || isSelf || isDeceased);
 
   if (isHead) {
-    if (payload.family_head_id) {
+    if (payload.family_head_id && !isDeceased) {
       throw new Error('Family head cannot have a family head reference');
     }
 
@@ -87,7 +93,8 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
 
   const headData = await resolveFamilyHead({
     relation,
-    family_head_id: payload.family_head_id || existing.family_head?.id
+    family_head_id: payload.family_head_id || existing.family_head?.id,
+    is_deceased: isDeceased
   });
 
   result.family_head = headData.family_head;

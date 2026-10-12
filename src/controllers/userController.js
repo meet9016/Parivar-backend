@@ -57,7 +57,8 @@ const register = async (req, res) => {
       familyHead
     } = req.body;
 
-    if (!first_name || !number) {
+    const isDeceasedMember = req.body.is_deceased === true || req.body.is_deceased === 'true';
+    if (!first_name || (!number && !isDeceasedMember)) {
       return res.status(400).json({ message: 'First name and number are required' });
     }
 
@@ -73,7 +74,8 @@ const register = async (req, res) => {
       relation,
       family_head_id: req.body.family_head_id,
       status: req.body.status,
-      familyHead
+      familyHead,
+      is_deceased: req.body.is_deceased === true || req.body.is_deceased === 'true'
     });
 
     const latestUser = await User.findOne({ member_id: /^\d+$/ })
@@ -113,6 +115,21 @@ const register = async (req, res) => {
       village_id: village_id || '',
       address,
       image: image || '',
+      is_deceased: req.body.is_deceased === true || req.body.is_deceased === 'true',
+      death_date: req.body.death_date ? new Date(req.body.death_date) : null,
+      death_time: req.body.death_time || '',
+      death_place: req.body.death_place || '',
+      death_note: req.body.death_note || '',
+      janaza_date: req.body.janaza_date ? new Date(req.body.janaza_date) : null,
+      janaza_time: req.body.janaza_time || '',
+      janaza_place: req.body.janaza_place || '',
+      kabrastan: req.body.kabrastan || '',
+      ziyarat_date: req.body.ziyarat_date ? new Date(req.body.ziyarat_date) : (req.body.besnu_date ? new Date(req.body.besnu_date) : null),
+      ziyarat_time: req.body.ziyarat_time || req.body.besnu_time || '',
+      ziyarat_place: req.body.ziyarat_place || req.body.besnu_place || '',
+      besnu_date: req.body.ziyarat_date ? new Date(req.body.ziyarat_date) : (req.body.besnu_date ? new Date(req.body.besnu_date) : null),
+      besnu_time: req.body.ziyarat_time || req.body.besnu_time || '',
+      besnu_place: req.body.ziyarat_place || req.body.besnu_place || '',
       family_head: familyData.family_head,
       familyHead: familyHead === true || familyHead === 'true',
       status: familyData.status,
@@ -248,7 +265,7 @@ const mongooseQueryForUser = (id) => {
   if (mongoose.isValidObjectId(id)) {
     return { _id: id };
   }
-  return { id: String(id) };
+  return { $or: [{ member_id: String(id) }, { _id: id }] };
 };
 
 const getUsers = async (req, res) => {
@@ -256,6 +273,7 @@ const getUsers = async (req, res) => {
     console.log("getUsers Query params:", req.query);
     const birthday = 'birthday' in req.query;
     const anniversary = 'anniversary' in req.query;
+    const death = 'death' in req.query || 'deaths' in req.query || 'deceased' in req.query || 'obituary' in req.query;
 
     const query = {};
     const requestPermissions = getRolePermissions(req.user);
@@ -327,10 +345,48 @@ const getUsers = async (req, res) => {
       query.anniversary = { $exists: true, $ne: null };
     }
 
+    if (death) {
+      query.$or = [
+        { is_deceased: true },
+        { death_date: { $exists: true, $ne: null } }
+      ];
+      const conditions = [];
+      const m = req.query.death_month || req.query.dob_month || req.query.month;
+      if (m) {
+        conditions.push({
+          $and: [
+            { $eq: [{ $type: "$death_date" }, "date"] },
+            { $eq: [{ $month: "$death_date" }, Number(m)] }
+          ]
+        });
+      }
+      const y = req.query.death_year || req.query.dob_year || req.query.year;
+      if (y) {
+        conditions.push({
+          $and: [
+            { $eq: [{ $type: "$death_date" }, "date"] },
+            { $eq: [{ $year: "$death_date" }, Number(y)] }
+          ]
+        });
+      }
+      if (conditions.length > 0) {
+        query.$expr = conditions.length === 1 ? conditions[0] : { $and: conditions };
+      }
+      const sDate = req.query.death_start || req.query.dob_start || req.query.start_date;
+      const eDate = req.query.death_end || req.query.dob_end || req.query.end_date;
+      if (sDate || eDate) {
+        const range = {};
+        if (sDate) range.$gte = new Date(sDate);
+        if (eDate) range.$lte = new Date(eDate);
+        query.death_date = range;
+      }
+    }
+
     // Determine if this is the Family Registry listing request (default view in Users.jsx)
     const isFamilyRegistryListing =
       !birthday &&
       !anniversary &&
+      !death &&
       req.query.is_committee === undefined &&
       !req.query.family_head_id &&
       req.query.is_head !== 'true' &&
@@ -524,8 +580,8 @@ const getUsers = async (req, res) => {
       baseQuery: query,
       searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'],
       filterFields: ['gender', 'blood_group', 'is_committee', 'committee_role', 'role_id', 'status', 'familyHead'],
-      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : '-password',
-      populate: (birthday || anniversary) ? '' : 'role_id',
+      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : death ? '_id member_id first_name middle_name last_name number email dob gender village address profile_image image is_deceased death_date death_time death_place death_note janaza_date janaza_time janaza_place kabrastan ziyarat_date ziyarat_time ziyarat_place besnu_date besnu_time besnu_place relation familyHead family_head status' : '-password',
+      populate: (birthday || anniversary || death) ? '' : 'role_id',
       defaultSort: { createdAt: -1 },
       lean: false
     });
@@ -557,6 +613,73 @@ const getUsers = async (req, res) => {
         anniversary: u.anniversary || null
       }));
       return apiResponse(res, 200, 'Users birthday list retrieved successfully', formatted, pagination);
+    }
+
+    if (death) {
+      const today = new Date();
+      const todayDay = today.getDate();
+      const todayMonth = today.getMonth() + 1;
+
+      const formatted = users.map(u => {
+        let isToday = false;
+        if (u.death_date) {
+          const d = new Date(u.death_date);
+          if (!isNaN(d.getTime())) {
+            if ((d.getDate() === todayDay && (d.getMonth() + 1) === todayMonth) ||
+                (d.getUTCDate() === todayDay && (d.getUTCMonth() + 1) === todayMonth)) {
+              isToday = true;
+            }
+          }
+        }
+
+        return {
+          id: u.id || String(u._id),
+          _id: u._id,
+          member_id: u.member_id || '',
+          first_name: u.first_name || '',
+          middle_name: u.middle_name || '',
+          last_name: u.last_name || '',
+          name: fullName(u),
+          number: u.number || '',
+          email: u.email || '',
+          dob: u.dob || null,
+          gender: u.gender || '',
+          village: u.village || '',
+          address: u.address || '',
+          profile_image: u.profile_image || u.image || '',
+          image: u.profile_image || u.image || '',
+          is_deceased: Boolean(u.is_deceased ?? true),
+          death_date: u.death_date || null,
+          death_time: u.death_time || '',
+          death_place: u.death_place || '',
+          death_note: u.death_note || '',
+          janaza_date: u.janaza_date || null,
+          janaza_time: u.janaza_time || '',
+          janaza_place: u.janaza_place || '',
+          kabrastan: u.kabrastan || '',
+          ziyarat_date: u.ziyarat_date || u.besnu_date || null,
+          ziyarat_time: u.ziyarat_time || u.besnu_time || '',
+          ziyarat_place: u.ziyarat_place || u.besnu_place || '',
+          besnu_date: u.ziyarat_date || u.besnu_date || null,
+          besnu_time: u.ziyarat_time || u.besnu_time || '',
+          besnu_place: u.ziyarat_place || u.besnu_place || '',
+          is_today: isToday,
+          relation: u.relation || '',
+          familyHead: Boolean(u.familyHead),
+          family_head: u.family_head || null
+        };
+      });
+
+      // Sort: Today's death anniversary strictly on top, then by death_date descending
+      formatted.sort((a, b) => {
+        if (a.is_today && !b.is_today) return -1;
+        if (!a.is_today && b.is_today) return 1;
+        const dateA = a.death_date ? new Date(a.death_date).getTime() : 0;
+        const dateB = b.death_date ? new Date(b.death_date).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      return apiResponse(res, 200, 'Deceased members list retrieved successfully', formatted, pagination);
     }
     // Map backend user to the fields expected by standard layout or user forms
     const formatted = users.map(u => ({
@@ -751,12 +874,20 @@ const updateUser = async (req, res) => {
       return apiResponse(res, 404, 'User not found');
     }
 
-    const familyData = await familyUtil.prepareFamilyFields({
-      relation,
-      family_head_id: req.body.family_head_id,
-      status,
-      familyHead
-    }, user);
+    let familyData = { family_head: user.family_head, relation: user.relation, status: user.status };
+    if (relation !== undefined || req.body.family_head_id !== undefined || familyHead !== undefined) {
+      try {
+        familyData = await familyUtil.prepareFamilyFields({
+          relation,
+          family_head_id: req.body.family_head_id,
+          status,
+          familyHead,
+          is_deceased: req.body.is_deceased !== undefined ? (req.body.is_deceased === true || req.body.is_deceased === 'true') : user.is_deceased
+        }, user);
+      } catch (e) {
+        console.warn('prepareFamilyFields warning:', e.message);
+      }
+    }
 
     if ((is_committee === true || is_committee === 'true' || user.is_committee) && req.file?.size > 1024 * 1024) {
       return apiResponse(res, 400, 'Committee image must be 1 MB or smaller');
@@ -784,12 +915,45 @@ const updateUser = async (req, res) => {
     if (designation !== undefined) user.designation = designation;
     if (status !== undefined) user.status = Number(status);
     if (familyHead !== undefined) user.familyHead = familyHead === true || familyHead === 'true';
-    user.family_head = familyData.family_head;
+    if (familyData.family_head !== undefined && (relation !== undefined || req.body.family_head_id !== undefined || familyHead !== undefined)) {
+      user.family_head = familyData.family_head;
+    }
     if (password) user.password = password;
     if (req.body.image !== undefined) {
       user.image = req.body.image;
     } else if (req.file) {
       user.image = `/uploads/${req.file.filename}`;
+    }
+
+    if (req.body.is_deceased !== undefined) user.is_deceased = req.body.is_deceased === true || req.body.is_deceased === 'true';
+    if (req.body.death_date !== undefined) user.death_date = req.body.death_date ? new Date(req.body.death_date) : null;
+    if (req.body.death_time !== undefined) user.death_time = req.body.death_time;
+    if (req.body.death_place !== undefined) user.death_place = req.body.death_place;
+    if (req.body.death_note !== undefined) user.death_note = req.body.death_note;
+    if (req.body.janaza_date !== undefined) user.janaza_date = req.body.janaza_date ? new Date(req.body.janaza_date) : null;
+    if (req.body.janaza_time !== undefined) user.janaza_time = req.body.janaza_time;
+    if (req.body.janaza_place !== undefined) user.janaza_place = req.body.janaza_place;
+    if (req.body.kabrastan !== undefined) user.kabrastan = req.body.kabrastan;
+    if (req.body.ziyarat_date !== undefined) {
+      user.ziyarat_date = req.body.ziyarat_date ? new Date(req.body.ziyarat_date) : null;
+      user.besnu_date = user.ziyarat_date;
+    } else if (req.body.besnu_date !== undefined) {
+      user.besnu_date = req.body.besnu_date ? new Date(req.body.besnu_date) : null;
+      user.ziyarat_date = user.besnu_date;
+    }
+    if (req.body.ziyarat_time !== undefined) {
+      user.ziyarat_time = req.body.ziyarat_time;
+      user.besnu_time = req.body.ziyarat_time;
+    } else if (req.body.besnu_time !== undefined) {
+      user.besnu_time = req.body.besnu_time;
+      user.ziyarat_time = req.body.besnu_time;
+    }
+    if (req.body.ziyarat_place !== undefined) {
+      user.ziyarat_place = req.body.ziyarat_place;
+      user.besnu_place = req.body.ziyarat_place;
+    } else if (req.body.besnu_place !== undefined) {
+      user.besnu_place = req.body.besnu_place;
+      user.ziyarat_place = req.body.besnu_place;
     }
 
     await user.save();

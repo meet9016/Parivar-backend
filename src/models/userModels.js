@@ -37,7 +37,7 @@ const userSchema = new mongoose.Schema({
   },
   number: {
     type: String,
-    required: [true, 'Primary phone number is required'],
+    // required: [true, 'Primary phone number is required'],
     trim: true,
     index: true // Multiple members can share the same login phone number
   },
@@ -54,6 +54,78 @@ const userSchema = new mongoose.Schema({
   },
   blood_group: {
     type: String,
+    trim: true
+  },
+  is_deceased: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  death_date: {
+    type: Date,
+    default: null,
+    index: true
+  },
+  death_time: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  death_place: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  death_note: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  janaza_date: {
+    type: Date,
+    default: null
+  },
+  janaza_time: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  janaza_place: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  kabrastan: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  ziyarat_date: {
+    type: Date,
+    default: null
+  },
+  ziyarat_time: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  ziyarat_place: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  besnu_date: {
+    type: Date,
+    default: null
+  },
+  besnu_time: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  besnu_place: {
+    type: String,
+    default: '',
     trim: true
   },
 

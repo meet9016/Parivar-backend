@@ -77,11 +77,11 @@ router.get('/:id', protect, (req, res, next) => {
 
 router.put('/:id', protect, parseForm, (req, res, next) => {
     if (isAdminCall(req)) {
-        return requirePermission('members.edit')(req, res, () => userController.updateUser(req, res, next));
+        return requirePermission(['members.edit', 'death.edit', 'death.delete'])(req, res, () => userController.updateUser(req, res, next));
     }
     return authorizeUserUpdate(req, res, () => userController.updateUser(req, res, next));
 });
 
-router.delete('/:id', protect, requirePermission('members.delete'), userController.deleteUser);
+router.delete('/:id', protect, requirePermission(['members.delete', 'death.delete']), userController.deleteUser);
 
 module.exports = router;
