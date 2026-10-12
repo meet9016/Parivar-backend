@@ -1301,10 +1301,7 @@ const approveRegistration = async (req, res) => {
       return apiResponse(res, 400, 'Registration has no valid phone number to migrate');
     }
 
-    // Block approval if all 5 steps are not complete
-    if ((regRequest.current_step || 1) < 5) {
-      return apiResponse(res, 400, `Cannot approve: Only ${regRequest.current_step || 1} of 5 steps completed. All 5 steps must be filled before approval.`);
-    }
+    // Allow approval even if all 5 steps are not completed (partial step registration approval)
 
     // Check if User already exists for this number or create fresh Head User
     let headUser = await User.findOne({
@@ -1344,10 +1341,10 @@ const approveRegistration = async (req, res) => {
     }
 
     // Populate head User fields from step-wise registration data
-    const s1 = regRequest.step1 || {};
-    const s3 = regRequest.step3 || {};
-    const s4 = regRequest.step4 || {};
-    const s5 = regRequest.step5 || {};
+    const s1 = (Array.isArray(regRequest.step1) ? regRequest.step1[0] : regRequest.step1) || {};
+    const s3 = (Array.isArray(regRequest.step3) ? regRequest.step3[0] : regRequest.step3) || {};
+    const s4 = (Array.isArray(regRequest.step4) ? regRequest.step4[0] : regRequest.step4) || {};
+    const s5 = (Array.isArray(regRequest.step5) ? regRequest.step5[0] : regRequest.step5) || regRequest.documents || {};
 
     headUser.first_name = regRequest.first_name || s1.first_name || 'Member';
     headUser.middle_name = regRequest.middle_name || s1.middle_name || '';
