@@ -51,8 +51,9 @@ const getcommitteeMembers = async (req, res) => {
       const cleanNum = String(member.number || '').trim().replace(/\D/g, '').slice(-10);
       const linkedUser = userMap.get(cleanNum);
 
-      let villageName = member.village || linkedUser?.village || linkedUser?.village_name || '';
-      let villageId = member.village_id || linkedUser?.village_id || '';
+      // Prioritize linked user's active village over cached member village
+      let villageName = linkedUser?.village || linkedUser?.village_name || member.village || '';
+      let villageId = linkedUser?.village_id || member.village_id || '';
 
       if (villageMap.has(String(villageName))) {
         villageId = villageName;
@@ -179,20 +180,36 @@ const updatecommitteeMember = async (req, res) => {
       delete updateData.role_id;
     }
 
-    if (!updateData.village && (updateData.number || id)) {
-      try {
-        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
-        let ph = updateData.number;
-        if (!ph) {
-          const currentDoc = await CommitteeMember.findById(id).lean();
-          ph = currentDoc?.number;
+    const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
+    let memberPhone = updateData.number;
+    if (!memberPhone && id) {
+      const currentDoc = await CommitteeMember.findById(id).lean();
+      memberPhone = currentDoc?.number;
+    }
+    const cleanPh = memberPhone ? String(memberPhone).trim().replace(/\D/g, '').slice(-10) : '';
+
+    if (updateData.village !== undefined || updateData.village_id !== undefined) {
+      // If village is explicitly provided/updated, also update the linked user
+      if (cleanPh) {
+        try {
+          const userUpdate = {};
+          if (updateData.village !== undefined) userUpdate.village = updateData.village;
+          if (updateData.village_id !== undefined) userUpdate.village_id = updateData.village_id;
+          await UserModel.updateMany(
+            { number: { $regex: new RegExp(cleanPh + '$') } },
+            { $set: userUpdate }
+          );
+        } catch (e) {
+          console.warn('Could not sync committee village to User:', e.message);
         }
-        if (ph) {
-          const linkedUser = await UserModel.findOne({ number: ph }).lean();
-          if (linkedUser) {
-            if (linkedUser.village) updateData.village = linkedUser.village;
-            if (linkedUser.village_id) updateData.village_id = linkedUser.village_id;
-          }
+      }
+    } else if (cleanPh) {
+      // If village was not explicitly passed, sync from linked user if present
+      try {
+        const linkedUser = await UserModel.findOne({ number: { $regex: new RegExp(cleanPh + '$') } }).lean();
+        if (linkedUser && (linkedUser.village || linkedUser.village_name)) {
+          updateData.village = linkedUser.village || linkedUser.village_name;
+          if (linkedUser.village_id) updateData.village_id = linkedUser.village_id;
         }
       } catch (e) {
         // ignore

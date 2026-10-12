@@ -1086,6 +1086,25 @@ const updateUser = async (req, res) => {
 
     await user.save();
 
+    // Sync updated village to CommitteeMember collection if applicable
+    if (user.number && (village !== undefined || village_id !== undefined)) {
+      try {
+        const CommitteeMemberModel = req?.tenantConn ? (req.tenantConn.models.CommitteeMember || req.tenantConn.model('CommitteeMember', require('../models/committeeMemberModel').schema)) : require('../models/committeeMemberModel');
+        const cleanPh = String(user.number).trim().replace(/\D/g, '').slice(-10);
+        const cmUpdate = {};
+        if (user.village !== undefined) cmUpdate.village = user.village;
+        if (user.village_id !== undefined) cmUpdate.village_id = user.village_id;
+        if (Object.keys(cmUpdate).length > 0) {
+          await CommitteeMemberModel.updateMany(
+            { number: { $regex: new RegExp(cleanPh + '$') } },
+            { $set: cmUpdate }
+          );
+        }
+      } catch (err) {
+        console.warn('Failed to sync village to committee member:', err.message);
+      }
+    }
+
     // Handle updating/creating/deleting child family members if passed
     let membersList = req.body.members;
     if (typeof membersList === 'string') {
