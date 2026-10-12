@@ -23,21 +23,60 @@ const getcommitteeMembers = async (req, res) => {
       populate: ['role_id']
     });
 
-    const data = committee.map((member) => ({
-      id: String(member._id),
-      first_name: member.first_name || '',
-      middle_name: member.middle_name || '',
-      last_name: member.last_name || '',
-      number: member.number || '',
-      email: member.email || '',
-      role_id: member.role_id?._id ? String(member.role_id._id) : (member.role_id || ''),
-      role_name: member.role_id?.name || '',
-      designation: member.designation || '',
-      village: member.village || '',
-      village_id: member.village_id || '',
-      status: Number(member.status ?? 1),
-      image: publicUrl(req, member.signature || member.image || '')
-    }));
+    // Batch lookup linked users and master villages to ensure clean village names
+    const numbers = committee.map(m => m.number).filter(Boolean);
+    const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
+    const MasterModel = req?.tenantConn ? (req.tenantConn.models.Master || req.tenantConn.model('Master', require('../models/masterModel').schema)) : require('../models/masterModel');
+
+    const [linkedUsers, allVillages] = await Promise.all([
+      UserModel.find({ number: { $in: numbers } }).select('number village village_id village_name').lean().catch(() => []),
+      MasterModel.find({ type: 'village' }).select('_id id name').lean().catch(() => [])
+    ]);
+
+    const userMap = new Map();
+    (linkedUsers || []).forEach(u => {
+      if (u.number) {
+        const clean = String(u.number).trim().replace(/\D/g, '').slice(-10);
+        userMap.set(clean, u);
+      }
+    });
+
+    const villageMap = new Map();
+    (allVillages || []).forEach(v => {
+      villageMap.set(String(v._id), v.name);
+      if (v.id) villageMap.set(String(v.id), v.name);
+    });
+
+    const data = committee.map((member) => {
+      const cleanNum = String(member.number || '').trim().replace(/\D/g, '').slice(-10);
+      const linkedUser = userMap.get(cleanNum);
+
+      let villageName = member.village || linkedUser?.village || linkedUser?.village_name || '';
+      let villageId = member.village_id || linkedUser?.village_id || '';
+
+      if (villageMap.has(String(villageName))) {
+        villageId = villageName;
+        villageName = villageMap.get(String(villageName));
+      } else if (villageMap.has(String(villageId)) && !villageName) {
+        villageName = villageMap.get(String(villageId));
+      }
+
+      return {
+        id: String(member._id),
+        first_name: member.first_name || '',
+        middle_name: member.middle_name || '',
+        last_name: member.last_name || '',
+        number: member.number || '',
+        email: member.email || '',
+        role_id: member.role_id?._id ? String(member.role_id._id) : (member.role_id || ''),
+        role_name: member.role_id?.name || '',
+        designation: member.designation || '',
+        village: villageName || '',
+        village_id: villageId || '',
+        status: Number(member.status ?? 1),
+        image: publicUrl(req, member.signature || member.image || '')
+      };
+    });
 
     return apiResponse(res, 200, 'committee Memeber Data fetch successful', data, pagination);
   } catch (error) {
@@ -70,8 +109,8 @@ const createcommitteeMember = async (req, res) => {
 
     if (!memberData.village && memberData.number) {
       try {
-        const User = require('../models/userModels');
-        const linkedUser = await User.findOne({ number: memberData.number }).lean();
+        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
+        const linkedUser = await UserModel.findOne({ number: memberData.number }).lean();
         if (linkedUser) {
           if (linkedUser.village) memberData.village = linkedUser.village;
           if (linkedUser.village_id) memberData.village_id = linkedUser.village_id;
@@ -142,14 +181,14 @@ const updatecommitteeMember = async (req, res) => {
 
     if (!updateData.village && (updateData.number || id)) {
       try {
-        const User = require('../models/userModels');
+        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
         let ph = updateData.number;
         if (!ph) {
           const currentDoc = await CommitteeMember.findById(id).lean();
           ph = currentDoc?.number;
         }
         if (ph) {
-          const linkedUser = await User.findOne({ number: ph }).lean();
+          const linkedUser = await UserModel.findOne({ number: ph }).lean();
           if (linkedUser) {
             if (linkedUser.village) updateData.village = linkedUser.village;
             if (linkedUser.village_id) updateData.village_id = linkedUser.village_id;
