@@ -39,6 +39,14 @@ const committeeMemberSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  village_id: {
+    type: String,
+    default: ''
+  },
+  village: {
+    type: String,
+    default: ''
+  },
   status: {
     type: Number,
     default: 1

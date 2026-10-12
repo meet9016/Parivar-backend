@@ -122,6 +122,10 @@ const register = async (req, res) => {
       country_id,
       state_id,
       city_id,
+      country: req.body.country || '',
+      state: req.body.state || '',
+      district: req.body.district || '',
+      city: req.body.city || '',
       village: village || village_id || '',
       village_id: village_id || '',
       patti_para_pargana: patti_para_pargana || patti || '',
@@ -279,8 +283,11 @@ const buildLocationMaps = async (usersList = []) => {
   const collectKeys = (u) => {
     if (!u) return;
     if (u.country_id) countryIds.add(String(u.country_id));
+    if (u.country) countryIds.add(String(u.country));
     if (u.state_id) stateIds.add(String(u.state_id));
+    if (u.state) stateIds.add(String(u.state));
     if (u.city_id) cityIds.add(String(u.city_id));
+    if (u.city) cityIds.add(String(u.city));
     if (u.district_id) masterIds.add(String(u.district_id));
     if (u.district) masterIds.add(String(u.district));
     if (u.taluka_id) masterIds.add(String(u.taluka_id));
@@ -391,13 +398,15 @@ const formatUserWithLocation = (req, u, locMaps = {}) => {
     pattiMap = new Map()
   } = locMaps;
 
-  const countryName = countryMap.get(String(u.country_id || '')) || u.country_name || u.country || (u.country_id && !mongoose.isValidObjectId(u.country_id) ? u.country_id : '');
-  const stateName = stateMap.get(String(u.state_id || '')) || u.state_name || u.state || (u.state_id && !mongoose.isValidObjectId(u.state_id) ? u.state_id : '');
-  const districtName = districtMap.get(String(u.district_id || u.district || '')) || u.district_name || u.district || (u.district_id && !mongoose.isValidObjectId(u.district_id) ? u.district_id : '');
-  const talukaName = talukaMap.get(String(u.taluka_id || u.taluka || '')) || u.taluka_name || u.taluka || (u.taluka_id && !mongoose.isValidObjectId(u.taluka_id) ? u.taluka_id : '');
-  const cityName = cityMap.get(String(u.city_id || u.city || '')) || u.city_name || u.city || (u.city_id && !mongoose.isValidObjectId(u.city_id) ? u.city_id : '');
-  const villageName = villageMap.get(String(u.village_id || u.village || '')) || u.village_name || u.village || (u.village_id && !mongoose.isValidObjectId(u.village_id) ? u.village_id : '');
-  const pattiName = pattiMap.get(String(u.patti_para_pargana || u.patti || '')) || u.patti_name || u.patti_para_pargana || u.patti || '';
+  const isHex = (val) => typeof val === 'string' && /^[0-9a-fA-F]{24}$/.test(val.trim());
+
+  const countryName = countryMap.get(String(u.country_id || '')) || countryMap.get(String(u.country || '')) || u.country_name || (!isHex(u.country) ? u.country : '');
+  const stateName = stateMap.get(String(u.state_id || '')) || stateMap.get(String(u.state || '')) || u.state_name || (!isHex(u.state) ? u.state : '');
+  const districtName = districtMap.get(String(u.district_id || '')) || districtMap.get(String(u.district || '')) || u.district_name || (!isHex(u.district) ? u.district : '');
+  const talukaName = talukaMap.get(String(u.taluka_id || '')) || talukaMap.get(String(u.taluka || '')) || u.taluka_name || (!isHex(u.taluka) ? u.taluka : '');
+  const cityName = cityMap.get(String(u.city_id || '')) || cityMap.get(String(u.city || '')) || u.city_name || (!isHex(u.city) ? u.city : '');
+  const villageName = villageMap.get(String(u.village_id || '')) || villageMap.get(String(u.village || '')) || u.village_name || (!isHex(u.village) ? u.village : '');
+  const pattiName = pattiMap.get(String(u.patti_para_pargana || '')) || pattiMap.get(String(u.patti || '')) || u.patti_name || (!isHex(u.patti_para_pargana) ? u.patti_para_pargana : (!isHex(u.patti) ? u.patti : ''));
 
   return {
     id: u.id || String(u._id),
@@ -422,24 +431,33 @@ const formatUserWithLocation = (req, u, locMaps = {}) => {
     designation: u.designation || '',
     pincode: u.pincode || '',
 
-    // Location fields with resolved names and original IDs
-    country_id: u.country_id || '',
-    country_name: countryName,
+    // Location fields with resolved clean human-readable names and proper IDs
+    country: countryName || '',
+    country_name: countryName || '',
+    country_id: isHex(u.country_id) ? u.country_id : (isHex(u.country) ? u.country : (u.country_id || '')),
 
-    state_id: u.state_id || '',
-    state_name: stateName,
+    state: stateName || '',
+    state_name: stateName || '',
+    state_id: isHex(u.state_id) ? u.state_id : (isHex(u.state) ? u.state : (u.state_id || '')),
 
-    district_id: u.district_id || '',
-    district_name: districtName,
+    district: districtName || '',
+    district_name: districtName || '',
+    district_id: isHex(u.district_id) ? u.district_id : (isHex(u.district) ? u.district : (u.district_id || '')),
 
-    city_id: u.city_id || '',
-    city_name: cityName,
+    taluka: talukaName || '',
+    taluka_name: talukaName || '',
+    taluka_id: isHex(u.taluka_id) ? u.taluka_id : (isHex(u.taluka) ? u.taluka : (u.taluka_id || '')),
 
-    village_id: u.village_id || '',
-    village_name: villageName,
+    city: cityName || '',
+    city_name: cityName || '',
+    city_id: isHex(u.city_id) ? u.city_id : (isHex(u.city) ? u.city : (u.city_id || '')),
 
-    patti_para_pargana: pattiName,
-    patti_name: pattiName,
+    village: villageName || '',
+    village_name: villageName || '',
+    village_id: isHex(u.village_id) ? u.village_id : (isHex(u.village) ? u.village : (u.village_id || '')),
+
+    patti_para_pargana: pattiName || '',
+    patti_name: pattiName || '',
 
     family_head: u.family_head ? {
       id: u.family_head.id ? String(u.family_head.id) : '',
@@ -466,6 +484,43 @@ const getUsers = async (req, res) => {
     const requestPermissions = getRolePermissions(req.user);
     const canListMembers = requestPermissions.includes('members.list') || requestPermissions.includes('users.manage');
     const canListCommittee = requestPermissions.includes('committee.list') || requestPermissions.includes('committee.manage');
+
+    const isSuperAdmin = Boolean(
+      req.user?.role === 'superadmin' || 
+      req.user?.is_super_admin === true || 
+      req.user?.committee_role === 'President' || 
+      req.user?.role_id?.name?.toLowerCase() === 'super admin' ||
+      req.user?.role_id?.name?.toLowerCase() === 'admin'
+    );
+
+    const isCommittee = Boolean(
+      req.user?.is_committee === true || 
+      req.user?.role === 'committee' || 
+      (req.user?.committee_role && req.user?.committee_role !== 'Self')
+    );
+
+    let committeeVillage = (req.user?.village || req.user?.village_name || '').trim();
+    if (!committeeVillage && req.user?.village_id) {
+      try {
+        const Master = req?.tenantConn ? (req.tenantConn.models.Master || req.tenantConn.model('Master', require('../models/masterModel').schema)) : require('../models/masterModel');
+        if (mongoose.isValidObjectId(req.user.village_id)) {
+          const vDoc = await Master.findById(req.user.village_id).lean();
+          if (vDoc?.name) committeeVillage = vDoc.name;
+        }
+      } catch (_) {}
+    }
+
+    if (!committeeVillage && req.user?.number) {
+      try {
+        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
+        const uDoc = await UserModel.findOne({ number: req.user.number }).lean();
+        if (uDoc) {
+          committeeVillage = (uDoc.village || uDoc.village_name || '').trim();
+        }
+      } catch (_) {}
+    }
+
+    const targetVillage = (isCommittee && !isSuperAdmin && committeeVillage) ? committeeVillage : (req.query.village ? String(req.query.village).trim() : '');
 
     if (req.query.gender) query.gender = req.query.gender;
     if (req.query.blood_group) query.blood_group = req.query.blood_group;
@@ -558,6 +613,17 @@ const getUsers = async (req, res) => {
       };
 
       const headClauses = [headCriteria];
+
+      if (targetVillage) {
+        const vRegex = new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i');
+        headClauses.push({
+          $or: [
+            { village: vRegex },
+            { village: targetVillage },
+            { village_id: targetVillage }
+          ]
+        });
+      }
 
       // Handle search: if search matches head OR any child member, include their family head
       if (req.query.search && String(req.query.search).trim()) {
@@ -757,7 +823,6 @@ const getUsers = async (req, res) => {
           .populate('role_id');
       }
 
-      // Build location maps for all paginated heads and their child members
       const locMaps = await buildLocationMaps([...paginatedHeads, ...childMembers]);
 
       const formatted = paginatedHeads.map(head => {
@@ -784,6 +849,27 @@ const getUsers = async (req, res) => {
         hasPrevPage: page > 1,
         hasNextPage: page < totalPages
       });
+    }
+
+    if (targetVillage) {
+      const escapeRegExp = (v = '') => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const vRegex = new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i');
+      const villageClause = {
+        $or: [
+          { village: vRegex },
+          { village: targetVillage },
+          { village_id: targetVillage }
+        ]
+      };
+      if (query.$or) {
+        query.$and = query.$and || [];
+        query.$and.push({ $or: query.$or }, villageClause);
+        delete query.$or;
+      } else if (query.$and) {
+        query.$and.push(villageClause);
+      } else {
+        Object.assign(query, villageClause);
+      }
     }
 
     const { data: users, pagination } = await queryHelper(User, req.query, {
@@ -977,6 +1063,10 @@ const updateUser = async (req, res) => {
     if (country_id !== undefined) user.country_id = country_id;
     if (state_id !== undefined) user.state_id = state_id;
     if (city_id !== undefined) user.city_id = city_id;
+    if (req.body.country !== undefined) user.country = req.body.country;
+    if (req.body.state !== undefined) user.state = req.body.state;
+    if (req.body.district !== undefined) user.district = req.body.district;
+    if (req.body.city !== undefined) user.city = req.body.city;
     if (village !== undefined) user.village = village;
     if (village_id !== undefined) user.village_id = village_id;
     if (patti_para_pargana !== undefined || patti !== undefined) {

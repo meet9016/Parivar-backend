@@ -251,6 +251,16 @@ const loginAdmin = async (req, res) => {
           const token = jwt.sign({ id: cm._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: '1d' });
           const isSuperAdmin = cm.designation === 'President' || cm.role_id?.name?.toLowerCase() === 'admin' || cm.role_id?.name?.toLowerCase() === 'super admin' || (!cm.role_id && cm.designation === 'Admin');
 
+          let cmVillage = cm.village || '';
+          let cmVillageId = cm.village_id || '';
+          if (!cmVillage && cm.number) {
+            const linkedU = await U.findOne({ number: cm.number }).lean();
+            if (linkedU) {
+              cmVillage = linkedU.village || linkedU.village_name || '';
+              cmVillageId = linkedU.village_id || '';
+            }
+          }
+
           const userData = {
             id: String(cm._id),
             name: `${cm.first_name} ${cm.last_name || ''}`.trim(),
@@ -258,6 +268,9 @@ const loginAdmin = async (req, res) => {
             role: isSuperAdmin ? 'admin' : 'committee',
             is_committee: true,
             committee_role: cm.designation || 'Committee Member',
+            village: cmVillage,
+            village_name: cmVillage,
+            village_id: cmVillageId,
             role_id: cm.role_id?._id ? String(cm.role_id._id) : (cm.role_id || ''),
             role_name: cm.role_id?.name || '',
             permissions,
@@ -294,6 +307,9 @@ const loginAdmin = async (req, res) => {
             role: isSuperAdmin ? 'admin' : (u.is_committee ? 'committee' : 'user'),
             is_committee: u.is_committee,
             committee_role: u.committee_role,
+            village: u.village || u.village_name || '',
+            village_name: u.village_name || u.village || '',
+            village_id: u.village_id || '',
             role_id: u.role_id?._id ? String(u.role_id._id) : '',
             role_name: u.role_id?.name || '',
             permissions,

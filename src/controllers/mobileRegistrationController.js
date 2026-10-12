@@ -293,12 +293,13 @@ const formatRegistrationResponse = (reg) => {
     status_check: s3Check
   };
 
-  // Only remove empty/null/undefined keys (preserve boolean status_check)
+  // Only remove empty/null/undefined keys (preserve boolean status_check and village)
   for (const key in step3Data) {
-    if (key !== 'status_check' && (step3Data[key] === '' || step3Data[key] === null || step3Data[key] === undefined)) {
+    if (key !== 'status_check' && key !== 'village' && (step3Data[key] === '' || step3Data[key] === null || step3Data[key] === undefined)) {
       delete step3Data[key];
     }
   }
+  step3Data.village = s3.village || r.village || '';
 
   const step4Data = {
     ...r.occupation_details,
@@ -338,6 +339,37 @@ const formatRegistrationResponse = (reg) => {
   const responsePayload = {
     _id: r._id,
     number: r.number,
+    first_name: step1Data.first_name || r.first_name || '',
+    middle_name: step1Data.middle_name || r.middle_name || '',
+    last_name: step1Data.last_name || r.last_name || '',
+    gender: step1Data.gender || r.gender || '',
+    blood_group: step1Data.blood_group || r.blood_group || '',
+    dob: step1Data.dob || r.dob,
+    marital_status: step1Data.marital_status || r.marital_status || '',
+    patti_para_pargana: step1Data.patti_para_pargana || r.patti_para_pargana || '',
+    peta_jati: step1Data.peta_jati || r.peta_jati || '',
+    profile_image: step1Data.profile_image || r.profile_image || '',
+    country: step3Data.country || r.country || '',
+    country_id: step3Data.country_id || r.country_id || '',
+    state: step3Data.state || r.state || '',
+    state_id: step3Data.state_id || r.state_id || '',
+    district: step3Data.district || r.district || '',
+    district_id: step3Data.district_id || r.district_id || '',
+    taluka: step3Data.taluka || r.taluka || '',
+    taluka_id: step3Data.taluka_id || r.taluka_id || '',
+    city: step3Data.city || r.city || '',
+    city_id: step3Data.city_id || r.city_id || '',
+    village: step3Data.village || r.village || '',
+    village_id: step3Data.village_id || r.village_id || '',
+    village_name: step3Data.village || r.village || '',
+    address: step3Data.address || r.address || '',
+    complete_address: step3Data.complete_address || step3Data.address || r.address || '',
+    pincode: step3Data.pincode || r.pincode || '',
+    occupation: step4Data.occupation || r.occupation || '',
+    occupation_details: step4Data,
+    documents: step5Data,
+    family_members_count: step2Data.length,
+    family_members: step2Data,
     status: computedStatus,
     is_approved: isApproved,
     status_check: overallStatusCheck,
@@ -561,28 +593,94 @@ const saveStep3 = async (req, res) => {
     const isHexId = (val) => Boolean(val && /^[0-9a-fA-F]{24}$/.test(String(val).trim()));
 
     // Extract country
-    let countryId = data.country_id !== undefined ? String(data.country_id).trim() : (isHexId(data.country) ? String(data.country).trim() : (regRequest.country_id || ''));
-    let countryName = (!isHexId(data.country) && data.country !== undefined) ? String(data.country).trim() : (regRequest.country || '');
+    let countryId = '';
+    let countryName = '';
+    if (data.country_id !== undefined && data.country_id !== '') countryId = String(data.country_id).trim();
+    if (data.country !== undefined && data.country !== '') {
+      if (isHexId(data.country)) countryId = String(data.country).trim();
+      else countryName = String(data.country).trim();
+    }
+    if (!countryId && !countryName) {
+      countryId = regRequest.country_id || '';
+      countryName = regRequest.country || '';
+    }
 
     // Extract state
-    let stateId = data.state_id !== undefined ? String(data.state_id).trim() : (isHexId(data.state) ? String(data.state).trim() : (regRequest.state_id || ''));
-    let stateName = (!isHexId(data.state) && data.state !== undefined) ? String(data.state).trim() : (regRequest.state || '');
+    let stateId = '';
+    let stateName = '';
+    if (data.state_id !== undefined && data.state_id !== '') stateId = String(data.state_id).trim();
+    if (data.state !== undefined && data.state !== '') {
+      if (isHexId(data.state)) stateId = String(data.state).trim();
+      else stateName = String(data.state).trim();
+    }
+    if (!stateName && stateId && !isHexId(stateId)) stateName = stateId;
+    if (!stateId && !stateName) {
+      stateId = regRequest.state_id || '';
+      stateName = regRequest.state || '';
+    }
 
     // Extract district
-    let districtId = data.district_id !== undefined ? String(data.district_id).trim() : (isHexId(data.district) ? String(data.district).trim() : (regRequest.district_id || ''));
-    let districtName = (!isHexId(data.district) && data.district !== undefined) ? String(data.district).trim() : (regRequest.district || '');
+    let districtId = '';
+    let districtName = '';
+    if (data.district_id !== undefined && data.district_id !== '') districtId = String(data.district_id).trim();
+    if (data.district !== undefined && data.district !== '') {
+      if (isHexId(data.district)) districtId = String(data.district).trim();
+      else districtName = String(data.district).trim();
+    }
+    if (!districtName && districtId && !isHexId(districtId)) districtName = districtId;
+    if (!districtId && !districtName) {
+      districtId = regRequest.district_id || '';
+      districtName = regRequest.district || '';
+    }
 
     // Extract taluka
-    let talukaId = data.taluka_id !== undefined ? String(data.taluka_id).trim() : (isHexId(data.taluka) ? String(data.taluka).trim() : (regRequest.taluka_id || ''));
-    let talukaName = (!isHexId(data.taluka) && data.taluka !== undefined) ? String(data.taluka).trim() : (regRequest.taluka || '');
+    let talukaId = '';
+    let talukaName = '';
+    if (data.taluka_id !== undefined && data.taluka_id !== '') talukaId = String(data.taluka_id).trim();
+    if (data.taluka !== undefined && data.taluka !== '') {
+      if (isHexId(data.taluka)) talukaId = String(data.taluka).trim();
+      else talukaName = String(data.taluka).trim();
+    }
+    if (!talukaName && talukaId && !isHexId(talukaId)) talukaName = talukaId;
+    if (!talukaId && !talukaName) {
+      talukaId = regRequest.taluka_id || '';
+      talukaName = regRequest.taluka || '';
+    }
 
     // Extract city
-    let cityId = data.city_id !== undefined ? String(data.city_id).trim() : (isHexId(data.city) ? String(data.city).trim() : (regRequest.city_id || ''));
-    let cityName = (!isHexId(data.city) && data.city !== undefined) ? String(data.city).trim() : (regRequest.city || '');
+    let cityId = '';
+    let cityName = '';
+    if (data.city_id !== undefined && data.city_id !== '') cityId = String(data.city_id).trim();
+    if (data.city !== undefined && data.city !== '') {
+      if (isHexId(data.city)) cityId = String(data.city).trim();
+      else cityName = String(data.city).trim();
+    }
+    if (!cityName && cityId && !isHexId(cityId)) cityName = cityId;
+    if (!cityId && !cityName) {
+      cityId = regRequest.city_id || '';
+      cityName = regRequest.city || '';
+    }
 
     // Extract village (user can pass village_id, village as ID, or village as name)
-    let villageId = data.village_id !== undefined ? String(data.village_id).trim() : (isHexId(data.village) ? String(data.village).trim() : (regRequest.village_id || ''));
-    let villageName = (!isHexId(data.village) && data.village !== undefined) ? String(data.village).trim() : (regRequest.village || '');
+    let villageId = '';
+    let villageName = '';
+    if (data.village_id !== undefined && data.village_id !== '') villageId = String(data.village_id).trim();
+    if (data.village_name !== undefined && data.village_name !== '') villageName = String(data.village_name).trim();
+    if (data.village !== undefined && data.village !== '') {
+      if (isHexId(data.village)) villageId = String(data.village).trim();
+      else villageName = String(data.village).trim();
+    }
+    if (!villageName && villageId && !isHexId(villageId)) villageName = villageId;
+    if (!villageId && !villageName) {
+      villageId = regRequest.village_id || '';
+      villageName = regRequest.village || '';
+    }
+
+    // Require village field in Step 3
+    const incomingVillage = (data.village || data.village_name || data.village_id || villageName || villageId || '').trim();
+    if (!incomingVillage && !regRequest.village && !regRequest.village_id) {
+      return apiResponse(res, 400, 'Village is required. Pehle village add/select karo.');
+    }
 
     const address = data.address || data.residential_address || data.complete_address || regRequest.address || '';
     const pincode = data.pincode !== undefined ? String(data.pincode).trim() : (regRequest.pincode || '');
@@ -619,32 +717,32 @@ const saveStep3 = async (req, res) => {
         return doc ? (doc[fallbackKey] || doc.name || '') : '';
       };
 
-      if (countryId) {
+      if (countryId && !countryName) {
         const c = getVal(countries, countryId, 'country') || getVal(countries, countryId, 'name');
         if (c) countryName = c;
       }
 
-      if (stateId) {
+      if (stateId && !stateName) {
         const s = getVal(states, stateId, 'state') || getVal(states, stateId, 'name');
         if (s) stateName = s;
       }
 
-      if (cityId) {
+      if (cityId && !cityName) {
         const ci = getVal(cities, cityId, 'city') || getVal(cities, cityId, 'name');
         if (ci) cityName = ci;
       }
 
-      if (districtId) {
+      if (districtId && !districtName) {
         const d = getVal(masters, districtId, 'name');
         if (d) districtName = d;
       }
 
-      if (talukaId) {
+      if (talukaId && !talukaName) {
         const t = getVal(masters, talukaId, 'name');
         if (t) talukaName = t;
       }
 
-      if (villageId) {
+      if (villageId && !villageName) {
         const v = getVal(masters, villageId, 'name');
         if (v) villageName = v;
       }
@@ -694,12 +792,21 @@ const saveStep3 = async (req, res) => {
     // Fallback: If villageName provided without villageId, try to resolve villageId from Master
     if (!villageId && villageName) {
       try {
-        const vDoc = await Master.findOne({
+        let vDoc = await Master.findOne({
           type: 'village',
           name: { $regex: new RegExp(`^${villageName.trim()}$`, 'i') }
         }).select('_id id name').lean();
+        if (!vDoc) {
+          const insertRes = await Master.create({
+            type: 'village',
+            name: villageName.trim(),
+            status: 1
+          });
+          vDoc = { _id: insertRes._id, name: villageName.trim() };
+        }
         if (vDoc) {
           villageId = String(vDoc._id || vDoc.id);
+          villageName = vDoc.name || villageName;
         }
       } catch (e) {}
     }
@@ -743,12 +850,13 @@ const saveStep3 = async (req, res) => {
       status_check: isStatusCheckStep3
     };
 
-    // Remove empty/null/undefined keys from step3Payload (preserve status_check boolean)
+    // Remove empty/null/undefined keys from step3Payload (preserve status_check boolean and village)
     for (const key of Object.keys(step3Payload)) {
-      if (key !== 'status_check' && (step3Payload[key] === '' || step3Payload[key] === null || step3Payload[key] === undefined)) {
+      if (key !== 'status_check' && key !== 'village' && (step3Payload[key] === '' || step3Payload[key] === null || step3Payload[key] === undefined)) {
         delete step3Payload[key];
       }
     }
+    step3Payload.village = villageName || '';
 
     // Retain full location fields in registration document
     regRequest.step3 = step3Payload;
@@ -1235,6 +1343,110 @@ const getRegistrationsList = async (req, res) => {
         { village: regex },
         { patti_para_pargana: regex }
       ];
+    }
+
+    // Village filtering: if logged-in user is a committee member (not super admin, manager, or staff), restrict to their village
+    const isSuperAdmin = Boolean(
+      req.user?.role === 'superadmin' || 
+      req.user?.is_super_admin === true || 
+      req.user?.committee_role === 'President' || 
+      req.user?.role_id?.name?.toLowerCase() === 'super admin' ||
+      req.user?.role_id?.name?.toLowerCase() === 'admin'
+    );
+
+    const roleNameLower = (req.user?.role_id?.name || req.user?.role_id?.roleName || req.user?.role || '').toLowerCase();
+    const isManagerOrStaff = Boolean(
+      roleNameLower.includes('manager') ||
+      roleNameLower.includes('staff') ||
+      roleNameLower.includes('office') ||
+      roleNameLower.includes('vice president') ||
+      roleNameLower.includes('money head') ||
+      roleNameLower.includes('prmukh')
+    );
+
+    const isCommittee = Boolean(
+      req.user?.is_committee === true || 
+      req.user?.role === 'committee' || 
+      (req.user?.committee_role && req.user?.committee_role !== 'Self')
+    );
+
+    let committeeVillage = (req.user?.village || req.user?.village_name || '').trim();
+    if (!committeeVillage && req.user?.village_id) {
+      try {
+        const Master = req?.tenantConn ? (req.tenantConn.models.Master || req.tenantConn.model('Master', require('../models/masterModel').schema)) : require('../models/masterModel');
+        if (mongoose.isValidObjectId(req.user.village_id)) {
+          const vDoc = await Master.findById(req.user.village_id).lean();
+          if (vDoc?.name) committeeVillage = vDoc.name;
+        }
+      } catch (_) {}
+    }
+
+    if (!committeeVillage && req.user?.number) {
+      try {
+        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
+        const uDoc = await UserModel.findOne({ number: req.user.number }).lean();
+        if (uDoc) {
+          committeeVillage = (uDoc.village || uDoc.village_name || '').trim();
+        }
+      } catch (_) {}
+    }
+
+    const targetVillage = (isCommittee && !isSuperAdmin && !isManagerOrStaff && committeeVillage) ? committeeVillage : (req.query.village ? String(req.query.village).trim() : '');
+
+    if (targetVillage) {
+      const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      let villageIdObj = null;
+      let villageNameObj = null;
+
+      try {
+        const Master = req?.tenantConn ? (req.tenantConn.models.Master || req.tenantConn.model('Master', require('../models/masterModel').schema)) : require('../models/masterModel');
+        const vDoc = await Master.findOne({
+          type: 'village',
+          $or: [
+            { name: new RegExp(`^${escapeRegex(targetVillage)}$`, 'i') },
+            ...(mongoose.isValidObjectId(targetVillage) ? [{ _id: targetVillage }] : [])
+          ]
+        }).lean();
+        if (vDoc) {
+          villageIdObj = String(vDoc._id || vDoc.id);
+          villageNameObj = vDoc.name;
+        }
+      } catch (_) {}
+
+      const cleanName = villageNameObj || targetVillage;
+      const vRegex = new RegExp(`^${escapeRegex(cleanName)}$`, 'i');
+
+      const orList = [
+        { village: vRegex },
+        { village: cleanName },
+        { 'step3.village': vRegex },
+        { 'step3.village': cleanName }
+      ];
+
+      if (villageIdObj) {
+        orList.push({ village_id: villageIdObj });
+        orList.push({ village: villageIdObj });
+        orList.push({ 'step3.village_id': villageIdObj });
+        orList.push({ 'step3.village': villageIdObj });
+      }
+      if (mongoose.isValidObjectId(targetVillage)) {
+        orList.push({ village_id: targetVillage });
+        orList.push({ village: targetVillage });
+        orList.push({ 'step3.village_id': targetVillage });
+        orList.push({ 'step3.village': targetVillage });
+      }
+
+      const villageClause = { $or: orList };
+
+      if (query.$or) {
+        query.$and = query.$and || [];
+        query.$and.push({ $or: query.$or }, villageClause);
+        delete query.$or;
+      } else if (query.$and) {
+        query.$and.push(villageClause);
+      } else {
+        Object.assign(query, villageClause);
+      }
     }
 
     const skip = (Number(page) - 1) * Number(limit);

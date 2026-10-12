@@ -56,6 +56,38 @@ const getActiveCommitteeModel = (req) => {
   return CommitteeMember;
 };
 
+const normalizeAuthUser = async (conn, rawUser, isCommittee = false) => {
+  if (!rawUser) return null;
+  const userObj = rawUser.toObject ? rawUser.toObject() : { ...rawUser };
+  if (isCommittee) {
+    userObj.is_committee = true;
+    if (!userObj.village && userObj.number) {
+      try {
+        const UserModel = conn.models.User || conn.model('User', User.schema);
+        const linkedUser = await UserModel.findOne({ number: userObj.number }).lean();
+        if (linkedUser) {
+          userObj.village = linkedUser.village || linkedUser.village_name || '';
+          userObj.village_id = linkedUser.village_id || '';
+        }
+      } catch (_) {}
+    }
+  }
+
+  // If village is an ObjectId, resolve to name
+  if (userObj.village && /^[0-9a-fA-F]{24}$/.test(String(userObj.village).trim())) {
+    try {
+      const Master = conn.models.Master || conn.model('Master', require('../models/masterModel').schema);
+      const vDoc = await Master.findById(userObj.village).lean();
+      if (vDoc?.name) {
+        userObj.village_id = userObj.village;
+        userObj.village = vDoc.name;
+        userObj.village_name = vDoc.name;
+      }
+    } catch (_) {}
+  }
+  return userObj;
+};
+
 const findUserInConnection = async (conn, decoded) => {
   if (!conn) return null;
   const UserModel = conn.models.User || conn.model('User', User.schema);
@@ -64,35 +96,27 @@ const findUserInConnection = async (conn, decoded) => {
 
   if (userId && mongoose.isValidObjectId(userId)) {
     const user = await UserModel.findById(userId).select('-password').populate('role_id');
-    if (user) return user;
+    if (user) return await normalizeAuthUser(conn, user, false);
 
     const committeeMember = await CMModel.findById(userId).select('-password').populate('role_id');
-    if (committeeMember) {
-      const cmObj = committeeMember.toObject ? committeeMember.toObject() : { ...committeeMember };
-      cmObj.is_committee = true;
-      return cmObj;
-    }
+    if (committeeMember) return await normalizeAuthUser(conn, committeeMember, true);
   }
 
   if (userId) {
     const user = await UserModel.findOne({ member_id: String(userId) }).select('-password').populate('role_id');
-    if (user) return user;
+    if (user) return await normalizeAuthUser(conn, user, false);
   }
 
   if (decoded.member_id) {
     const user = await UserModel.findOne({ member_id: String(decoded.member_id) }).select('-password').populate('role_id');
-    if (user) return user;
+    if (user) return await normalizeAuthUser(conn, user, false);
   }
 
   if (decoded.number) {
     const user = await UserModel.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
-    if (user) return user;
+    if (user) return await normalizeAuthUser(conn, user, false);
     const committeeMember = await CMModel.findOne({ number: String(decoded.number) }).select('-password').populate('role_id');
-    if (committeeMember) {
-      const cmObj = committeeMember.toObject ? committeeMember.toObject() : { ...committeeMember };
-      cmObj.is_committee = true;
-      return cmObj;
-    }
+    if (committeeMember) return await normalizeAuthUser(conn, committeeMember, true);
   }
 
   return null;
@@ -275,6 +299,7 @@ const authorizeUserUpdate = (req, res, next) => {
 
 const legacyPermissionFor = (permission) => {
   const legacyMap = {
+    'registrations.': 'members.list',
     'members.': 'users.manage',
     'committee.': 'committee.manage',
     'roles.': 'roles.manage',

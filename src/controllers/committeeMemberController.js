@@ -33,6 +33,8 @@ const getcommitteeMembers = async (req, res) => {
       role_id: member.role_id?._id ? String(member.role_id._id) : (member.role_id || ''),
       role_name: member.role_id?.name || '',
       designation: member.designation || '',
+      village: member.village || '',
+      village_id: member.village_id || '',
       status: Number(member.status ?? 1),
       image: publicUrl(req, member.signature || member.image || '')
     }));
@@ -45,7 +47,7 @@ const getcommitteeMembers = async (req, res) => {
 
 const createcommitteeMember = async (req, res) => {
   try {
-    const { first_name, middle_name, last_name, number, email, password, role_id, designation, status } = req.body;
+    const { first_name, middle_name, last_name, number, email, password, role_id, designation, status, village, village_id } = req.body;
 
     let hashedPassword = undefined;
     if (password && password.trim()) {
@@ -60,9 +62,24 @@ const createcommitteeMember = async (req, res) => {
       last_name: (last_name || '').trim(),
       number: (number || '').trim(),
       designation: (designation || '').trim(),
+      village: (village || '').trim(),
+      village_id: (village_id || '').trim(),
       image,
       status: status !== undefined ? Number(status) : 1
     };
+
+    if (!memberData.village && memberData.number) {
+      try {
+        const User = require('../models/userModels');
+        const linkedUser = await User.findOne({ number: memberData.number }).lean();
+        if (linkedUser) {
+          if (linkedUser.village) memberData.village = linkedUser.village;
+          if (linkedUser.village_id) memberData.village_id = linkedUser.village_id;
+        }
+      } catch (e) {
+        console.warn('Could not auto-fetch village for committee member from User:', e.message);
+      }
+    }
 
     if (email && email.trim()) {
       const emailLower = email.trim().toLowerCase();
@@ -121,6 +138,26 @@ const updatecommitteeMember = async (req, res) => {
 
     if (!updateData.role_id) {
       delete updateData.role_id;
+    }
+
+    if (!updateData.village && (updateData.number || id)) {
+      try {
+        const User = require('../models/userModels');
+        let ph = updateData.number;
+        if (!ph) {
+          const currentDoc = await CommitteeMember.findById(id).lean();
+          ph = currentDoc?.number;
+        }
+        if (ph) {
+          const linkedUser = await User.findOne({ number: ph }).lean();
+          if (linkedUser) {
+            if (linkedUser.village) updateData.village = linkedUser.village;
+            if (linkedUser.village_id) updateData.village_id = linkedUser.village_id;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
     }
 
     const committeeMember = await CommitteeMember.findByIdAndUpdate(id, updateData, { new: true }).populate('role_id');

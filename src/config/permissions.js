@@ -7,6 +7,7 @@ const ACTIONS = [
 
 const PERMISSION_MODULES = [
   { key: 'members', label: 'Members' },
+  { key: 'registrations', label: 'New Registrations' },
   { key: 'committee', label: 'Committee Members' },
   { key: 'roles', label: 'Roles' },
   { key: 'festivals', label: 'Festivals' },
@@ -41,6 +42,7 @@ const PERMISSIONS = [
 ];
 
 const LEGACY_PERMISSION_KEYS = [
+  'registrations.manage',
   'committee.manage',
   'users.manage',
   'roles.manage',
