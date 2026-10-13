@@ -5,6 +5,7 @@ const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
 const { uploadToExternalService } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
+const XLSX = require('xlsx');
 
 // Helper to resolve mandal by ID or fallback to default
 async function resolveMandal(mandalId) {
@@ -360,8 +361,12 @@ exports.getMonthlyContributions = async (req, res) => {
       query.status = statusFilter;
     }
 
+    if (req.query.payment_mode && req.query.payment_mode !== 'All') {
+      query.payment_mode = req.query.payment_mode;
+    }
+
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       query.$or = [
         { member_name: searchRegex },
         { member_number: searchRegex },
@@ -421,6 +426,166 @@ exports.getMonthlyContributions = async (req, res) => {
   } catch (error) {
     console.error('Error in getMonthlyContributions:', error);
     return apiResponse(res, 500, error.message || 'Failed to fetch monthly contributions');
+  }
+};
+
+// 9b. Export Month-wise Contributions to Excel (.xlsx)
+exports.exportMonthlyContributions = async (req, res) => {
+  try {
+    const mandal = await resolveMandal(req.query.mandal_id);
+    const currentMonthStr = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+    const month = req.query.month || currentMonthStr;
+    const statusFilter = req.query.status || 'All';
+    const paymentMode = req.query.payment_mode;
+    const search = (req.query.search || '').trim();
+
+    const mandalMemberIds = mandal.members || [];
+
+    // Ensure all mandal members have a contribution record for this month
+    if (mandalMemberIds.length > 0) {
+      const existingContribs = await MandalContribution.find({
+        mandal_id: mandal._id,
+        month: month
+      }).select('member_id').lean();
+
+      const existingMemberIdSet = new Set(existingContribs.map(c => c.member_id.toString()));
+      const missingMemberIds = mandalMemberIds.filter(id => !existingMemberIdSet.has(id.toString()));
+
+      if (missingMemberIds.length > 0) {
+        const missingUsers = await User.find({ _id: { $in: missingMemberIds } })
+          .select('first_name middle_name last_name number village image profile_image')
+          .lean();
+
+        const newRecords = missingUsers.map(user => ({
+          mandal_id: mandal._id,
+          member_id: user._id,
+          member_name: `${user.first_name || ''} ${user.middle_name || ''} ${user.last_name || ''}`.trim(),
+          member_number: user.number || '',
+          month: month,
+          amount: 0,
+          expected_amount: mandal.monthly_amount || 500,
+          status: 'Pending',
+          payment_mode: 'Cash'
+        }));
+
+        if (newRecords.length > 0) {
+          await MandalContribution.insertMany(newRecords, { ordered: false }).catch(() => {});
+        }
+      }
+    }
+
+    // Build query for month
+    let query = {
+      mandal_id: mandal._id,
+      month: month,
+      member_id: { $in: mandalMemberIds }
+    };
+
+    if (statusFilter && statusFilter !== 'All') {
+      query.status = statusFilter;
+    }
+
+    if (paymentMode && paymentMode !== 'All') {
+      query.payment_mode = paymentMode;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [
+        { member_name: searchRegex },
+        { member_number: searchRegex },
+        { receipt_number: searchRegex },
+        { transaction_id: searchRegex }
+      ];
+    }
+
+    if (req.query.ids) {
+      const ids = String(req.query.ids).split(',').map(id => id.trim()).filter(id => mongoose.isValidObjectId(id));
+      if (ids.length > 0) {
+        query._id = { $in: ids };
+      }
+    }
+
+    const contributions = await MandalContribution.find(query)
+      .populate('member_id', 'first_name middle_name last_name number village')
+      .sort({ status: 1, member_name: 1 })
+      .lean();
+
+    const excelRows = contributions.map((c, idx) => {
+      const u = c.member_id || {};
+      const fullName = c.member_name || `${u.first_name || ''} ${u.middle_name || ''} ${u.last_name || ''}`.trim() || 'Unknown Member';
+      const mobile = c.member_number || u.number || '';
+      const pDate = c.payment_date ? new Date(c.payment_date).toISOString().slice(0, 10) : '';
+
+      return {
+        'Sr No': idx + 1,
+        'Member Name': fullName,
+        'Mobile Number': mobile,
+        'Village': u.village || '',
+        'Month': c.month || month,
+        'Expected Amount (₹)': Number(c.expected_amount || mandal.monthly_amount || 500),
+        'Paid Amount (₹)': Number(c.amount || 0),
+        'Status': c.status || 'Pending',
+        'Payment Date': pDate || '-',
+        'Payment Mode': c.status === 'Paid' ? (c.payment_mode || 'Cash') : '-',
+        'Receipt Number': c.receipt_number || '-',
+        'Transaction ID': c.transaction_id || '-',
+        'Notes': c.notes || ''
+      };
+    });
+
+    const worksheetData = excelRows.length > 0 ? excelRows : [{
+      'Sr No': '',
+      'Member Name': '',
+      'Mobile Number': '',
+      'Village': '',
+      'Month': month,
+      'Expected Amount (₹)': mandal.monthly_amount || 500,
+      'Paid Amount (₹)': 0,
+      'Status': 'No records found',
+      'Payment Date': '-',
+      'Payment Mode': '-',
+      'Receipt Number': '-',
+      'Transaction ID': '-',
+      'Notes': ''
+    }];
+
+    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+    worksheet['!cols'] = [
+      { wch: 8 },  // Sr No
+      { wch: 30 }, // Member Name
+      { wch: 18 }, // Mobile Number
+      { wch: 18 }, // Village
+      { wch: 12 }, // Month
+      { wch: 20 }, // Expected Amount
+      { wch: 18 }, // Paid Amount
+      { wch: 14 }, // Status
+      { wch: 15 }, // Payment Date
+      { wch: 16 }, // Payment Mode
+      { wch: 18 }, // Receipt Number
+      { wch: 20 }, // Transaction ID
+      { wch: 25 }  // Notes
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    const sheetName = (mandal.name || 'Contributions').slice(0, 31).replace(/[:\\/?*\[\]]/g, '');
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Contributions');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    const safeMandalName = (mandal.name || 'Mandal').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Contributions_${safeMandalName}_${month}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.status(200).send(buffer);
+  } catch (error) {
+    console.error('Error in exportMonthlyContributions:', error);
+    return res.status(500).json({ status: 500, message: 'Failed to export monthly contributions', error: error.message });
   }
 };
 

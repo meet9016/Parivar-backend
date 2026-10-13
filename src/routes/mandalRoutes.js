@@ -19,6 +19,7 @@ router.post('/members/toggle', protect, parseForm, mandalController.toggleMandal
 router.post('/members/bulk', protect, parseForm, mandalController.bulkUpdateMandalMembers);
 
 // Monthly Contributions
+router.get('/contributions/export', protect, mandalController.exportMonthlyContributions);
 router.get('/contributions', protect, mandalController.getMonthlyContributions);
 router.put('/contributions/:id', protect, parseForm, mandalController.recordContribution);
 router.post('/contributions/bulk-mark-paid', protect, parseForm, mandalController.bulkMarkPaid);
