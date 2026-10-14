@@ -403,10 +403,12 @@ function renderMarriageCertificateHtml(data = {}) {
             <!-- 6. Kazi Saheb Details -->
             <div style="background: #ffffff; border: 1.2px solid #fde047; border-radius: 5px; padding: 6px 9px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
               ${renderSectionBadge('૬', 'નિકાહ પઢાવનાર કાઝી સાહેબની વિગત :')}
-              <div style="display: flex; align-items: center; gap: 6px; font-size: 11.5px; margin-top: 3px;">
+              <div style="display: flex; align-items: center; gap: 5px; font-size: 11.5px; margin-top: 3px; flex-wrap: wrap;">
                 <strong style="color: #854d0e; flex-shrink: 0; font-weight: 800;">• કાઝી સાહેબનું નામ:</strong>
                 ${renderUnderField(d.kaziName || '', 'auto', '1')}
-                <strong style="color: #854d0e; flex-shrink: 0; margin-left: 8px; font-weight: 800;">• સરનામું / મો. નં.:</strong>
+                <strong style="color: #854d0e; flex-shrink: 0; margin-left: 4px; font-weight: 800;">• આધાર કાર્ડ નં.:</strong>
+                ${renderUnderField(d.kaziAadhaar || '', '115px', null)}
+                <strong style="color: #854d0e; flex-shrink: 0; margin-left: 4px; font-weight: 800;">• સરનામું / મો.:</strong>
                 ${renderUnderField(d.kaziContact || '', 'auto', '1')}
               </div>
             </div>
