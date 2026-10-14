@@ -13,22 +13,38 @@ const requestData = (req) => ({
 // --- MEMBER / MOBILE CONTROLLER METHODS ---
 
 function resolveBaseUrl(req) {
-  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '');
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
-  if (req) {
+  let base = '';
+  if (process.env.BASE_URL) base = process.env.BASE_URL;
+  else if (process.env.APP_URL) base = process.env.APP_URL;
+  else if (req) {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5001';
-    return `${protocol}://${host}`;
+    base = `${protocol}://${host}`;
+  } else {
+    base = 'http://localhost:5001';
   }
-  return 'http://localhost:5001';
+  return base.replace(/\/api\/?$/, '').replace(/\/$/, '');
+}
+
+function buildDonationDownloadUrl(recId, req) {
+  const baseUrl = resolveBaseUrl(req);
+  const token = req?.query?.token || '';
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+
+  // In production (e.g. *.parivar.me) or when path contains /api/api, use /api/api prefix
+  const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '';
+  const referer = req?.headers?.['referer'] || '';
+  const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
+                    host.includes('parivar.me') ||
+                    referer.includes('parivar.me');
+
+  const prefix = isApiApi ? '/api/api' : '/api';
+  return `${baseUrl}${prefix}/donations/receipt/${recId}/download${tokenQuery}`;
 }
 
 function formatDonationRecord(d, req) {
-  const baseUrl = resolveBaseUrl(req);
   const id = String(d._id || d.id);
-  const token = req?.query?.token || '';
-  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-  const downloadUrl = `${baseUrl}/api/donations/receipt/${id}/download${tokenQuery}`;
+  const downloadUrl = buildDonationDownloadUrl(id, req);
 
   return {
     id,
@@ -460,11 +476,8 @@ const getDonationReceiptLink = async (req, res) => {
       });
     }
 
-    const baseUrl = resolveBaseUrl(req);
     const recId = String(donation.id || donation._id);
-    const token = req.query.token || '';
-    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-    const downloadUrl = `${baseUrl}/api/donations/receipt/${recId}/download${tokenQuery}`;
+    const downloadUrl = buildDonationDownloadUrl(recId, req);
 
     return res.status(200).json({
       status: 200,

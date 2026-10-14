@@ -53,6 +53,7 @@ app.post('/test', (req, res) => {
 // Unified API Routes
 const tenantMiddleware = require('./src/middleware/tenantMiddleware');
 app.use('/api', tenantMiddleware, routes);
+app.use('/api/api', tenantMiddleware, routes);
 
 app.use((req, res) => {
   res.status(404).json({
