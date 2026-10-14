@@ -76,6 +76,29 @@ router.get('/:id', protect, (req, res, next) => {
 });
 
 router.put('/:id', protect, parseForm, (req, res, next) => {
+    // Check if this is an Intekal / Deceased record update (e.g. from Mobile App)
+    const isDeceasedUpdate = Boolean(
+        req.body && (
+            req.body.is_deceased !== undefined ||
+            req.body.death_date !== undefined ||
+            req.body.janaza_date !== undefined ||
+            req.body.janaza_time !== undefined ||
+            req.body.janaza_place !== undefined ||
+            req.body.kabrastan !== undefined ||
+            req.body.death_note !== undefined
+        )
+    );
+
+    if (isDeceasedUpdate) {
+        // Strip admin-controlled role fields for security
+        ['role', 'role_id', 'permissions', 'is_committee', 'committee_role', 'status'].forEach((field) => {
+            if (req.body && Object.prototype.hasOwnProperty.call(req.body, field)) {
+                delete req.body[field];
+            }
+        });
+        return userController.updateUser(req, res, next);
+    }
+
     if (isAdminCall(req)) {
         return requirePermission(['members.edit', 'death.edit', 'death.delete'])(req, res, () => userController.updateUser(req, res, next));
     }

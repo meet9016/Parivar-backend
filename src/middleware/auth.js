@@ -240,6 +240,24 @@ const isAdminUser = (user = {}) => {
   );
 };
 
+const DECEASED_UPDATE_FIELDS = [
+  'is_deceased',
+  'death_date',
+  'death_time',
+  'death_place',
+  'death_note',
+  'janaza_date',
+  'janaza_time',
+  'janaza_place',
+  'kabrastan',
+  'ziyarat_date',
+  'ziyarat_time',
+  'ziyarat_place',
+  'besnu_date',
+  'besnu_time',
+  'besnu_place'
+];
+
 const authorizeUserUpdate = (req, res, next) => {
   const targetId = req.params.id || req.body?.id || req.body?.member_id;
   const isAdmin = isAdminUser(req.user);
@@ -253,6 +271,25 @@ const authorizeUserUpdate = (req, res, next) => {
   }
 
   if (isAdmin) {
+    return next();
+  }
+
+  // Check if this is an Intekal / Death record update
+  const isDeceasedUpdate = Boolean(
+    req.body && (
+      req.body.is_deceased !== undefined ||
+      DECEASED_UPDATE_FIELDS.some(field => Object.prototype.hasOwnProperty.call(req.body, field))
+    )
+  );
+
+  // Allow authenticated members to record/update Intekal details of members
+  if (isDeceasedUpdate) {
+    // Strip any admin-controlled role fields for security
+    ADMIN_CONTROLLED_USER_FIELDS.forEach((field) => {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, field)) {
+        delete req.body[field];
+      }
+    });
     return next();
   }
 
