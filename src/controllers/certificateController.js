@@ -372,31 +372,43 @@ exports.downloadCertificatePdf = async (req, res) => {
     const { id } = req.params;
     const record = await Certificate.findOne({ _id: id, isDeleted: { $ne: true } });
     if (!record) {
-      return res.status(404).send('Certificate not found');
+      return res.status(404).json({
+        status: 404,
+        message: 'Certificate not found',
+        data: null
+      });
     }
 
     const tenantSlug = getTenantSlugFromReq(req);
     let diskPath = resolveCertificateDiskPath(record.pdfPath, tenantSlug);
     const fileExists = diskPath && (await certificatePdfExists(record.pdfPath, tenantSlug));
 
-    // Self-healing recovery: If file is missing on disk, regenerate on-demand
-    if (!fileExists) {
-      console.warn(`[Self-Healing] Missing PDF detected for certificate ${id}. Regenerating...`);
-      await synchronizedGeneratePdf(`regen_${id}`, async () => {
-        const safeNum = (record.certificateNumber || 'doc').replace(/[^a-zA-Z0-9_\-]/g, '_');
-        const filename = `certificate-${record.type}-${safeNum}-${id.toString().slice(-6)}`;
-        const html = renderCertificateHtml(record.type, record.data);
-        const buffer = await generatePdfFromHtml(html, {
-          filename,
-          pageRanges: record.type === 'letterhead' ? undefined : '1-2',
-        });
-        const meta = await saveCertificatePdf({
-          buffer,
-          filename,
-          tenantSlug,
-          req,
-          type: record.type,
-        });
+    let pdfBuffer = null;
+    if (fileExists) {
+      try {
+        pdfBuffer = await fs.promises.readFile(diskPath);
+      } catch (readErr) {
+        console.warn('Could not read existing disk file, will regenerate:', readErr.message);
+      }
+    }
+
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      const safeNum = (record.certificateNumber || 'doc').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const filename = `certificate-${record.type}-${safeNum}-${id.toString().slice(-6)}`;
+      const html = renderCertificateHtml(record.type, record.data);
+      pdfBuffer = await generatePdfFromHtml(html, {
+        filename,
+        pageRanges: record.type === 'letterhead' ? undefined : '1-2',
+      });
+
+      // Save asynchronously in background so next time it's on disk
+      saveCertificatePdf({
+        buffer: pdfBuffer,
+        filename,
+        tenantSlug,
+        req,
+        type: record.type,
+      }).then(async (meta) => {
         record.pdfUrl = meta.pdfUrl;
         record.pdfPath = meta.pdfPath;
         record.fileName = meta.fileName;
@@ -404,23 +416,56 @@ exports.downloadCertificatePdf = async (req, res) => {
         record.isGenerated = true;
         record.generatedAt = meta.generatedAt;
         await record.save();
-        diskPath = resolveCertificateDiskPath(meta.pdfPath, tenantSlug);
-      });
+      }).catch(err => console.warn('Background cache save error:', err.message));
     }
 
     const downloadName = (record.fileName || `${record.type}-certificate.pdf`).replace(/\.pdf$/i, '');
-    const asciiFilename = downloadName.replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const encodedFilename = encodeURIComponent(downloadName);
+    const cleanFilename = downloadName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const isInline = req.query.view === 'true' || req.query.inline === 'true' || req.path.includes('/view');
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${asciiFilename}.pdf"; filename*=UTF-8''${encodedFilename}.pdf`);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${cleanFilename}.pdf"; filename*=UTF-8''${encodeURIComponent(downloadName)}.pdf`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
-    const fileStream = fs.createReadStream(diskPath);
-    return fileStream.pipe(res);
+    return res.status(200).send(pdfBuffer);
   } catch (error) {
     console.error('Error in downloadCertificatePdf:', error);
-    return res.status(500).send('Error downloading certificate PDF: ' + error.message);
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to download certificate PDF',
+      error: error.message
+    });
+  }
+};
+
+// ── 8B. Generate Secure Download Link for Certificate (similar to donations) ──
+exports.getCertificateDownloadLink = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const record = await Certificate.findOne({ _id: id, isDeleted: { $ne: true } });
+    if (!record) {
+      return apiResponse(res, 404, 'Certificate record not found');
+    }
+
+    const baseUrl = resolveBaseUrl(req);
+    const recId = String(record._id || record.id);
+    const token = req.query.token || req.headers.authorization?.replace(/^Bearer\s+/i, '') || '';
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    const downloadUrl = `${baseUrl}/api/certificates/download/${recId}${tokenQuery}`;
+    const filename = (record.fileName || `${record.type}-certificate.pdf`).replace(/\.pdf$/i, '');
+
+    return apiResponse(res, 200, 'Certificate download link generated successfully', {
+      id: recId,
+      certificate_number: record.certificateNumber || '',
+      type: record.type,
+      filename: `${filename}.pdf`,
+      download_url: downloadUrl,
+    });
+  } catch (error) {
+    console.error('Error in getCertificateDownloadLink:', error);
+    return apiResponse(res, 500, error.message || 'Server error');
   }
 };
 
