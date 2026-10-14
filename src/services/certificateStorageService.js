@@ -29,8 +29,9 @@ function resolveBaseUrl(req) {
     return process.env.APP_URL.replace(/\/$/, '');
   }
   if (req) {
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
-    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5000';
+    const headers = req.headers || {};
+    const protocol = headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = headers['x-forwarded-host'] || (typeof req.get === 'function' ? req.get('host') : headers.host) || 'localhost:5000';
     return `${protocol}://${host}`;
   }
   return 'http://localhost:5000';

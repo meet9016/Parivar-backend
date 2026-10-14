@@ -9,13 +9,22 @@ const {
   restoreCertificateRecord,
   viewCertificatePdf,
   downloadCertificatePdf,
+  getCertificateDownloadLink,
   regenerateCertificatePdf,
   bulkDownloadCertificates,
   saveCertificates,
   generateCertificatePdf,
 } = require('../controllers/certificateController');
 const { parseCertificateUpload } = require('../middleware/certificateUpload');
-const { protect } = require('../middleware/auth');
+const { protect, getTokenFromRequest } = require('../middleware/auth');
+
+const optionalProtect = async (req, res, next) => {
+  const token = getTokenFromRequest(req);
+  if (token) {
+    return protect(req, res, next);
+  }
+  return next();
+};
 
 // ── Generic Certificate Routes ──
 router.get('/', protect, getCertificates);
@@ -24,8 +33,9 @@ router.put('/', protect, parseCertificateUpload, saveCertificates);
 router.post('/generate-pdf', generateCertificatePdf);
 
 // ── Authenticated Document Stream & Bulk Operations ──
-router.get('/view/:id', protect, viewCertificatePdf);
-router.get('/download/:id', protect, downloadCertificatePdf);
+router.get('/view/:id', optionalProtect, viewCertificatePdf);
+router.get('/download/:id', optionalProtect, downloadCertificatePdf);
+router.get('/download-link/:id', optionalProtect, getCertificateDownloadLink);
 router.post('/bulk-download', protect, bulkDownloadCertificates);
 
 // ── Individual Dedicated Endpoints for 3 Certificate Types ──
