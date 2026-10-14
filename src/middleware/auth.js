@@ -100,7 +100,7 @@ const findUserInConnection = async (conn, decoded) => {
 
 const findUserFromToken = async (decoded, req) => {
   const activeConn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
-  
+
   // 1. Try in current active tenant connection
   if (activeConn) {
     const user = await findUserInConnection(activeConn, decoded);
@@ -117,7 +117,7 @@ const findUserFromToken = async (decoded, req) => {
         const user = await findUserInConnection(tokenTenantConn, decoded);
         if (user) return user;
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // 3. Fallback to Primary DB connection
@@ -274,7 +274,7 @@ const authorizeUserUpdate = (req, res, next) => {
     return next();
   }
 
-  // Check if this is an Intekal / Death record update
+  // Check if this is an vafat / Death record update
   const isDeceasedUpdate = Boolean(
     req.body && (
       req.body.is_deceased !== undefined ||
@@ -282,7 +282,7 @@ const authorizeUserUpdate = (req, res, next) => {
     )
   );
 
-  // Allow authenticated members to record/update Intekal details of members
+  // Allow authenticated members to record/update vafat details of members
   if (isDeceasedUpdate) {
     // Strip any admin-controlled role fields for security
     ADMIN_CONTROLLED_USER_FIELDS.forEach((field) => {

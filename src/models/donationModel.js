@@ -20,7 +20,8 @@ const donationSchema = new mongoose.Schema({
 
   donation_purpose: {
     type: String,
-    required: true,
+    required: false,
+    default: '',
     trim: true
   },
   date: {

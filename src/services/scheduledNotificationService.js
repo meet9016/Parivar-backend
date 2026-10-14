@@ -236,6 +236,60 @@ const checkAndSendScheduledNotifications = async () => {
         } catch (aErr) {
           console.error(`[Scheduler Anniversary Error in ${name}]:`, aErr.message);
         }
+
+        // 3. Process Overdue Mandal Contributions Notification (When month has ended, e.g. 1st day of month)
+        try {
+          const Mandal = conn.models.Mandal;
+          const MandalContribution = conn.models.MandalContribution;
+
+          // If today is the 1st day of the month (or after the due day), notify members who haven't paid previous month
+          if (Mandal && MandalContribution) {
+            const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const prevMonthStr = prevMonthDate.toISOString().slice(0, 7);
+            const reminderTrackKey = `mandal_reminder_${prevMonthStr}`;
+
+            const activeMandals = await Mandal.find({ status: 1 }).lean();
+
+            for (const mandal of activeMandals) {
+              const memberIds = mandal.members || [];
+              if (!memberIds.length) continue;
+
+              // Find pending contributions for previous month
+              const pendingList = await MandalContribution.find({
+                mandal_id: mandal._id,
+                month: prevMonthStr,
+                member_id: { $in: memberIds },
+                status: { $ne: 'Paid' },
+                overdue_notified_month: { $ne: prevMonthStr }
+              }).populate('member_id', 'first_name last_name number fcm_token').lean();
+
+              for (const item of pendingList) {
+                const uId = item.member_id?._id || item.member_id;
+                if (!uId) continue;
+                const mName = item.member_name || `${item.member_id?.first_name || ''} ${item.member_id?.last_name || ''}`.trim() || 'સભ્યશ્રી';
+                const amt = item.expected_amount || mandal.monthly_amount || 500;
+
+                console.log(`[Scheduler] 🔔 Auto-sending Overdue Mandal notification to "${mName}" for month ${prevMonthStr}`);
+
+                await MandalContribution.updateOne(
+                  { _id: item._id },
+                  { $set: { overdue_notified_month: prevMonthStr } }
+                );
+
+                await createAndBroadcast({
+                  title: `મંડળ યોગદાન બાકી નોટિફિકેશન (${mandal.name})`,
+                  body: `આદરણીય ${mName}, મહિનો ${prevMonthStr} પૂર્ણ થઈ ગયો છે અને તમારું યોગદાન ₹${Number(amt).toLocaleString('en-IN')} બાકી છે. કૃપા કરીને જમા કરાવી આપશો.`,
+                  type: 'mandal',
+                  ref_id: String(mandal._id),
+                  target_type: 'specific',
+                  target_users: [String(uId)]
+                });
+              }
+            }
+          }
+        } catch (mandalErr) {
+          console.error(`[Scheduler Mandal Overdue Error in ${name}]:`, mandalErr.message);
+        }
       }
     }
   } catch (globalErr) {

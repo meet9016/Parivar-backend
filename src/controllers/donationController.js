@@ -93,10 +93,10 @@ const addDonation = async (req, res) => {
       status
     } = requestData(req);
 
-    if (!donator_name || !donate_amount || !donation_purpose || !date) {
+    if (!donator_name || !donate_amount || !date) {
       return res.status(400).json({
         status: 400,
-        message: 'All fields are mandatory',
+        message: 'Donator name, amount, and date are required',
         data: []
       });
     }
@@ -288,10 +288,10 @@ const adminSaveDonation = async (req, res) => {
     } = requestData(req);
 
     // For new donation, check mandatory fields
-    if (!existing && (!donator_name || !donate_amount || !donation_purpose || !date)) {
+    if (!existing && (!donator_name || !donate_amount || !date)) {
       return res.status(400).json({
         status: 400,
-        message: 'All fields are mandatory',
+        message: 'Donator name, amount, and date are required',
         data: []
       });
     }

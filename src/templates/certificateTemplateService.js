@@ -432,6 +432,9 @@ function renderMarriageCertificateHtml(data = {}) {
                 <div>
                   <strong style="color: #166534; font-weight: 800;">૫. સત્તાવાર દસ્તાવેજ:</strong> આ પ્રમાણપત્ર મુસ્લિમ પર્સનલ લો (શરીઅત) તથા 'ધ ગુજરાત રજીસ્ટ્રેશન ઓફ મેરેજીસ એક્ટ' અન્વયે જમાઅતના અધિકૃત દસ્તાવેજ તરીકે માન્ય રહેશે.
                 </div>
+                <div>
+                  <strong style="color: #166534; font-weight: 800;">૬. UCC લગ્ન નોંધણી:</strong> UCC ના કાયદા મુજબ ૬૦ દિવસની અંદર લગ્ન નોંધણી કરાવી લેવી.
+                </div>
               </div>
             </div>
 

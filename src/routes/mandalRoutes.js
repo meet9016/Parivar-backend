@@ -23,6 +23,7 @@ router.get('/contributions/export', protect, mandalController.exportMonthlyContr
 router.get('/contributions', protect, mandalController.getMonthlyContributions);
 router.put('/contributions/:id', protect, parseForm, mandalController.recordContribution);
 router.post('/contributions/bulk-mark-paid', protect, parseForm, mandalController.bulkMarkPaid);
+router.post('/contributions/send-reminders', protect, parseForm, mandalController.sendPendingReminders);
 
 // Payment History (compatibility)
 router.get('/history', protect, mandalController.getPaymentHistory);

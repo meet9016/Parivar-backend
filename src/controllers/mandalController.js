@@ -6,6 +6,7 @@ const { apiResponse } = require('../utils/apiResponse');
 const { uploadToExternalService } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
 const XLSX = require('xlsx');
+const { createAndBroadcast } = require('./notificationController');
 
 // Helper to resolve mandal by ID or fallback to default
 async function resolveMandal(mandalId) {
@@ -398,6 +399,68 @@ exports.getMonthlyContributions = async (req, res) => {
     const expectedAmount = totalMembers * (mandal.monthly_amount || 500);
     const pendingAmount = Math.max(0, expectedAmount - collectedAmount);
 
+    // Payment Mode Breakdown for this Mandal
+    let cashCollected = 0;
+    let bankOnlineCollected = 0;
+    paidList.forEach(c => {
+      const mode = String(c.payment_mode || 'Cash').toLowerCase().trim();
+      const amt = Number(c.amount || 0);
+      if (mode === 'cash') {
+        cashCollected += amt;
+      } else {
+        // 'online', 'bank', 'bank transfer', 'upi', 'cheque', etc.
+        bankOnlineCollected += amt;
+      }
+    });
+
+    // Grand Total across ALL Mandals for this month
+    const allMandalsList = await Mandal.find().select('_id name monthly_amount').lean();
+    const allMandalsPaidMonth = await MandalContribution.find({
+      month: month,
+      status: 'Paid'
+    }).lean();
+
+    let grandTotalCollected = 0;
+    let grandCashCollected = 0;
+    let grandBankOnlineCollected = 0;
+
+    // Group by mandal_id
+    const mandalStatsMap = {};
+    allMandalsList.forEach(m => {
+      mandalStatsMap[m._id.toString()] = {
+        mandal_id: m._id,
+        name: m.name,
+        monthly_amount: m.monthly_amount || 500,
+        total_collected: 0,
+        cash_collected: 0,
+        bank_collected: 0
+      };
+    });
+
+    allMandalsPaidMonth.forEach(c => {
+      const mode = String(c.payment_mode || 'Cash').toLowerCase().trim();
+      const amt = Number(c.amount || 0);
+      const mId = c.mandal_id ? c.mandal_id.toString() : '';
+
+      grandTotalCollected += amt;
+      if (mode === 'cash') {
+        grandCashCollected += amt;
+      } else {
+        grandBankOnlineCollected += amt;
+      }
+
+      if (mId && mandalStatsMap[mId]) {
+        mandalStatsMap[mId].total_collected += amt;
+        if (mode === 'cash') {
+          mandalStatsMap[mId].cash_collected += amt;
+        } else {
+          mandalStatsMap[mId].bank_collected += amt;
+        }
+      }
+    });
+
+    const mandalsBreakdown = Object.values(mandalStatsMap);
+
     const formatted = contributions.map(c => ({
       ...c,
       id: c._id,
@@ -409,12 +472,20 @@ exports.getMonthlyContributions = async (req, res) => {
       data: formatted,
       summary: {
         month,
+        mandal_monthly_amount: mandal.monthly_amount || 500,
         total_members: totalMembers,
         paid_members: paidMembersCount,
         pending_members: pendingMembersCount,
         expected_amount: expectedAmount,
         collected_amount: collectedAmount,
-        pending_amount: pendingAmount
+        pending_amount: pendingAmount,
+        cash_collected: cashCollected,
+        bank_online_collected: bankOnlineCollected,
+        // All Mandals Grand Total & Individual Breakdown
+        grand_total_collected: grandTotalCollected,
+        grand_cash_collected: grandCashCollected,
+        grand_bank_online_collected: grandBankOnlineCollected,
+        mandals_breakdown: mandalsBreakdown
       },
       pagination: {
         page,
@@ -804,3 +875,98 @@ exports.getMandalDashboard = async (req, res) => {
     return apiResponse(res, 500, error.message || 'Failed to fetch mandal dashboard');
   }
 };
+
+// 14. Send Pending Contribution Reminders Notification
+// Sends notification to members who have pending contributions for previous / current month
+exports.sendPendingReminders = async (req, res) => {
+  try {
+    const { month, mandal_id } = req.body || {};
+    const targetMonth = month || new Date().toISOString().slice(0, 7);
+
+    let mandalQuery = { status: 1 };
+    if (mandal_id && mongoose.isValidObjectId(mandal_id)) {
+      mandalQuery = { _id: mandal_id };
+    }
+    const mandals = await Mandal.find(mandalQuery).lean();
+
+    let totalNotificationsSent = 0;
+    const notifiedMembers = [];
+
+    for (const mandal of mandals) {
+      const memberIds = mandal.members || [];
+      if (!memberIds.length) continue;
+
+      // Find pending contributions for this mandal & month
+      const pendingContribs = await MandalContribution.find({
+        mandal_id: mandal._id,
+        month: targetMonth,
+        member_id: { $in: memberIds },
+        status: { $ne: 'Paid' }
+      }).populate('member_id', 'first_name last_name number fcm_token').lean();
+
+      // Also identify members in mandal who do not even have a contribution record created yet
+      const existingMemberIds = new Set(pendingContribs.map(c => String(c.member_id?._id || c.member_id)));
+      const paidContribs = await MandalContribution.find({
+        mandal_id: mandal._id,
+        month: targetMonth,
+        member_id: { $in: memberIds },
+        status: 'Paid'
+      }).select('member_id').lean();
+      paidContribs.forEach(c => existingMemberIds.add(String(c.member_id)));
+
+      const unrecordedMemberIds = memberIds.filter(id => !existingMemberIds.has(String(id)));
+      const unrecordedUsers = unrecordedMemberIds.length > 0 
+        ? await User.find({ _id: { $in: unrecordedMemberIds } }, 'first_name last_name number fcm_token').lean()
+        : [];
+
+      // Combine both
+      const allPendingMembers = [
+        ...pendingContribs.map(c => ({
+          userId: c.member_id?._id || c.member_id,
+          name: c.member_name || `${c.member_id?.first_name || ''} ${c.member_id?.last_name || ''}`.trim() || 'Mandal Member',
+          pendingAmount: c.expected_amount || mandal.monthly_amount || 500,
+          mandalName: mandal.name
+        })),
+        ...unrecordedUsers.map(u => ({
+          userId: u._id,
+          name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Mandal Member',
+          pendingAmount: mandal.monthly_amount || 500,
+          mandalName: mandal.name
+        }))
+      ];
+
+      for (const item of allPendingMembers) {
+        if (!item.userId) continue;
+        const title = `મંડળ યોગદાન રીમાઇન્ડર (${item.mandalName})`;
+        const body = `આદરણીય ${item.name}, મહિનો ${targetMonth} નું મંડળ યોગદાન બાકી છે. બાકી રકમ: ₹${Number(item.pendingAmount).toLocaleString('en-IN')}. મહેરબાની કરીને જમા કરાવી આપશો.`;
+
+        await createAndBroadcast({
+          title,
+          body,
+          type: 'mandal',
+          ref_id: String(mandal._id),
+          target_type: 'specific',
+          target_users: [String(item.userId)]
+        });
+
+        totalNotificationsSent++;
+        notifiedMembers.push({
+          member_id: item.userId,
+          name: item.name,
+          mandal: item.mandalName,
+          amount: item.pendingAmount
+        });
+      }
+    }
+
+    return apiResponse(res, 200, `${totalNotificationsSent} સભ્યોને પેન્ડિંગ રકમનું નોટિફિકેશન સફળતાપૂર્વક મોકલવામાં આવ્યું છે.`, {
+      total_sent: totalNotificationsSent,
+      month: targetMonth,
+      members: notifiedMembers
+    });
+  } catch (error) {
+    console.error('Error in sendPendingReminders:', error);
+    return apiResponse(res, 500, error.message || 'Failed to send pending notifications');
+  }
+};
+

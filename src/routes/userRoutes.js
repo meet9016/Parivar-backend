@@ -76,7 +76,7 @@ router.get('/:id', protect, (req, res, next) => {
 });
 
 router.put('/:id', protect, parseForm, (req, res, next) => {
-    // Check if this is an Intekal / Deceased record update (e.g. from Mobile App)
+    // Check if this is an vafat / Deceased record update (e.g. from Mobile App)
     const isDeceasedUpdate = Boolean(
         req.body && (
             req.body.is_deceased !== undefined ||
