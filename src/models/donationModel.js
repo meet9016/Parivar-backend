@@ -27,6 +27,16 @@ const donationSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  payment_mode: {
+    type: String,
+    default: 'Cash',
+    trim: true
+  },
+  receipt_number: {
+    type: String,
+    default: '',
+    trim: true
+  },
 
   status: {
     type: Number,

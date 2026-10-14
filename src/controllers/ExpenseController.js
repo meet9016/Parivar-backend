@@ -85,10 +85,10 @@ const adminSaveExpense = async (req, res) => {
       remove_image
     } = requestData(req);
 
-    if (!existing && (!date || amount === undefined || amount === null || String(amount).trim() === '' || (!req.file && !image))) {
+    if (!existing && (!date || amount === undefined || amount === null || String(amount).trim() === '')) {
       return res.status(400).json({
         status: 400,
-        message: 'Date, Amount, and Proof / Receipt are required',
+        message: 'Date and Amount are required',
         data: []
       });
     }

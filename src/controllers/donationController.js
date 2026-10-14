@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Donation = require('../models/donationModel');
 const { apiResponse } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+const { generatePdfFromHtml } = require('../services/pdfService');
+const { renderDonationReceiptHtml } = require('../templates/donationReceiptTemplateService');
 
 const requestData = (req) => ({
   ...req.query,
@@ -9,6 +11,37 @@ const requestData = (req) => ({
 });
 
 // --- MEMBER / MOBILE CONTROLLER METHODS ---
+
+function resolveBaseUrl(req) {
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '');
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
+  if (req) {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5001';
+    return `${protocol}://${host}`;
+  }
+  return 'http://localhost:5001';
+}
+
+function formatDonationRecord(d, req) {
+  const baseUrl = resolveBaseUrl(req);
+  const id = String(d._id || d.id);
+  const token = req?.query?.token || '';
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+  const downloadUrl = `${baseUrl}/api/donations/receipt/${id}/download${tokenQuery}`;
+
+  return {
+    id,
+    donator_name: d.donator_name || '',
+    donate_amount: Number(d.donate_amount || 0),
+    donation_purpose: d.donation_purpose || '',
+    date: d.date || '',
+    payment_mode: d.payment_mode || 'Cash',
+    receipt_number: d.receipt_number || `DON-${id.slice(-6).toUpperCase()}`,
+    download_url: downloadUrl,
+    status: Number(d.status ?? 1)
+  };
+}
 
 const getDonations = async (req, res) => {
   try {
@@ -20,14 +53,7 @@ const getDonations = async (req, res) => {
     return res.status(200).json({
       status: 200,
       message: 'Donations retrieved successfully',
-      data: donations.map(d => ({
-        id: d._id || String(d._id),
-        donator_name: d.donator_name || '',
-        donate_amount: Number(d.donate_amount || 0),
-        donation_purpose: d.donation_purpose || '',
-        date: d.date || '',
-        status: Number(d.status ?? 1)
-      })),
+      data: donations.map(d => formatDonationRecord(d, req)),
       ...(pagination ? { pagination } : {})
     });
   } catch (error) {
@@ -47,6 +73,7 @@ const addDonation = async (req, res) => {
       donate_amount,
       donation_purpose,
       date,
+      payment_mode,
       status
     } = requestData(req);
 
@@ -64,6 +91,7 @@ const addDonation = async (req, res) => {
       donate_amount: Number(donate_amount),
       donation_purpose,
       date,
+      payment_mode: payment_mode || 'Cash',
       status: status === undefined ? 1 : Number(status),
       cdate: new Date().toISOString().slice(0, 10)
     };
@@ -78,6 +106,7 @@ const addDonation = async (req, res) => {
         donate_amount: Number(donation.donate_amount || 0),
         donation_purpose: donation.donation_purpose || '',
         date: donation.date || '',
+        payment_mode: donation.payment_mode || 'Cash',
         status: Number(donation.status ?? 1)
       }
     });
@@ -116,6 +145,7 @@ const updateDonation = async (req, res) => {
       donate_amount,
       donation_purpose,
       date,
+      payment_mode,
       status
     } = requestData(req);
 
@@ -123,6 +153,7 @@ const updateDonation = async (req, res) => {
     if (donate_amount !== undefined) donation.donate_amount = Number(donate_amount);
     if (donation_purpose !== undefined) donation.donation_purpose = donation_purpose;
     if (date !== undefined) donation.date = date;
+    if (payment_mode !== undefined) donation.payment_mode = payment_mode;
     if (status !== undefined) donation.status = Number(status);
 
     await donation.save();
@@ -135,6 +166,7 @@ const updateDonation = async (req, res) => {
         donate_amount: Number(donation.donate_amount || 0),
         donation_purpose: donation.donation_purpose || '',
         date: donation.date || '',
+        payment_mode: donation.payment_mode || 'Cash',
         status: Number(donation.status ?? 1)
       }
     });
@@ -195,14 +227,7 @@ const adminGetDonations = async (req, res) => {
     return res.status(200).json({
       status: 200,
       message: 'Donations retrieved successfully',
-      data: donations.map(d => ({
-        id: d._id || String(d._id),
-        donator_name: d.donator_name || '',
-        donate_amount: Number(d.donate_amount || 0),
-        donation_purpose: d.donation_purpose || '',
-        date: d.date || '',
-        status: Number(d.status ?? 1)
-      })),
+      data: donations.map(d => formatDonationRecord(d, req)),
       ...(pagination ? { pagination } : {})
     });
   } catch (error) {
@@ -242,10 +267,9 @@ const adminSaveDonation = async (req, res) => {
       donate_amount,
       donation_purpose,
       date,
+      payment_mode,
       status
     } = requestData(req);
-
-
 
     // For new donation, check mandatory fields
     if (!existing && (!donator_name || !donate_amount || !donation_purpose || !date)) {
@@ -265,6 +289,7 @@ const adminSaveDonation = async (req, res) => {
     if (donate_amount !== undefined) updateFields.donate_amount = Number(donate_amount);
     if (donation_purpose !== undefined) updateFields.donation_purpose = donation_purpose;
     if (date !== undefined) updateFields.date = date;
+    if (payment_mode !== undefined) updateFields.payment_mode = payment_mode;
     if (status !== undefined) updateFields.status = Number(status);
 
     donation.set(updateFields);
@@ -279,6 +304,7 @@ const adminSaveDonation = async (req, res) => {
         donate_amount: Number(donation.donate_amount || 0),
         donation_purpose: donation.donation_purpose || '',
         date: donation.date || '',
+        payment_mode: donation.payment_mode || 'Cash',
         status: Number(donation.status ?? 1)
       }
     });
@@ -358,6 +384,107 @@ const exportDonations = async (req, res) => {
 
 
 
+const downloadDonationReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.push({ _id: id });
+    }
+
+    const donation = await Donation.findOne({
+      $or: orConditions
+    });
+
+    if (!donation) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Donation record not found',
+        data: null
+      });
+    }
+
+    // Resolve tenant / community config if available
+    let config = null;
+    try {
+      const Config = require('../models/configModel');
+      config = await Config.findOne().lean();
+    } catch (_) { }
+
+    const html = await renderDonationReceiptHtml(donation, config || {});
+
+    const cleanDonor = (donation.donator_name || 'Donor').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const recId = String(donation.id || donation._id).slice(-6).toUpperCase();
+    const filename = `Donation_Receipt_${cleanDonor}_${recId}`;
+
+    const pdfBuffer = await generatePdfFromHtml(html, {
+      filename,
+    });
+
+
+    const isInline = req.query.view === 'true' || req.query.inline === 'true' || req.path.includes('/view');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${filename}.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.status(200).send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating donation receipt PDF:', error);
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to generate donation receipt PDF',
+      error: error.message
+    });
+  }
+};
+
+const getDonationReceiptLink = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.push({ _id: id });
+    }
+
+    const donation = await Donation.findOne({
+      $or: orConditions
+    });
+
+    if (!donation) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Donation record not found',
+        data: null
+      });
+    }
+
+    const baseUrl = resolveBaseUrl(req);
+    const recId = String(donation.id || donation._id);
+    const token = req.query.token || '';
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    const downloadUrl = `${baseUrl}/api/donations/receipt/${recId}/download${tokenQuery}`;
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Receipt download link generated successfully',
+      data: {
+        id: recId,
+        donator_name: donation.donator_name || '',
+        receipt_number: donation.receipt_number || `DON-${recId.slice(-6).toUpperCase()}`,
+        download_url: downloadUrl
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to retrieve receipt link',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getDonations,
   addDonation,
@@ -366,6 +493,7 @@ module.exports = {
   adminGetDonations,
   adminSaveDonation,
   adminDeleteDonation,
-  exportDonations
-
+  exportDonations,
+  downloadDonationReceipt,
+  getDonationReceiptLink,
 };
