@@ -1370,6 +1370,10 @@ const getRegistrationsList = async (req, res) => {
       (req.user?.committee_role && req.user?.committee_role !== 'Self')
     );
 
+    const { getUserRoleScope } = require('../utils/roleScopeHelper');
+    const userScope = await getUserRoleScope(req.user, req.tenantConn);
+    const scopeClause = userScope.isRestricted ? userScope.buildQueryClause('registration') : null;
+
     let committeeVillage = (req.user?.village || req.user?.village_name || '').trim();
     if (!committeeVillage && req.user?.village_id) {
       try {
@@ -1391,9 +1395,13 @@ const getRegistrationsList = async (req, res) => {
       } catch (_) {}
     }
 
-    const targetVillage = (isCommittee && !isSuperAdmin && !isManagerOrStaff && committeeVillage) ? committeeVillage : (req.query.village ? String(req.query.village).trim() : '');
+    const targetVillage = (userScope.scopeType === 'village' && (userScope.villageName || committeeVillage))
+      ? (userScope.villageName || committeeVillage)
+      : (req.query.village ? String(req.query.village).trim() : '');
 
-    if (targetVillage) {
+    let effectiveRegClause = (scopeClause && Object.keys(scopeClause).length > 0) ? scopeClause : null;
+
+    if (!effectiveRegClause && targetVillage) {
       const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       let villageIdObj = null;
       let villageNameObj = null;
@@ -1436,16 +1444,18 @@ const getRegistrationsList = async (req, res) => {
         orList.push({ 'step3.village': targetVillage });
       }
 
-      const villageClause = { $or: orList };
+      effectiveRegClause = { $or: orList };
+    }
 
+    if (effectiveRegClause) {
       if (query.$or) {
         query.$and = query.$and || [];
-        query.$and.push({ $or: query.$or }, villageClause);
+        query.$and.push({ $or: query.$or }, effectiveRegClause);
         delete query.$or;
       } else if (query.$and) {
-        query.$and.push(villageClause);
+        query.$and.push(effectiveRegClause);
       } else {
-        Object.assign(query, villageClause);
+        Object.assign(query, effectiveRegClause);
       }
     }
 

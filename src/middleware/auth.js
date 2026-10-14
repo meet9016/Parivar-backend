@@ -59,24 +59,33 @@ const getActiveCommitteeModel = (req) => {
 const normalizeAuthUser = async (conn, rawUser, isCommittee = false) => {
   if (!rawUser) return null;
   const userObj = rawUser.toObject ? rawUser.toObject() : { ...rawUser };
+  const UserModel = conn.models.User || conn.model('User', User.schema);
+  const Master = conn.models.Master || conn.model('Master', require('../models/masterModel').schema);
+
   if (isCommittee) {
     userObj.is_committee = true;
-    if (!userObj.village && userObj.number) {
+    if (userObj.number) {
       try {
-        const UserModel = conn.models.User || conn.model('User', User.schema);
         const linkedUser = await UserModel.findOne({ number: userObj.number }).lean();
         if (linkedUser) {
-          userObj.village = linkedUser.village || linkedUser.village_name || '';
-          userObj.village_id = linkedUser.village_id || '';
+          if (!userObj.village && (linkedUser.village || linkedUser.village_name)) {
+            userObj.village = linkedUser.village || linkedUser.village_name || '';
+            userObj.village_id = linkedUser.village_id || '';
+          }
+          if (!userObj.city_id && linkedUser.city_id) userObj.city_id = linkedUser.city_id;
+          if (!userObj.city && (linkedUser.city || linkedUser.city_name)) userObj.city = linkedUser.city || linkedUser.city_name || '';
+          if (!userObj.district_id && linkedUser.district_id) userObj.district_id = linkedUser.district_id;
+          if (!userObj.district && (linkedUser.district || linkedUser.district_name)) userObj.district = linkedUser.district || linkedUser.district_name || '';
+          if (!userObj.state_id && linkedUser.state_id) userObj.state_id = linkedUser.state_id;
+          if (!userObj.state && (linkedUser.state || linkedUser.state_name)) userObj.state = linkedUser.state || linkedUser.state_name || '';
         }
       } catch (_) {}
     }
   }
 
-  // If village is an ObjectId, resolve to name
+  // Resolve village if it's an ObjectId or missing name
   if (userObj.village && /^[0-9a-fA-F]{24}$/.test(String(userObj.village).trim())) {
     try {
-      const Master = conn.models.Master || conn.model('Master', require('../models/masterModel').schema);
       const vDoc = await Master.findById(userObj.village).lean();
       if (vDoc?.name) {
         userObj.village_id = userObj.village;
@@ -84,7 +93,64 @@ const normalizeAuthUser = async (conn, rawUser, isCommittee = false) => {
         userObj.village_name = vDoc.name;
       }
     } catch (_) {}
+  } else if (!userObj.village && userObj.village_id && /^[0-9a-fA-F]{24}$/.test(String(userObj.village_id).trim())) {
+    try {
+      const vDoc = await Master.findById(userObj.village_id).lean();
+      if (vDoc?.name) {
+        userObj.village = vDoc.name;
+        userObj.village_name = vDoc.name;
+      }
+    } catch (_) {}
   }
+
+  // Resolve state if state is an ObjectId or missing name
+  if (userObj.state && /^[0-9a-fA-F]{24}$/.test(String(userObj.state).trim())) {
+    try {
+      const sDoc = await Master.findById(userObj.state).lean();
+      if (sDoc?.name) {
+        userObj.state_id = userObj.state;
+        userObj.state = sDoc.name;
+      }
+    } catch (_) {}
+  } else if (!userObj.state && userObj.state_id && /^[0-9a-fA-F]{24}$/.test(String(userObj.state_id).trim())) {
+    try {
+      const sDoc = await Master.findById(userObj.state_id).lean();
+      if (sDoc?.name) userObj.state = sDoc.name;
+    } catch (_) {}
+  }
+
+  // Resolve district if district is an ObjectId or missing name
+  if (userObj.district && /^[0-9a-fA-F]{24}$/.test(String(userObj.district).trim())) {
+    try {
+      const dDoc = await Master.findById(userObj.district).lean();
+      if (dDoc?.name) {
+        userObj.district_id = userObj.district;
+        userObj.district = dDoc.name;
+      }
+    } catch (_) {}
+  } else if (!userObj.district && userObj.district_id && /^[0-9a-fA-F]{24}$/.test(String(userObj.district_id).trim())) {
+    try {
+      const dDoc = await Master.findById(userObj.district_id).lean();
+      if (dDoc?.name) userObj.district = dDoc.name;
+    } catch (_) {}
+  }
+
+  // Resolve city if city is an ObjectId or missing name
+  if (userObj.city && /^[0-9a-fA-F]{24}$/.test(String(userObj.city).trim())) {
+    try {
+      const cDoc = await Master.findById(userObj.city).lean();
+      if (cDoc?.name) {
+        userObj.city_id = userObj.city;
+        userObj.city = cDoc.name;
+      }
+    } catch (_) {}
+  } else if (!userObj.city && userObj.city_id && /^[0-9a-fA-F]{24}$/.test(String(userObj.city_id).trim())) {
+    try {
+      const cDoc = await Master.findById(userObj.city_id).lean();
+      if (cDoc?.name) userObj.city = cDoc.name;
+    } catch (_) {}
+  }
+
   return userObj;
 };
 

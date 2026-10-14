@@ -499,6 +499,10 @@ const getUsers = async (req, res) => {
       (req.user?.committee_role && req.user?.committee_role !== 'Self')
     );
 
+    const { getUserRoleScope } = require('../utils/roleScopeHelper');
+    const userScope = await getUserRoleScope(req.user, req.tenantConn);
+    const scopeClause = userScope.isRestricted ? userScope.buildQueryClause('user') : null;
+
     let committeeVillage = (req.user?.village || req.user?.village_name || '').trim();
     if (!committeeVillage && req.user?.village_id) {
       try {
@@ -520,7 +524,9 @@ const getUsers = async (req, res) => {
       } catch (_) {}
     }
 
-    const targetVillage = (isCommittee && !isSuperAdmin && committeeVillage) ? committeeVillage : (req.query.village ? String(req.query.village).trim() : '');
+    const targetVillage = (userScope.scopeType === 'village' && (userScope.villageName || committeeVillage))
+      ? (userScope.villageName || committeeVillage)
+      : (req.query.village ? String(req.query.village).trim() : '');
 
     if (req.query.gender) query.gender = req.query.gender;
     if (req.query.blood_group) query.blood_group = req.query.blood_group;
@@ -614,7 +620,9 @@ const getUsers = async (req, res) => {
 
       const headClauses = [headCriteria];
 
-      if (targetVillage) {
+      if (scopeClause && Object.keys(scopeClause).length > 0) {
+        headClauses.push(scopeClause);
+      } else if (targetVillage) {
         const vRegex = new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i');
         headClauses.push({
           $or: [
@@ -841,8 +849,31 @@ const getUsers = async (req, res) => {
         return formattedHead;
       });
 
+      // Also count total individual members across the entire query
+      let totalIndividualMembers = totalHeads;
+      try {
+        const memberCountClauses = [];
+        if (effectiveScopeClause && Object.keys(effectiveScopeClause).length > 0) {
+          memberCountClauses.push(effectiveScopeClause);
+        }
+        if (req.query.status !== undefined && req.query.status !== '') {
+          const sVal = Number(req.query.status);
+          if (!isNaN(sVal)) {
+            if (sVal === 1) {
+              memberCountClauses.push({ $or: [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }] });
+            } else {
+              memberCountClauses.push({ $or: [{ status: 0 }, { status: '0' }] });
+            }
+          }
+        }
+        const mCountQuery = memberCountClauses.length > 0 ? (memberCountClauses.length === 1 ? memberCountClauses[0] : { $and: memberCountClauses }) : {};
+        totalIndividualMembers = await User.countDocuments(mCountQuery);
+      } catch (_) {}
+
       return apiResponse(res, 200, 'Users retrieved successfully', formatted, {
         total: totalHeads,
+        totalFamilies: totalHeads,
+        totalMembers: totalIndividualMembers,
         page,
         limit,
         totalPages,
@@ -851,24 +882,25 @@ const getUsers = async (req, res) => {
       });
     }
 
-    if (targetVillage) {
-      const escapeRegExp = (v = '') => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const vRegex = new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i');
-      const villageClause = {
-        $or: [
-          { village: vRegex },
-          { village: targetVillage },
-          { village_id: targetVillage }
-        ]
-      };
+    const effectiveScopeClause = (scopeClause && Object.keys(scopeClause).length > 0)
+      ? scopeClause
+      : (targetVillage ? {
+          $or: [
+            { village: new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i') },
+            { village: targetVillage },
+            { village_id: targetVillage }
+          ]
+        } : null);
+
+    if (effectiveScopeClause) {
       if (query.$or) {
         query.$and = query.$and || [];
-        query.$and.push({ $or: query.$or }, villageClause);
+        query.$and.push({ $or: query.$or }, effectiveScopeClause);
         delete query.$or;
       } else if (query.$and) {
-        query.$and.push(villageClause);
+        query.$and.push(effectiveScopeClause);
       } else {
-        Object.assign(query, villageClause);
+        Object.assign(query, effectiveScopeClause);
       }
     }
 

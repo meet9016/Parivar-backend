@@ -17,8 +17,8 @@ const getcommitteeMembers = async (req, res) => {
 
     const { data: committee, pagination } = await queryHelper(CommitteeMember, req.query, {
       baseQuery,
-      searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'designation'],
-      filterFields: ['status', 'role_id'],
+      searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'designation', 'state', 'district', 'city', 'village'],
+      filterFields: ['status', 'role_id', 'state_id', 'district_id', 'city_id', 'village_id'],
       defaultSort: { createdAt: -1 },
       populate: ['role_id']
     });
@@ -72,6 +72,12 @@ const getcommitteeMembers = async (req, res) => {
         role_id: member.role_id?._id ? String(member.role_id._id) : (member.role_id || ''),
         role_name: member.role_id?.name || '',
         designation: member.designation || '',
+        state: member.state || linkedUser?.state || linkedUser?.state_name || '',
+        state_id: member.state_id || linkedUser?.state_id || '',
+        district: member.district || linkedUser?.district || linkedUser?.district_name || '',
+        district_id: member.district_id || linkedUser?.district_id || '',
+        city: member.city || linkedUser?.city || linkedUser?.city_name || '',
+        city_id: member.city_id || linkedUser?.city_id || '',
         village: villageName || '',
         village_id: villageId || '',
         status: Number(member.status ?? 1),
@@ -87,7 +93,7 @@ const getcommitteeMembers = async (req, res) => {
 
 const createcommitteeMember = async (req, res) => {
   try {
-    const { first_name, middle_name, last_name, number, email, password, role_id, designation, status, village, village_id } = req.body;
+    const { first_name, middle_name, last_name, number, email, password, role_id, designation, status, state, state_id, district, district_id, city, city_id, village, village_id } = req.body;
 
     let hashedPassword = undefined;
     if (password && password.trim()) {
@@ -102,22 +108,36 @@ const createcommitteeMember = async (req, res) => {
       last_name: (last_name || '').trim(),
       number: (number || '').trim(),
       designation: (designation || '').trim(),
+      state: (state || '').trim(),
+      state_id: (state_id || '').trim(),
+      district: (district || '').trim(),
+      district_id: (district_id || '').trim(),
+      city: (city || '').trim(),
+      city_id: (city_id || '').trim(),
       village: (village || '').trim(),
       village_id: (village_id || '').trim(),
       image,
       status: status !== undefined ? Number(status) : 1
     };
 
-    if (!memberData.village && memberData.number) {
+    if (memberData.number) {
       try {
         const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
         const linkedUser = await UserModel.findOne({ number: memberData.number }).lean();
         if (linkedUser) {
-          if (linkedUser.village) memberData.village = linkedUser.village;
-          if (linkedUser.village_id) memberData.village_id = linkedUser.village_id;
+          if (!memberData.village && (linkedUser.village || linkedUser.village_name)) {
+            memberData.village = linkedUser.village || linkedUser.village_name;
+            memberData.village_id = linkedUser.village_id || '';
+          }
+          if (!memberData.city_id && linkedUser.city_id) memberData.city_id = linkedUser.city_id;
+          if (!memberData.city && (linkedUser.city || linkedUser.city_name)) memberData.city = linkedUser.city || linkedUser.city_name;
+          if (!memberData.district_id && linkedUser.district_id) memberData.district_id = linkedUser.district_id;
+          if (!memberData.district && (linkedUser.district || linkedUser.district_name)) memberData.district = linkedUser.district || linkedUser.district_name;
+          if (!memberData.state_id && linkedUser.state_id) memberData.state_id = linkedUser.state_id;
+          if (!memberData.state && (linkedUser.state || linkedUser.state_name)) memberData.state = linkedUser.state || linkedUser.state_name;
         }
       } catch (e) {
-        console.warn('Could not auto-fetch village for committee member from User:', e.message);
+        console.warn('Could not auto-fetch location for committee member from User:', e.message);
       }
     }
 
