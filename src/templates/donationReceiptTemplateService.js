@@ -318,15 +318,15 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
           </div>
         </div>
 
-        <!-- Right: Receipt Badge & Numbering -->
-        <div style="flex-shrink: 0; text-align: right; background: rgba(0,0,0,0.24); border: 1.2px solid rgba(255,255,255,0.32); border-radius: 8px; padding: 6px 12px; min-width: 140px;">
-          <div style="font-size: 10px; font-weight: 900; letter-spacing: 0.7px; color: #fef08a; text-transform: uppercase;">
-            ★ દાન પહોંચ • RECEIPT
+        <!-- Right: Receipt Number & Date (Clean, unboxed presentation) -->
+        <div style="flex-shrink: 0; text-align: right; min-width: 135px;">
+          <div style="font-size: 11px; font-weight: 900; letter-spacing: 0.8px; color: #fef08a; text-transform: uppercase;">
+            સત્તાવાર દાન પહોંચ
           </div>
           <div style="margin-top: 3px; font-size: 10.5px; font-weight: 800; color: #ffffff;">
-            <span style="color: #a7f3d0; font-weight: 700;">No:</span> <span style="font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0.22); padding: 1px 7px; border-radius: 3px; font-weight: 900;">${escapeHtml(receiptNo)}</span>
+            <span style="color: #a7f3d0; font-weight: 700;">No:</span> <span style="font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0.22); padding: 1px 7px; border-radius: 4px; font-weight: 900;">${escapeHtml(receiptNo)}</span>
           </div>
-          <div style="margin-top: 2.5px; font-size: 9.5px; font-weight: 700; color: #e2e8f0;">
+          <div style="margin-top: 2.5px; font-size: 9.5px; font-weight: 700; color: #d1fae5;">
             તારીખ: <strong style="color: #ffffff;">${escapeHtml(formattedDate)}</strong>
           </div>
         </div>
@@ -344,7 +344,7 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
             <!-- Donor Name Card -->
             <div style="background: #f8fafc; border: 1.2px solid #e2e8f0; border-left: 5px solid #047857; border-radius: 8px; padding: 8px 14px;">
               <div style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
-                સહર્ષ સ્વીકારવામાં આવેલ દાતાશ્રીનું નામ (DONOR NAME):
+                દાતાશ્રીનું નામ (DONOR NAME):
               </div>
               <div style="font-size: 17px; font-weight: 900; color: #0f172a; margin-top: 2px;">
                 ${escapeHtml(d.donator_name || '-')}
@@ -387,13 +387,10 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
           <div style="flex: 1.05; background: linear-gradient(145deg, #f0fdf4 0%, #dcfce7 100%); border: 2.2px solid #10b981; border-radius: 10px; padding: 10px 12px; text-align: center; display: flex; flex-direction: column; justify-content: space-between; align-items: center; box-shadow: 0 3px 10px rgba(16,185,129,0.15);">
             
             <div style="width: 100%;">
-              <div style="font-size: 9.5px; font-weight: 800; color: #15803d; text-transform: uppercase; letter-spacing: 0.7px;">
-                કુલ સ્વીકારેલ દાન રકમ
+              <div style="font-size: 9.5px; font-weight: 800; color: #15803d; text-transform: uppercase; letter-spacing: 1px;">
+                DONATION AMOUNT
               </div>
-              <div style="font-size: 8.5px; font-weight: 800; color: #166534; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 3px;">
-                TOTAL RECEIVED
-              </div>
-              <div style="font-size: 29px; font-weight: 900; color: #064e3b; letter-spacing: -0.5px; line-height: 1.1; margin: 2px 0;">
+              <div style="font-size: 29px; font-weight: 900; color: #064e3b; letter-spacing: -0.5px; line-height: 1.1; margin: 4px 0 2px;">
                 ₹ ${formattedAmount} /-
               </div>
             </div>
@@ -417,11 +414,11 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
           </div>
         </div>
 
-        <!-- AABHAR MESSAGE STRIP (Rich amber card) -->
+        <!-- AABHAR MESSAGE STRIP (Rich gratitude card with Ishwar removed) -->
         <div style="background: #fffbeb; border: 1.2px solid #fef3c7; border-left: 5px solid #f59e0b; border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 18px;">🤲</span>
           <div style="font-size: 10.5px; font-weight: 700; color: #92400e; line-height: 1.35;">
-            આપશ્રીના આ ઉમદા સખાવતી દાન અને સહયોગ બદલ સંસ્થા હૃદયપૂર્વક આભાર વ્યક્ત કરે છે. ઈશ્વર આપના ધન-ધાન્યમાં અવિરત બરકત આપે એવી શુભકામનાઓ!
+            આપશ્રીના આ ઉમદા સખાવતી દાન બદલ સમસ્ત સમાજ હૃદયપૂર્વક આભાર વ્યક્ત કરે છે અને આપના ધન-ધાન્યમાં અવિરત બરકત રહે એવી નેક દુઆ તથા શુભકામનાઓ પાઠવે છે!
           </div>
         </div>
 

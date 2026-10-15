@@ -427,7 +427,13 @@ const downloadDonationReceipt = async (req, res) => {
       config = await Config.findOne().lean();
     } catch (_) { }
 
-    const html = await renderDonationReceiptHtml(donation, config || {});
+    let renderReceiptFn = renderDonationReceiptHtml;
+    try {
+      delete require.cache[require.resolve('../templates/donationReceiptTemplateService')];
+      renderReceiptFn = require('../templates/donationReceiptTemplateService').renderDonationReceiptHtml;
+    } catch (_) { }
+
+    const html = await renderReceiptFn(donation, config || {});
 
     const cleanDonor = (donation.donator_name || 'Donor').replace(/[^a-zA-Z0-9_\-]/g, '_');
     const recId = String(donation.id || donation._id).slice(-6).toUpperCase();
