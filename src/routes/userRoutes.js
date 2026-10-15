@@ -68,6 +68,7 @@ router.put('/bulk-update', protect, (req, res, next) => {
 });
 
 router.get('/export', protect, userController.exportUsers);
+router.get('/export/download/:filename', optionalProtect, userController.downloadExportFile);
 
 router.post('/bulk-import', protect, requirePermission('members.add'), upload.single('file'), userController.bulkImportUsers);
 

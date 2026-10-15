@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const User = require('../models/userModels');
 const mongoose = require('mongoose');
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
@@ -8,6 +10,7 @@ const { deleteFileFromExternalService } = require('../utils/fileUpload');
 const queryHelper = require('../utils/queryHelper');
 const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
 const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
@@ -139,7 +142,7 @@ const register = async (req, res) => {
     if (defaultRole) {
       newUser.role_id = defaultRole._id;
     }
-    
+
     await newUser.save();
     if (familyData.relation === 'Self' || newUser.familyHead) {
       newUser.family_head = {
@@ -399,7 +402,6 @@ const getUsers = async (req, res) => {
       // 2. Fetch all dependent members under these paginated heads and attach them
       const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
-      
       const headCriteria = {
         $or: [
           { familyHead: true },
@@ -412,7 +414,6 @@ const getUsers = async (req, res) => {
       if (req.query.search && String(req.query.search).trim()) {
         const rawSearch = String(req.query.search).trim();
         const tokens = rawSearch.split(/\s+/).filter(Boolean);
-        
         let searchCondition;
         if (tokens.length === 1) {
           const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
@@ -557,7 +558,7 @@ const getUsers = async (req, res) => {
           const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
           const mParentId = String(m.parent_member_id || '');
           return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
-                 (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+            (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
         });
 
         const formattedHead = formatUserObj(head);
@@ -626,7 +627,7 @@ const getUsers = async (req, res) => {
           const d = new Date(u.death_date);
           if (!isNaN(d.getTime())) {
             if ((d.getDate() === todayDay && (d.getMonth() + 1) === todayMonth) ||
-                (d.getUTCDate() === todayDay && (d.getUTCMonth() + 1) === todayMonth)) {
+              (d.getUTCDate() === todayDay && (d.getUTCMonth() + 1) === todayMonth)) {
               isToday = true;
             }
           }
@@ -1176,7 +1177,7 @@ const bulkImportUsers = async (req, res) => {
       // Try DD-MM-YYYY
       const ddmmyyyy = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
       if (ddmmyyyy) {
-        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
+        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`);
         return isNaN(d.getTime()) ? null : d;
       }
       const d = new Date(str);
@@ -1205,7 +1206,7 @@ const bulkImportUsers = async (req, res) => {
       const rowNum = i + 2; // Excel row number (1 = header)
 
       const firstName = getVal(row, 'First Name', 'first_name', 'firstname', 'name');
-      const number    = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone');
+      const number = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone');
 
       if (!firstName) {
         errors.push({ row: rowNum, reason: 'First Name is required' });
@@ -1224,27 +1225,27 @@ const bulkImportUsers = async (req, res) => {
       }
 
       const isFamilyHeadVal = getVal(row, 'Is Family Head', 'is family head', 'family head', 'familyhead').toLowerCase();
-      const relation        = getVal(row, 'Relation', 'relation') || 'Self';
-      const isFamilyHead    = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
+      const relation = getVal(row, 'Relation', 'relation') || 'Self';
+      const isFamilyHead = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
 
       try {
         const newUser = new User({
-          member_id:    String(nextMemberId),
-          first_name:   firstName,
-          middle_name:  getVal(row, 'Middle Name', 'middle_name', 'middlename'),
-          last_name:    getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
-          email:        getVal(row, 'Email', 'email').toLowerCase() || '',
-          password:     '12345',
+          member_id: String(nextMemberId),
+          first_name: firstName,
+          middle_name: getVal(row, 'Middle Name', 'middle_name', 'middlename'),
+          last_name: getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
+          email: getVal(row, 'Email', 'email').toLowerCase() || '',
+          password: '12345',
           number,
-          gender:       getVal(row, 'Gender', 'gender') || '',
-          dob:          parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
-          anniversary:  parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
-          blood_group:  getVal(row, 'Blood Group', 'blood group', 'blood_group'),
-          address:      getVal(row, 'Address', 'address'),
-          relation:     isFamilyHead ? 'Self' : (relation || 'Other'),
-          familyHead:   isFamilyHead,
-          status:       1,
-          role_id:      defaultRole ? defaultRole._id : undefined
+          gender: getVal(row, 'Gender', 'gender') || '',
+          dob: parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
+          anniversary: parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
+          blood_group: getVal(row, 'Blood Group', 'blood group', 'blood_group'),
+          address: getVal(row, 'Address', 'address'),
+          relation: isFamilyHead ? 'Self' : (relation || 'Other'),
+          familyHead: isFamilyHead,
+          status: 1,
+          role_id: defaultRole ? defaultRole._id : undefined
         });
 
         if (isFamilyHead) {
@@ -1275,7 +1276,7 @@ const bulkImportUsers = async (req, res) => {
 
     return apiResponse(res, 200, `Import complete: ${created.length} created, ${errors.length} failed`, {
       created_count: created.length,
-      failed_count:  errors.length,
+      failed_count: errors.length,
       created,
       errors
     });
@@ -1291,7 +1292,7 @@ const exportUsers = async (req, res) => {
   try {
     const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
-    
+
     const headCriteria = {
       $or: [
         { familyHead: true },
@@ -1305,7 +1306,7 @@ const exportUsers = async (req, res) => {
     if (req.query.search && String(req.query.search).trim()) {
       const rawSearch = String(req.query.search).trim();
       const tokens = rawSearch.split(/\s+/).filter(Boolean);
-      
+
       let searchCondition;
       if (tokens.length === 1) {
         const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
@@ -1402,65 +1403,261 @@ const exportUsers = async (req, res) => {
         const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
         const mParentId = String(m.parent_member_id || '');
         return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
-               (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+          (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
       });
 
       // Add Head row
       excelRows.push({
-        'Member ID': head.member_id || '',
-        'Name': fullName(head),
-        'Relation': 'Family Head (મુખ્ય)',
-        'Mobile Number': head.number || '',
-        'Email': head.email || 'No Email',
-        'Gender': head.gender || '',
-        'Blood Group': head.blood_group || '',
-        'Village': head.village || '',
-        'Status': Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive'
+        member_id: head.member_id || '',
+        name: fullName(head),
+        relation: 'Family Head (મુખ્ય)',
+        number: head.number || '',
+        email: head.email || 'No Email',
+        gender: head.gender || '',
+        blood_group: head.blood_group || '',
+        village: head.village || '',
+        status: Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive',
+        isHead: true
       });
 
       // Add Child members under head
       for (const child of matchingChildren) {
         excelRows.push({
-          'Member ID': child.member_id || '',
-          'Name': `  ↳ ${fullName(child)}`,
-          'Relation': child.relation || 'Member',
-          'Mobile Number': child.number || '',
-          'Email': child.email || 'No Email',
-          'Gender': child.gender || '',
-          'Blood Group': child.blood_group || '',
-          'Village': child.village || head.village || '',
-          'Status': Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive'
+          member_id: child.member_id || '',
+          name: `  ↳ ${fullName(child)}`,
+          relation: child.relation || 'Member',
+          number: child.number || '',
+          email: child.email || 'No Email',
+          gender: child.gender || '',
+          blood_group: child.blood_group || '',
+          village: child.village || head.village || '',
+          status: Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive',
+          isHead: false
         });
       }
     }
 
-    // Build worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelRows);
-    worksheet['!cols'] = [
-      { wch: 15 }, // Member ID
-      { wch: 35 }, // Name
-      { wch: 25 }, // Relation
-      { wch: 20 }, // Mobile Number
-      { wch: 30 }, // Email
-      { wch: 15 }, // Gender
-      { wch: 15 }, // Blood Group
-      { wch: 20 }, // Village
-      { wch: 15 }  // Status
+    // Build workbook with ExcelJS for rich styling (header colors, status colors, borders)
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Parivar App';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet('Family Registry', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+
+    worksheet.columns = [
+      { header: 'Member ID', key: 'member_id', width: 16 },
+      { header: 'Name', key: 'name', width: 36 },
+      { header: 'Relation', key: 'relation', width: 26 },
+      { header: 'Mobile Number', key: 'number', width: 22 },
+      { header: 'Email', key: 'email', width: 32 },
+      { header: 'Gender', key: 'gender', width: 14 },
+      { header: 'Blood Group', key: 'blood_group', width: 14 },
+      { header: 'Village', key: 'village', width: 22 },
+      { header: 'Status', key: 'status', width: 18 }
     ];
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Family Registry');
+    // Style the Header Row
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E3A8A' } // Professional Royal Navy Blue
+      };
+      cell.font = {
+        name: 'Segoe UI',
+        size: 11,
+        bold: true,
+        color: { argb: 'FFFFFFFF' } // Crisp White
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF93C5FD' } },
+        left: { style: 'thin', color: { argb: 'FF93C5FD' } },
+        bottom: { style: 'medium', color: { argb: 'FF1D4ED8' } },
+        right: { style: 'thin', color: { argb: 'FF93C5FD' } }
+      };
+    });
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    // Populate data rows with styles
+    for (const item of excelRows) {
+      const row = worksheet.addRow({
+        member_id: item.member_id,
+        name: item.name,
+        relation: item.relation,
+        number: item.number,
+        email: item.email,
+        gender: item.gender,
+        blood_group: item.blood_group,
+        village: item.village,
+        status: item.status
+      });
+
+      row.height = 24;
+
+      row.eachCell((cell, colNumber) => {
+        cell.font = {
+          name: 'Segoe UI',
+          size: 10,
+          bold: item.isHead && (colNumber === 2 || colNumber === 3)
+        };
+
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+        };
+
+        // Alignments: Name, Relation, Email, Village to left; others centered
+        if ([2, 3, 5, 8].includes(colNumber)) {
+          cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        } else {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        }
+      });
+
+      // Special styling for Family Head
+      if (item.isHead) {
+        row.getCell('relation').font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF1D4ED8' } };
+      }
+
+      // Status cell formatting: Inactive = Red, Active = Green
+      const statusCell = row.getCell('status');
+      if (item.status === 'Active') {
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6F4EA' } // Light Green background
+        };
+        statusCell.font = {
+          name: 'Segoe UI',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF137333' } // Dark Green text
+        };
+      } else {
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFCE8E6' } // Light Red background
+        };
+        statusCell.font = {
+          name: 'Segoe UI',
+          size: 10,
+          bold: true,
+          color: { argb: 'FFC5221F' } // Dark Red text
+        };
+      }
+    }
+
+    worksheet.autoFilter = 'A1:I1';
+
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    // Ensure exports directory exists
+    const exportDir = path.join(__dirname, '../../public/uploads/exports');
+    if (!fs.existsSync(exportDir)) {
+      fs.mkdirSync(exportDir, { recursive: true });
+    }
+
+    // Clean up old export files older than 24 hours
+    try {
+      const existingFiles = fs.readdirSync(exportDir);
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000;
+      for (const file of existingFiles) {
+        const fPath = path.join(exportDir, file);
+        const stat = fs.statSync(fPath);
+        if (now - stat.mtimeMs > maxAge) {
+          fs.unlinkSync(fPath);
+        }
+      }
+    } catch (_) { }
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const timestamp = Date.now();
+    const filename = `Family_Registry_${dateStr}_${timestamp}.xlsx`;
+    const filePath = path.join(exportDir, filename);
+
+    fs.writeFileSync(filePath, buffer);
+
+    // If direct buffer download was explicitly requested
+    if (req.query.direct === 'true') {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.status(200).send(buffer);
+    }
+
+    // Resolve canonical base URL and route prefix
+    const resolveBaseUrl = (request) => {
+      if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, '');
+      if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
+      if (request) {
+        const protocol = request.headers['x-forwarded-proto'] || request.protocol || 'http';
+        const host = request.headers['x-forwarded-host'] || request.get('host') || 'localhost:5006';
+        return `${protocol}://${host}`;
+      }
+      return 'http://localhost:5006';
+    };
+
+    const baseUrl = resolveBaseUrl(req);
+    const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '';
+    const referer = req?.headers?.['referer'] || '';
+    const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
+      host.includes('parivar.me') ||
+      referer.includes('parivar.me');
+    const prefix = isApiApi ? '/api/api' : '/api';
+
+    const downloadUrl = `${baseUrl}${prefix}/users/export/download/${encodeURIComponent(filename)}`;
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Family registry exported successfully',
+      data: {
+        download_url: downloadUrl,
+        filename
+      }
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting users', { error: error.message });
+  }
+};
+
+/**
+ * Direct file download endpoint for exported users/family registry.
+ * Streams the saved Excel file with proper Content-Disposition header.
+ */
+const downloadExportFile = async (req, res) => {
+  try {
+    const { filename } = req.params;
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return apiResponse(res, 400, 'Invalid filename');
+    }
+
+    const safeFilename = path.basename(filename);
+    const exportDir = path.join(__dirname, '../../public/uploads/exports');
+    const filePath = path.join(exportDir, safeFilename);
+
+    if (!fs.existsSync(filePath)) {
+      return apiResponse(res, 404, 'Export file not found or expired');
+    }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="Family_Registry_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    return res.status(200).send(buffer);
+
+    return res.sendFile(filePath);
   } catch (error) {
-    return apiResponse(res, 500, 'Error exporting users', { error: error.message });
+    return apiResponse(res, 500, 'Error downloading export file', { error: error.message });
   }
 };
 
@@ -1476,5 +1673,6 @@ module.exports = {
   getFamilyMembersByNumber,
   bulkUpdateUsers,
   bulkImportUsers,
-  exportUsers
+  exportUsers,
+  downloadExportFile
 };
