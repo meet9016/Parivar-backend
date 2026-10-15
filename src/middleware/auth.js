@@ -340,7 +340,6 @@ const legacyPermissionFor = (permission) => {
     'dashboard.view': 'dashboard.view',
     'users.': 'users.manage',
     'donations.': 'donations.manage',
-    'feedback.': 'feedback.manage',
     'birthday.': 'users.manage',
     'death.': 'users.manage',
     'obituary.': 'users.manage',

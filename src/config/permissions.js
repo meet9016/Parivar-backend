@@ -22,7 +22,6 @@ const PERMISSION_MODULES = [
   { key: 'birthday', label: 'Birthdays' },
   { key: 'job-vacancy', label: 'Job Vacancies' },
   { key: 'posts', label: 'Posts' },
-  { key: 'feedback', label: 'Feedback' },
   { key: 'contact-inquiries', label: 'Contact Inquiries' }
 ];
 
