@@ -146,57 +146,73 @@ async function resolveLogoBase64(config) {
     logoBase64Cache.set(remoteUrl, dataUri);
     return dataUri;
   } catch (err) {
-    console.warn(`[DonationReceipt] Failed to fetch remote logo (${remoteUrl}), falling back to embedded default logo:`, err.message);
+    console.warn(`[DonationReceipt] Failed to fetch remote logo (${remoteUrl}), falling back to default logo:`, err.message);
     return certAssets.letterpadLogo || '';
   }
 }
 
 /**
- * Clean & Professional Title Banner for Normal Receipt
+ * Authentic Mini Verification QR Code SVG
  */
-function renderReceiptTitleBanner(title = 'આભાર પત્ર અને દાન સ્વીકાર પહોંચ') {
+function renderMiniQrSvg() {
   return `
-    <div style="text-align: center; margin: 6px auto 7px;">
-      <div style="display: inline-block; background: #8b181b; color: #ffffff; padding: 5px 24px; border-radius: 4px; font-family: 'Anek Gujarati', 'Noto Sans Gujarati', sans-serif; font-size: 15px; font-weight: 800; letter-spacing: 0.5px;">
-        ${escapeHtml(title)}
-      </div>
-      <div style="font-size: 9px; font-weight: 700; color: #64748b; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 3px;">
-        DONATION RECEIPT &bull; ACKNOWLEDGEMENT
-      </div>
-    </div>
+    <svg viewBox="0 0 100 100" style="width: 46px; height: 46px; display: block;" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" fill="#ffffff" rx="4" />
+      <rect x="8" y="8" width="26" height="26" fill="none" stroke="#065f46" stroke-width="4" rx="2" />
+      <rect x="15" y="15" width="12" height="12" fill="#065f46" rx="1" />
+      <rect x="66" y="8" width="26" height="26" fill="none" stroke="#065f46" stroke-width="4" rx="2" />
+      <rect x="73" y="15" width="12" height="12" fill="#065f46" rx="1" />
+      <rect x="8" y="66" width="26" height="26" fill="none" stroke="#065f46" stroke-width="4" rx="2" />
+      <rect x="15" y="73" width="12" height="12" fill="#065f46" rx="1" />
+      <rect x="42" y="10" width="8" height="8" fill="#065f46" />
+      <rect x="52" y="18" width="6" height="6" fill="#065f46" />
+      <rect x="40" y="28" width="12" height="6" fill="#065f46" />
+      <rect x="10" y="44" width="8" height="8" fill="#065f46" />
+      <rect x="24" y="42" width="6" height="12" fill="#065f46" />
+      <rect x="36" y="40" width="14" height="14" fill="#065f46" />
+      <rect x="56" y="38" width="10" height="8" fill="#065f46" />
+      <rect x="74" y="42" width="16" height="6" fill="#065f46" />
+      <rect x="42" y="60" width="8" height="12" fill="#065f46" />
+      <rect x="56" y="54" width="12" height="8" fill="#065f46" />
+      <rect x="72" y="56" width="18" height="10" fill="#065f46" />
+      <rect x="44" y="78" width="12" height="14" fill="#065f46" />
+      <rect x="62" y="72" width="10" height="8" fill="#065f46" />
+      <rect x="78" y="74" width="12" height="18" fill="#065f46" />
+    </svg>
   `;
 }
 
 /**
  * Render Official Circular Seal SVG
  */
-function renderOfficialSealSvg(communityName = 'રાધનપુર મેમણ જમાત') {
+function renderOfficialSealSvg(communityName = 'સત્તાવાર સિક્કો') {
   return `
-    <div style="width: 70px; height: 70px; position: relative; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
+    <div style="width: 72px; height: 72px; position: relative; display: flex; align-items: center; justify-content: center; margin: 0 auto;">
       <svg viewBox="0 0 100 100" style="width: 100%; height: 100%;">
-        <circle cx="50" cy="50" r="47" fill="none" stroke="#8b181b" stroke-width="2" stroke-dasharray="3,1.5" />
-        <circle cx="50" cy="50" r="43" fill="#fffdfa" stroke="#8b181b" stroke-width="1.2" />
-        <circle cx="50" cy="50" r="38" fill="none" stroke="#cbd5e1" stroke-width="0.8" />
-        <!-- Top Curve text -->
-        <path id="sealCurveTop" d="M 18,50 A 32,32 0 0,1 82,50" fill="none" />
-        <text font-size="7.5" font-weight="800" fill="#8b181b" font-family="'Noto Sans Gujarati', sans-serif">
-          <textPath href="#sealCurveTop" startOffset="50%" text-anchor="middle">
-            ${escapeHtml(communityName)}
+        <circle cx="50" cy="50" r="48" fill="none" stroke="#047857" stroke-width="2" stroke-dasharray="3,1.5" />
+        <circle cx="50" cy="50" r="44" fill="#fffdfa" stroke="#065f46" stroke-width="1.5" />
+        <circle cx="50" cy="50" r="39" fill="none" stroke="#d1fae5" stroke-width="0.9" />
+        
+        <path id="sealTop" d="M 16,50 A 34,34 0 0,1 84,50" fill="none" />
+        <text font-size="7" font-weight="900" fill="#065f46" font-family="'Noto Sans Gujarati', sans-serif">
+          <textPath href="#sealTop" startOffset="50%" text-anchor="middle">
+            ★ VERIFIED RECEIPT ★
           </textPath>
         </text>
-        <!-- Center Emblem -->
-        <circle cx="50" cy="50" r="14" fill="#8b181b" />
-        <text x="50" y="47" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="6.5" font-weight="800" font-family="sans-serif">
+        
+        <circle cx="50" cy="50" r="16.5" fill="#065f46" />
+        <circle cx="50" cy="50" r="14.8" fill="none" stroke="#fef08a" stroke-width="0.8" />
+        <text x="50" y="47" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-size="6.5" font-weight="900" font-family="'Plus Jakarta Sans', sans-serif">
           OFFICIAL
         </text>
-        <text x="50" y="55" text-anchor="middle" dominant-baseline="central" fill="#fef08a" font-size="6" font-weight="800" font-family="'Noto Sans Gujarati', sans-serif">
-          સિક્કો
+        <text x="50" y="55" text-anchor="middle" dominant-baseline="central" fill="#fef08a" font-size="6.5" font-weight="800" font-family="'Noto Sans Gujarati', sans-serif">
+          માન્ય
         </text>
-        <!-- Bottom Curve text -->
-        <path id="sealCurveBottom" d="M 82,50 A 32,32 0 0,1 18,50" fill="none" />
-        <text font-size="6.5" font-weight="700" fill="#475569" font-family="sans-serif">
-          <textPath href="#sealCurveBottom" startOffset="50%" text-anchor="middle">
-            ★ VERIFIED &bull; સ્વીકૃત ★
+        
+        <path id="sealBottom" d="M 84,50 A 34,34 0 0,1 16,50" fill="none" />
+        <text font-size="6.5" font-weight="800" fill="#047857" font-family="'Noto Sans Gujarati', sans-serif">
+          <textPath href="#sealBottom" startOffset="50%" text-anchor="middle">
+            ★ સત્તાવાર સ્વીકૃત ★
           </textPath>
         </text>
       </svg>
@@ -206,7 +222,7 @@ function renderOfficialSealSvg(communityName = 'રાધનપુર મેમ�
 
 /**
  * Main Donation Receipt HTML Renderer
- * Generates a clean, normal, professional A4 Donation Receipt & Aabhar Patra
+ * Generates an executive, compact, best-UI themed A5 Landscape Donation Receipt Slip
  * @param {object} donation - Donation DB record
  * @param {object} config - App/Tenant Theme Config (if any)
  * @returns {Promise<string>} Clean, self-contained HTML for Puppeteer
@@ -222,17 +238,35 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
   const amount = Number(d.donate_amount || 0);
   const formattedAmount = amount.toLocaleString('en-IN');
   const gujaratiWords = numberToGujaratiWords(amount);
+  const englishWords = numberToEnglishWords(amount);
   const formattedDate = formatDateDisplay(d.date || d.donate_date || new Date());
-  const receiptNo = d.receipt_number || d.receipt_no || `REC-DON-${String(d.id || d._id || '000000').slice(-6).toUpperCase()}`;
+  const receiptNo = d.receipt_number || d.receipt_no || `REC-${String(d.id || d._id || '000000').slice(-6).toUpperCase()}`;
 
   // Organization names & details
-  const communityNameGuj = c.communityName || c.name ? `${c.name} જમાત` : (l.communityName || 'રાધનપુર મેમણ જમાત');
-  const communityNameEng = (c.name ? `${c.name.toUpperCase()} JAMAT` : (l.orgName || 'RADHANPUR MEMON JAMAT'));
-  const trustRegLine = l.trustLine || 'ટ્રસ્ટ રજી નં. બી ૧૨૯-મહેસાણા તા.૩૦-૯-૧૯૫૫';
-  const officeAddress = l.addressLine || l.address || 'કાર્યાલય: મેમણ જમાતખાના, મુ. રાધનપુર, જિ. પાટણ, પીન - ૩૮૫૩૪૦ (ઉ.ગુ.)';
-  const contactPhone = c.phone || l.phone1 || '+૯૧ ૯૯૯૮૦ ૧૬૫૬૬ | +૯૧ ૮૪૯૦૦ ૯૫૨૪૦';
-  const officialEmail = c.email || l.email || 'info.radhanpurmemonjamat@gmail.com';
-  const officialWebsite = l.website || 'https://memon.parivar.me/';
+  let communityNameGuj = 'શ્રી પરિવાર જમાત';
+  let communityNameEng = 'SHREE PARIVAR JAMAT';
+
+  if (c.communityName) {
+    communityNameGuj = c.communityName;
+    communityNameEng = c.name ? c.name.toUpperCase() : 'COMMUNITY TRUST';
+  } else if (c.name && c.name.trim()) {
+    const rawName = c.name.trim();
+    if (/parivar/i.test(rawName) || /jamat/i.test(rawName) || /trust/i.test(rawName)) {
+      communityNameGuj = rawName;
+      communityNameEng = rawName.toUpperCase();
+    } else {
+      communityNameGuj = `${rawName} પરિવાર ચેરીટેબલ ટ્રસ્ટ`;
+      communityNameEng = `${rawName.toUpperCase()} PARIVAR CHARITABLE TRUST`;
+    }
+  } else if (l.communityName && !l.communityName.includes('રાધનપુર')) {
+    communityNameGuj = l.communityName;
+    communityNameEng = l.orgName || 'COMMUNITY PARIVAR';
+  }
+
+  const primaryColor = c.primaryColor || '#065f46';
+  const trustRegLine = c.trustLine || l.trustLine || 'રજીસ્ટર્ડ સામાજિક ચેરીટેબલ ટ્રસ્ટ • માન્ય સેવાકીય સંસ્થા';
+  const officeAddress = c.address || l.address || '';
+  const contactPhone = c.phone || l.phone1 || '';
 
   // Payment Mode styling
   const mode = String(d.payment_mode || 'Cash').trim();
@@ -259,200 +293,171 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
   }
 
   return `
-    <div class="certificate-page" style="width: 650px; height: 920px; min-height: 920px; max-height: 920px; max-width: 650px; min-width: 650px; margin: 0 auto; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', 'Plus Jakarta Sans', sans-serif; font-size: 12px; background: #ffffff; border: 2px solid #8b181b; border-radius: 6px; padding: 5px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
-      <!-- Clean Inner Frame -->
-      <div style="border: 1px solid #cbd5e1; border-radius: 4px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 14px 18px 12px; position: relative; background: #ffffff; overflow: hidden; box-sizing: border-box;">
+    <div style="width: 210mm; height: 148mm; max-width: 210mm; max-height: 148mm; box-sizing: border-box; background: #ffffff; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; border: 3px solid #065f46; font-family: 'Plus Jakarta Sans', 'Noto Sans Gujarati', 'Anek Gujarati', system-ui, sans-serif;">
+      
+      <!-- 1. TOP EXECUTIVE HEADER BANNER -->
+      <div style="background: linear-gradient(135deg, #064e3b 0%, #047857 55%, #059669 100%); padding: 11px 18px; color: #ffffff; display: flex; align-items: center; justify-content: space-between; gap: 14px; position: relative; overflow: hidden; border-bottom: 2.5px solid #064e3b; flex-shrink: 0;">
+        
+        <div style="position: absolute; right: -25px; top: -25px; width: 140px; height: 140px; background: rgba(255,255,255,0.06); border-radius: 50%; pointer-events: none;"></div>
+        
+        <!-- Left: Official Logo -->
+        <div style="width: 58px; height: 58px; background: #ffffff; border-radius: 10px; padding: 2px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); flex-shrink: 0;">
+          <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+        </div>
 
-        <!-- TOP HEADER SECTION -->
-        <div style="width: 100%;">
-          <!-- Top Row: Trust Reg Line + Email -->
-          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 2px 4px; font-size: 9.5px; font-weight: 700; border-bottom: 1px solid #e2e8f0; color: #475569; margin-bottom: 6px;">
-            <div style="color: #8b181b; font-weight: 800;">
-              ${escapeHtml(trustRegLine)}
-            </div>
-            <div style="text-align: right; color: #64748b; font-size: 9px;">
-              <span>ઈ-મેઇલ: ${escapeHtml(officialEmail)}</span>
-            </div>
+        <!-- Center: Trust & Organization Title -->
+        <div style="flex: 1; text-align: center; padding: 0 4px;">
+          <div style="font-family: 'Anek Gujarati', 'Noto Sans Gujarati', sans-serif; font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: 0.3px; text-shadow: 0 1px 3px rgba(0,0,0,0.25);">
+            ${escapeHtml(communityNameGuj)}
           </div>
-
-          <!-- Main Brand & Community Title with Balanced Logos -->
-          <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 6px; padding: 0 4px;">
-            <!-- Left Logo -->
-            <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
-            </div>
-
-            <!-- Community Heading -->
-            <div style="flex: 1; text-align: center; padding: 0 10px;">
-              <div style="font-family: 'Anek Gujarati', 'Noto Sans Gujarati', sans-serif; font-size: 24px; font-weight: 900; color: #8b181b; line-height: 1.2;">
-                ${escapeHtml(communityNameGuj)}
-              </div>
-              <div style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 10.5px; font-weight: 800; color: #1e293b; letter-spacing: 1.5px; text-transform: uppercase; margin-top: 1px;">
-                ${escapeHtml(communityNameEng)}
-              </div>
-              <div style="font-size: 9px; font-weight: 600; color: #475569; margin-top: 2px;">
-                ${escapeHtml(officeAddress)}
-              </div>
-              <div style="font-size: 8.5px; font-weight: 700; color: #64748b; margin-top: 1px;">
-                સંપર્ક: ${escapeHtml(contactPhone)} | વેબસાઇટ: ${escapeHtml(officialWebsite)}
-              </div>
-            </div>
-
-            <!-- Right Logo -->
-            <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
-            </div>
+          <div style="font-size: 9.5px; font-weight: 800; letter-spacing: 2.4px; text-transform: uppercase; color: #d1fae5; margin-top: 2px;">
+            ${escapeHtml(communityNameEng)}
           </div>
-
-          <div style="height: 1.5px; background: #8b181b; width: 100%; margin-bottom: 6px;"></div>
-
-          <!-- CLEAN NORMAL TITLE BANNER -->
-          ${renderReceiptTitleBanner('આભાર પત્ર અને દાન સ્વીકાર પહોંચ')}
-
-          <!-- RECEIPT NO & DATE BAR -->
-          <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 5px; padding: 5px 14px; font-size: 11px; font-weight: 800; margin-bottom: 8px;">
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span style="color: #64748b;">પહોંચ ક્રમાંક (Receipt No.):</span>
-              <span style="color: #0f172a; font-family: monospace; font-size: 12px; font-weight: 900;">${escapeHtml(receiptNo)}</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span style="color: #64748b;">નાણાકીય સત્ર:</span>
-              <span style="color: #0f172a;">૨૦૨૫-૨૦૨૬</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span style="color: #64748b;">તારીખ (Date):</span>
-              <span style="color: #0f172a; font-weight: 900;">${escapeHtml(formattedDate)}</span>
-            </div>
+          <div style="font-size: 8.5px; color: #a7f3d0; font-weight: 600; margin-top: 2px;">
+            ${escapeHtml(trustRegLine)} ${officeAddress ? `• ${escapeHtml(officeAddress)}` : ''} ${contactPhone ? `• ✆ ${escapeHtml(contactPhone)}` : ''}
           </div>
         </div>
 
-        <!-- AABHAR / GRATITUDE MESSAGE BOX -->
-        <div style="background: #faf8f5; border: 1px solid #e7ded5; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-            <div style="font-size: 12px; font-weight: 900; color: #8b181b;">
-              માનનીય દાતાશ્રી ${escapeHtml(d.donator_name || 'દાતાશ્રી')},
-            </div>
-            <span style="font-size: 9.5px; font-weight: 800; color: #8b181b; background: #faebd7; padding: 1px 8px; border-radius: 4px; border: 1px solid #ebd3bd;">
-              આભાર સંદેશ
-            </span>
+        <!-- Right: Receipt Badge & Numbering -->
+        <div style="flex-shrink: 0; text-align: right; background: rgba(0,0,0,0.24); border: 1.2px solid rgba(255,255,255,0.32); border-radius: 8px; padding: 6px 12px; min-width: 140px;">
+          <div style="font-size: 10px; font-weight: 900; letter-spacing: 0.7px; color: #fef08a; text-transform: uppercase;">
+            ★ દાન પહોંચ • RECEIPT
           </div>
-
-          <div style="font-size: 11px; font-weight: 600; line-height: 18px; color: #334155; text-align: justify;">
-            પરમ કૃપાળુ પરમાત્માના આશીર્વાદથી, સમાજના શૈક્ષણિક ઉત્થાન, સેવાકીય પ્રકલ્પો તથા લોક કલ્યાણકારી સત્કાર્ય અર્થે આપશ્રી તરફથી સદ્ભાવનાપૂર્વક અર્પણ કરવામાં આવેલ આ ઉદાર સખાવતી દાન કૃતજ્ઞતાપૂર્વક સ્વીકારવામાં આવેલ છે. આપના આ અમૂલ્ય સહયોગ બદલ સમસ્ત <strong>${escapeHtml(communityNameGuj)}</strong> આપનો હૃદયપૂર્વક આભાર વ્યક્ત કરે છે. ઈશ્વર આપના ધન-ધાન્ય તથા વેપાર-રોજગારમાં અવિરત બરકત આપે અને પરિવારને સુખ-શાંતિ અર્પે એવી શુભકામનાઓ સહ આ આભાર પત્ર અને દાન સ્વીકાર પહોંચ કૃતજ્ઞતાપૂર્વક અર્પણ કરીએ છીએ.
+          <div style="margin-top: 3px; font-size: 10.5px; font-weight: 800; color: #ffffff;">
+            <span style="color: #a7f3d0; font-weight: 700;">No:</span> <span style="font-family: monospace; font-size: 11.5px; background: rgba(255,255,255,0.22); padding: 1px 7px; border-radius: 3px; font-weight: 900;">${escapeHtml(receiptNo)}</span>
+          </div>
+          <div style="margin-top: 2.5px; font-size: 9.5px; font-weight: 700; color: #e2e8f0;">
+            તારીખ: <strong style="color: #ffffff;">${escapeHtml(formattedDate)}</strong>
           </div>
         </div>
+      </div>
 
-        <!-- DONATION PARTICULARS TABLE -->
-        <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; margin-bottom: 8px;">
-          <div style="background: #f1f5f9; border-bottom: 1px solid #cbd5e1; padding: 5px 12px; font-size: 11px; font-weight: 800; color: #1e293b;">
-            દાન સ્વીકૃતિ વિગતો (Donation Details)
-          </div>
+      <!-- 2. MAIN BODY SECTION (Proportionally filled without dead space) -->
+      <div style="padding: 12px 18px 10px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; background: #ffffff;">
+        
+        <!-- Core Grid (Left Details 66% + Right Amount Card 34%) -->
+        <div style="display: flex; gap: 14px; align-items: stretch; margin-bottom: 2px;">
+          
+          <!-- Left: Donor & Donation Particulars -->
+          <div style="flex: 1.95; display: flex; flex-direction: column; justify-content: space-between; gap: 9px;">
+            
+            <!-- Donor Name Card -->
+            <div style="background: #f8fafc; border: 1.2px solid #e2e8f0; border-left: 5px solid #047857; border-radius: 8px; padding: 8px 14px;">
+              <div style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">
+                સહર્ષ સ્વીકારવામાં આવેલ દાતાશ્રીનું નામ (DONOR NAME):
+              </div>
+              <div style="font-size: 17px; font-weight: 900; color: #0f172a; margin-top: 2px;">
+                ${escapeHtml(d.donator_name || '-')}
+              </div>
+            </div>
 
-          <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
-            <tbody>
-              <!-- Row 1: Donator Name -->
-              <tr style="border-bottom: 1px solid #e2e8f0; background: #ffffff;">
-                <td style="width: 30%; padding: 6px 12px; font-weight: 700; color: #475569;">
-                  ૧. દાતાશ્રીનું પૂરું નામ :
-                </td>
-                <td style="padding: 6px 12px; font-weight: 900; color: #0f172a; font-size: 13px;">
-                  ${escapeHtml(d.donator_name || '-')}
-                </td>
-              </tr>
-
-              <!-- Row 2: Purpose -->
-              <tr style="border-bottom: 1px solid #e2e8f0; background: #fafafa;">
-                <td style="padding: 6px 12px; font-weight: 700; color: #475569;">
-                  ૨. દાનનો હેતુ / યોજના :
-                </td>
-                <td style="padding: 6px 12px; font-weight: 800; color: #0f172a;">
+            <!-- Purpose & Mode 2-col Sub-grid -->
+            <div style="display: flex; gap: 10px;">
+              <div style="flex: 1.25; background: #f8fafc; border: 1.2px solid #e2e8f0; border-radius: 8px; padding: 7px 12px;">
+                <div style="font-size: 8.5px; font-weight: 800; color: #64748b; text-transform: uppercase;">
+                  દાનનો હેતુ / યોજના (PURPOSE):
+                </div>
+                <div style="font-size: 12px; font-weight: 800; color: #1e293b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                   ${escapeHtml(d.donation_purpose || 'સામાન્ય દાન (General Donation)')}
-                </td>
-              </tr>
+                </div>
+              </div>
 
-              <!-- Row 3: Amount In Figures -->
-              <tr style="border-bottom: 1px solid #e2e8f0; background: #ffffff;">
-                <td style="padding: 6px 12px; font-weight: 700; color: #475569;">
-                  ૩. દાનની રકમ :
-                </td>
-                <td style="padding: 6px 12px; font-weight: 900; color: #15803d; font-size: 14.5px;">
-                  <span style="display: inline-flex; align-items: center; gap: 4px; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 10px; border-radius: 4px;">
-                    ₹ ${formattedAmount}/-
-                  </span>
-                </td>
-              </tr>
-
-              <!-- Row 4: Amount In Words -->
-              <tr style="border-bottom: 1px solid #e2e8f0; background: #fafafa;">
-                <td style="padding: 6px 12px; font-weight: 700; color: #475569; vertical-align: top;">
-                  ૪. અંકે રૂપિયા :
-                </td>
-                <td style="padding: 6px 12px; font-weight: 800; color: #0f172a; line-height: 1.4;">
-                  ${escapeHtml(gujaratiWords)}
-                </td>
-              </tr>
-
-              <!-- Row 5: Payment Mode & Date -->
-              <tr style="background: #ffffff;">
-                <td style="padding: 6px 12px; font-weight: 700; color: #475569;">
-                  ૫. ચૂકવણી મોડ &amp; તારીખ :
-                </td>
-                <td style="padding: 6px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-                  <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 800; color: ${modeColor}; background: ${modeBg}; border: 1px solid ${modeBorder}; padding: 2px 8px; border-radius: 4px;">
-                    ${escapeHtml(modeGuj)}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- HIGHLIGHT AMOUNT BOX -->
-        <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 6px; padding: 8px 16px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-          <div>
-            <div style="font-size: 9px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">
-              કુલ સ્વીકારેલ દાન રકમ (Total Received)
-            </div>
-            <div style="font-size: 17px; font-weight: 900; color: #14532d; letter-spacing: 0.5px;">
-              ₹ ${formattedAmount} /-
-            </div>
-          </div>
-          <div style="text-align: right; max-width: 55%; font-size: 11.5px; font-weight: 800; color: #15803d;">
-            ${escapeHtml(gujaratiWords)}
-          </div>
-        </div>
-
-        <!-- SIGNATURES & OFFICIAL SEAL SECTION -->
-        <div style="width: 100%; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 2px 14px;">
-            <!-- Left: Cashier -->
-            <div style="text-align: center; min-width: 130px;">
-              <div style="height: 24px;"></div>
-              <div style="border-top: 1.2px solid #334155; padding-top: 3px;">
-                <div style="font-weight: 800; font-size: 11px; color: #1e293b;">ખજાનચીશ્રી / કેશિયર</div>
+              <div style="flex: 1; background: #f0fdf4; border: 1.2px solid #bbf7d0; border-radius: 8px; padding: 7px 12px;">
+                <div style="font-size: 8.5px; font-weight: 800; color: #15803d; text-transform: uppercase;">
+                  ચૂકવણી મોડ (PAYMENT MODE):
+                </div>
+                <div style="font-size: 11.5px; font-weight: 800; color: #166534; margin-top: 2px;">
+                  ${escapeHtml(modeGuj)}
+                </div>
               </div>
             </div>
 
-            <!-- Center: Official Seal -->
-            <div style="text-align: center;">
-              ${renderOfficialSealSvg(communityNameGuj)}
-            </div>
-
-            <!-- Right: President / Secretary -->
-            <div style="text-align: center; min-width: 130px;">
-              <div style="height: 24px;"></div>
-              <div style="border-top: 1.2px solid #334155; padding-top: 3px;">
-                <div style="font-weight: 800; font-size: 11px; color: #1e293b;">પ્રમુખશ્રી / સેક્રેટરી</div>
-                <div style="font-size: 9px; color: #64748b; font-weight: 700;">${escapeHtml(communityNameGuj)}</div>
+            <!-- Amount in Words -->
+            <div style="background: #fafaf9; border: 1.2px solid #e7e5e4; border-radius: 8px; padding: 7px 14px;">
+              <div style="font-size: 8.5px; font-weight: 800; color: #78716c; text-transform: uppercase;">
+                અંકે રૂપિયા (AMOUNT IN WORDS):
+              </div>
+              <div style="font-size: 12.5px; font-weight: 900; color: #1c1917; margin-top: 2px; line-height: 1.35;">
+                ${escapeHtml(gujaratiWords)} <span style="font-size: 10.5px; color: #57534e; font-weight: 700;">(${escapeHtml(englishWords)})</span>
               </div>
             </div>
           </div>
 
-          <!-- Bottom Footer Note -->
-          <div style="text-align: center; font-size: 8.5px; font-weight: 600; color: #64748b; margin-top: 6px; padding-top: 3px; border-top: 1px solid #f1f5f9;">
-            * આ કોમ્પ્યુટરાઈઝ્ડ ઈ-પહોંચ સંસ્થાના સત્તાવાર ચોપડે નોંધાયેલ છે અને માન્ય ગણાશે. આપના ઉમદા દાન બદલ સમસ્ત સમાજ આપનો ઋણી છે.
+          <!-- Right: Highlight Amount & Security Card -->
+          <div style="flex: 1.05; background: linear-gradient(145deg, #f0fdf4 0%, #dcfce7 100%); border: 2.2px solid #10b981; border-radius: 10px; padding: 10px 12px; text-align: center; display: flex; flex-direction: column; justify-content: space-between; align-items: center; box-shadow: 0 3px 10px rgba(16,185,129,0.15);">
+            
+            <div style="width: 100%;">
+              <div style="font-size: 9.5px; font-weight: 800; color: #15803d; text-transform: uppercase; letter-spacing: 0.7px;">
+                કુલ સ્વીકારેલ દાન રકમ
+              </div>
+              <div style="font-size: 8.5px; font-weight: 800; color: #166534; letter-spacing: 1.2px; text-transform: uppercase; margin-bottom: 3px;">
+                TOTAL RECEIVED
+              </div>
+              <div style="font-size: 29px; font-weight: 900; color: #064e3b; letter-spacing: -0.5px; line-height: 1.1; margin: 2px 0;">
+                ₹ ${formattedAmount} /-
+              </div>
+            </div>
+
+            <!-- QR Code & Verified Tag -->
+            <div style="display: flex; align-items: center; gap: 10px; background: #ffffff; border: 1.2px solid #a7f3d0; border-radius: 8px; padding: 6px 10px; width: 100%; justify-content: center;">
+              ${renderMiniQrSvg()}
+              <div style="text-align: left;">
+                <div style="display: inline-block; background: #dcfce7; color: #166534; font-size: 9px; font-weight: 900; padding: 2px 6px; border-radius: 4px;">
+                  ✓ VERIFIED
+                </div>
+                <div style="font-size: 8px; font-weight: 800; color: #047857; margin-top: 2.5px;">
+                  100% Official
+                </div>
+                <div style="font-size: 7.5px; color: #64748b; font-weight: 600;">
+                  Scan To Verify
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
+
+        <!-- AABHAR MESSAGE STRIP (Rich amber card) -->
+        <div style="background: #fffbeb; border: 1.2px solid #fef3c7; border-left: 5px solid #f59e0b; border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 18px;">🤲</span>
+          <div style="font-size: 10.5px; font-weight: 700; color: #92400e; line-height: 1.35;">
+            આપશ્રીના આ ઉમદા સખાવતી દાન અને સહયોગ બદલ સંસ્થા હૃદયપૂર્વક આભાર વ્યક્ત કરે છે. ઈશ્વર આપના ધન-ધાન્યમાં અવિરત બરકત આપે એવી શુભકામનાઓ!
+          </div>
+        </div>
+
+        <!-- FOOTER: SIGNATURES & OFFICIAL SEAL -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 8px 12px 4px; border: 1.2px solid #e2e8f0; background: #f8fafc; border-radius: 8px;">
+          
+          <!-- Left: Cashier -->
+          <div style="text-align: center; width: 140px;">
+            <div style="height: 24px;"></div>
+            <div style="border-top: 1.5px solid #334155; padding-top: 3px;">
+              <div style="font-weight: 900; font-size: 11.5px; color: #0f172a;">ખજાનચી / કેશિયર</div>
+              <div style="font-size: 8.5px; color: #64748b; font-weight: 700;">Treasurer / Cashier</div>
+            </div>
+          </div>
+
+          <!-- Center: Verified Seal -->
+          <div style="text-align: center;">
+            ${renderOfficialSealSvg(communityNameGuj)}
+          </div>
+
+          <!-- Right: Secretary / President -->
+          <div style="text-align: center; width: 140px;">
+            <div style="height: 24px;"></div>
+            <div style="border-top: 1.5px solid #334155; padding-top: 3px;">
+              <div style="font-weight: 900; font-size: 11.5px; color: #0f172a;">પ્રમુખ / મંત્રી</div>
+              <div style="font-size: 8.5px; color: #64748b; font-weight: 700;">President / Secretary</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBTEXT NOTICE -->
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 8px; color: #94a3b8; font-weight: 600; padding: 2px 4px 0;">
+          <span>* આ કમ્પ્યુટરાઈઝ્ડ સત્તાવાર ઈ-પહોંચ છે • Valid Computerized Official Donation Receipt</span>
+          <span style="font-family: monospace;">TXN: ${escapeHtml(receiptNo)}-EVAL • 100% SECURE</span>
+        </div>
+
       </div>
     </div>
   `;

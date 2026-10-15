@@ -435,6 +435,8 @@ const downloadDonationReceipt = async (req, res) => {
 
     const pdfBuffer = await generatePdfFromHtml(html, {
       filename,
+      format: 'A5',
+      landscape: true,
     });
 
 

@@ -64,11 +64,15 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
   const browser = await getBrowser();
   const page = await browser.newPage();
 
+  const format = options.format || 'A4';
+  const isLandscape = Boolean(options.landscape || options.orientation === 'landscape');
+  const orientation = isLandscape ? 'landscape' : 'portrait';
+
   try {
-    // Set viewport to standard high-DPI A4 aspect (794 x 1123 at 2x device scale)
+    // Set viewport based on orientation
     await page.setViewport({
-      width: 794,
-      height: 1123,
+      width: isLandscape ? 1123 : 794,
+      height: isLandscape ? 794 : 1123,
       deviceScaleFactor: 2,
     });
 
@@ -84,7 +88,7 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
         <link href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800;900&family=Noto+Sans+Gujarati:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
         <style>
           @page {
-            size: A4 portrait;
+            size: ${format} ${orientation};
             margin: 0;
           }
           * {
@@ -202,7 +206,8 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
     });
 
     const pdfOptions = {
-      format: 'A4',
+      format: format,
+      landscape: isLandscape,
       printBackground: true,
       preferCSSPageSize: true,
       margin: { top: 0, right: 0, bottom: 0, left: 0 },
