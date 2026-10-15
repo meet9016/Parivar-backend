@@ -418,7 +418,7 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
         <div style="background: #fffbeb; border: 1.2px solid #fef3c7; border-left: 5px solid #f59e0b; border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; gap: 10px;">
           <span style="font-size: 18px;">🤲</span>
           <div style="font-size: 10.5px; font-weight: 700; color: #92400e; line-height: 1.35;">
-            આપશ્રીના આ ઉમદા સખાવતી દાન બદલ સમસ્ત સમાજ હૃદયપૂર્વક આભાર વ્યક્ત કરે છે અને આપના ધન-ધાન્યમાં અવિરત બરકત રહે એવી નેક દુઆ તથા શુભકામનાઓ પાઠવે છે!
+            આપશ્રીના આ ઉમદા સખાવતી દાન બદલ સમસ્ત સમાજ હૃદયપૂર્વક આભાર વ્યક્ત કરે છે અને આપના ધન-ધાન્યમાં અવિરત બરકત રહે એવી નેક દુઆ પાઠવે છે!
           </div>
         </div>
 
