@@ -30,15 +30,43 @@ async function resolveMandal(mandalId) {
   return mandal;
 }
 
+// Helper to determine if the logged-in user is an admin / superadmin
+function isMandalAdminUser(user) {
+  if (!user) return false;
+  if (user.is_super_admin === true) return true;
+  if (user.role === 'superadmin' || user.role === 'admin') return true;
+  if (user.committee_role === 'President' || user.committee_role === 'Admin') return true;
+  const roleName = user.role_id?.name?.toLowerCase() || user.role_id?.roleName?.toLowerCase() || String(user.role || '').toLowerCase();
+  if (roleName === 'admin' || roleName === 'super admin' || roleName === 'superadmin') return true;
+  if (user.is_committee === true && !user.role_id) return true;
+
+  const perms = Array.isArray(user.role_id?.permissions) ? user.role_id.permissions : [];
+  if (perms.includes('*') || perms.includes('all') || perms.includes('committee.manage')) return true;
+
+  return false;
+}
+
 // 1. List All Mandals (Multiple Mandals)
 exports.getMandalsList = async (req, res) => {
   try {
-    const mandals = await Mandal.find()
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+
+    let query = {};
+    if (!isFullAdmin && userId) {
+      // Regular user: Only show the mandal(s) where they are enrolled as member
+      query = { members: userId };
+    }
+
+    const mandals = await Mandal.find(query)
       .populate('mandal_head_id', 'first_name middle_name last_name number profile_image image')
       .sort({ createdAt: -1 })
       .lean();
 
     if (mandals.length === 0) {
+      if (!isFullAdmin) {
+        return apiResponse(res, 200, 'User is not enrolled in any Mandal', []);
+      }
       const def = await resolveMandal();
       return apiResponse(res, 200, 'Mandals list retrieved successfully', [{
         ...def.toObject(),
@@ -47,11 +75,21 @@ exports.getMandalsList = async (req, res) => {
       }]);
     }
 
-    const formatted = mandals.map(m => ({
-      ...m,
-      id: m._id,
-      members_count: (m.members || []).length
-    }));
+    const formatted = mandals.map(m => {
+      if (!isFullAdmin && userId) {
+        return {
+          ...m,
+          id: m._id,
+          members: [userId],
+          members_count: 1
+        };
+      }
+      return {
+        ...m,
+        id: m._id,
+        members_count: (m.members || []).length
+      };
+    });
 
     return apiResponse(res, 200, 'Mandals list retrieved successfully', formatted);
   } catch (error) {
@@ -63,6 +101,9 @@ exports.getMandalsList = async (req, res) => {
 // 2. Create New Mandal
 exports.createMandal = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const { name, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
 
     if (!name || !name.trim()) {
@@ -115,6 +156,9 @@ exports.getMandalSetup = async (req, res) => {
 // 4. Update Mandal Setup
 exports.updateMandalSetup = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const mandalId = req.query.mandal_id || req.params.id || req.body.mandal_id;
     const mandal = await resolveMandal(mandalId);
     const { name, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
@@ -149,6 +193,9 @@ exports.updateMandalSetup = async (req, res) => {
 // 5. Delete Mandal
 exports.deleteMandal = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const mandalId = req.params.id || req.body.mandal_id;
     if (!mandalId) {
       return apiResponse(res, 400, 'Mandal ID is required');
@@ -173,6 +220,8 @@ exports.deleteMandal = async (req, res) => {
 // 6. Get Members for Mandal Selection / Management
 exports.getMandalMembers = async (req, res) => {
   try {
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 15;
@@ -182,7 +231,23 @@ exports.getMandalMembers = async (req, res) => {
     const mandalMemberIds = (mandal.members || []).map(id => id.toString());
 
     let query = {};
-    if (filterType === 'mandal_only') {
+    if (!isFullAdmin && userId) {
+      const isEnrolled = mandalMemberIds.includes(userId.toString());
+      if (!isEnrolled) {
+        return apiResponse(res, 200, 'User is not enrolled in this Mandal', {
+          data: [],
+          total_mandal_members: 0,
+          pagination: {
+            page: 1,
+            limit,
+            total: 0,
+            totalPages: 1
+          }
+        });
+      }
+      // Regular user only sees themselves
+      query._id = userId;
+    } else if (filterType === 'mandal_only') {
       query._id = { $in: mandal.members || [] };
     } else if (filterType === 'non_mandal') {
       query._id = { $nin: mandal.members || [] };
@@ -219,7 +284,7 @@ exports.getMandalMembers = async (req, res) => {
 
     return apiResponse(res, 200, 'Members fetched successfully', {
       data: formatted,
-      total_mandal_members: mandalMemberIds.length,
+      total_mandal_members: isFullAdmin ? mandalMemberIds.length : (mandalMemberIds.includes(userId?.toString()) ? 1 : 0),
       pagination: {
         page,
         limit,
@@ -236,6 +301,9 @@ exports.getMandalMembers = async (req, res) => {
 // 7. Toggle single member in Mandal
 exports.toggleMandalMember = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const { member_id, mandal_id } = req.body;
     if (!member_id) {
       return apiResponse(res, 400, 'Member ID is required');
@@ -268,6 +336,9 @@ exports.toggleMandalMember = async (req, res) => {
 // 8. Bulk update members in Mandal
 exports.bulkUpdateMandalMembers = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const { member_ids, action, mandal_id } = req.body; // action: 'add', 'remove', or 'enroll_all'
 
     const mandal = await resolveMandal(mandal_id);
@@ -308,6 +379,8 @@ exports.bulkUpdateMandalMembers = async (req, res) => {
 // 9. Get Month-wise Contributions (Auto-generates pending records for enrolled members)
 exports.getMonthlyContributions = async (req, res) => {
   try {
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
     const currentMonthStr = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
     const month = req.query.month || currentMonthStr;
@@ -317,6 +390,38 @@ exports.getMonthlyContributions = async (req, res) => {
     const search = (req.query.search || '').trim();
 
     const mandalMemberIds = mandal.members || [];
+
+    // If regular user: check if enrolled in this mandal
+    if (!isFullAdmin && userId) {
+      const isEnrolled = mandalMemberIds.some(id => id.toString() === userId.toString());
+      if (!isEnrolled) {
+        return apiResponse(res, 200, 'User is not enrolled in this Mandal', {
+          data: [],
+          summary: {
+            month,
+            mandal_monthly_amount: mandal.monthly_amount || 500,
+            total_members: 0,
+            paid_members: 0,
+            pending_members: 0,
+            expected_amount: 0,
+            collected_amount: 0,
+            pending_amount: 0,
+            cash_collected: 0,
+            bank_online_collected: 0,
+            grand_total_collected: 0,
+            grand_cash_collected: 0,
+            grand_bank_online_collected: 0,
+            mandals_breakdown: []
+          },
+          pagination: {
+            page: 1,
+            limit,
+            total: 0,
+            totalPages: 1
+          }
+        });
+      }
+    }
 
     // Ensure all mandal members have a contribution record for this month
     if (mandalMemberIds.length > 0) {
@@ -357,6 +462,11 @@ exports.getMonthlyContributions = async (req, res) => {
       month: month,
       member_id: { $in: mandalMemberIds }
     };
+
+    // If regular user: MUST ONLY SEE THEIR OWN RECORD!
+    if (!isFullAdmin && userId) {
+      query.member_id = userId;
+    }
 
     if (statusFilter && statusFilter !== 'All') {
       query.status = statusFilter;
@@ -385,92 +495,112 @@ exports.getMonthlyContributions = async (req, res) => {
       .lean();
 
     // Summary calculation for the given month
-    const allMonthContribs = await MandalContribution.find({
-      mandal_id: mandal._id,
-      month: month,
-      member_id: { $in: mandalMemberIds }
-    }).lean();
+    let summaryPayload = {};
 
-    const totalMembers = mandalMemberIds.length;
-    const paidList = allMonthContribs.filter(c => c.status === 'Paid');
-    const paidMembersCount = paidList.length;
-    const pendingMembersCount = Math.max(0, totalMembers - paidMembersCount);
-    const collectedAmount = paidList.reduce((acc, c) => acc + (c.amount || 0), 0);
-    const expectedAmount = totalMembers * (mandal.monthly_amount || 500);
-    const pendingAmount = Math.max(0, expectedAmount - collectedAmount);
+    if (!isFullAdmin && userId) {
+      // Summary ONLY for this user
+      const myContrib = await MandalContribution.findOne({
+        mandal_id: mandal._id,
+        month: month,
+        member_id: userId
+      }).lean();
 
-    // Payment Mode Breakdown for this Mandal
-    let cashCollected = 0;
-    let bankOnlineCollected = 0;
-    paidList.forEach(c => {
-      const mode = String(c.payment_mode || 'Cash').toLowerCase().trim();
-      const amt = Number(c.amount || 0);
-      if (mode === 'cash') {
-        cashCollected += amt;
-      } else {
-        // 'online', 'bank', 'bank transfer', 'upi', 'cheque', etc.
-        bankOnlineCollected += amt;
-      }
-    });
+      const isPaid = myContrib?.status === 'Paid';
+      const expAmt = Number(myContrib?.expected_amount || mandal.monthly_amount || 500);
+      const paidAmt = isPaid ? Number(myContrib?.amount || expAmt) : 0;
+      const pendAmt = isPaid ? 0 : expAmt;
+      const mode = String(myContrib?.payment_mode || 'Cash').toLowerCase().trim();
 
-    // Grand Total across ALL Mandals for this month
-    const allMandalsList = await Mandal.find().select('_id name monthly_amount').lean();
-    const allMandalsPaidMonth = await MandalContribution.find({
-      month: month,
-      status: 'Paid'
-    }).lean();
-
-    let grandTotalCollected = 0;
-    let grandCashCollected = 0;
-    let grandBankOnlineCollected = 0;
-
-    // Group by mandal_id
-    const mandalStatsMap = {};
-    allMandalsList.forEach(m => {
-      mandalStatsMap[m._id.toString()] = {
-        mandal_id: m._id,
-        name: m.name,
-        monthly_amount: m.monthly_amount || 500,
-        total_collected: 0,
-        cash_collected: 0,
-        bank_collected: 0
+      summaryPayload = {
+        month,
+        mandal_monthly_amount: mandal.monthly_amount || 500,
+        total_members: 1,
+        paid_members: isPaid ? 1 : 0,
+        pending_members: isPaid ? 0 : 1,
+        expected_amount: expAmt,
+        collected_amount: paidAmt,
+        pending_amount: pendAmt,
+        cash_collected: mode === 'cash' ? paidAmt : 0,
+        bank_online_collected: mode !== 'cash' ? paidAmt : 0,
+        grand_total_collected: paidAmt,
+        grand_cash_collected: mode === 'cash' ? paidAmt : 0,
+        grand_bank_online_collected: mode !== 'cash' ? paidAmt : 0,
+        mandals_breakdown: []
       };
-    });
+    } else {
+      // Admin summary (all members)
+      const allMonthContribs = await MandalContribution.find({
+        mandal_id: mandal._id,
+        month: month,
+        member_id: { $in: mandalMemberIds }
+      }).lean();
 
-    allMandalsPaidMonth.forEach(c => {
-      const mode = String(c.payment_mode || 'Cash').toLowerCase().trim();
-      const amt = Number(c.amount || 0);
-      const mId = c.mandal_id ? c.mandal_id.toString() : '';
+      const totalMembers = mandalMemberIds.length;
+      const paidList = allMonthContribs.filter(c => c.status === 'Paid');
+      const paidMembersCount = paidList.length;
+      const pendingMembersCount = Math.max(0, totalMembers - paidMembersCount);
+      const collectedAmount = paidList.reduce((acc, c) => acc + (c.amount || 0), 0);
+      const expectedAmount = totalMembers * (mandal.monthly_amount || 500);
+      const pendingAmount = Math.max(0, expectedAmount - collectedAmount);
 
-      grandTotalCollected += amt;
-      if (mode === 'cash') {
-        grandCashCollected += amt;
-      } else {
-        grandBankOnlineCollected += amt;
-      }
-
-      if (mId && mandalStatsMap[mId]) {
-        mandalStatsMap[mId].total_collected += amt;
+      let cashCollected = 0;
+      let bankOnlineCollected = 0;
+      paidList.forEach(c => {
+        const mode = String(c.payment_mode || 'Cash').toLowerCase().trim();
+        const amt = Number(c.amount || 0);
         if (mode === 'cash') {
-          mandalStatsMap[mId].cash_collected += amt;
+          cashCollected += amt;
         } else {
-          mandalStatsMap[mId].bank_collected += amt;
+          bankOnlineCollected += amt;
         }
-      }
-    });
+      });
 
-    const mandalsBreakdown = Object.values(mandalStatsMap);
+      // Grand Total across ALL Mandals for this month
+      const allMandalsList = await Mandal.find().select('_id name monthly_amount').lean();
+      const allMandalsPaidMonth = await MandalContribution.find({
+        month: month,
+        status: 'Paid'
+      }).lean();
 
-    const formatted = contributions.map(c => ({
-      ...c,
-      id: c._id,
-      member_name: c.member_name || (c.member_id ? `${c.member_id.first_name || ''} ${c.member_id.last_name || ''}`.trim() : 'Unknown Member'),
-      member_number: c.member_number || c.member_id?.number || ''
-    }));
+      let grandTotalCollected = 0;
+      let grandCashCollected = 0;
+      let grandBankOnlineCollected = 0;
 
-    return apiResponse(res, 200, 'Monthly contributions fetched successfully', {
-      data: formatted,
-      summary: {
+      const mandalStatsMap = {};
+      allMandalsList.forEach(m => {
+        mandalStatsMap[m._id.toString()] = {
+          mandal_id: m._id,
+          name: m.name,
+          monthly_amount: m.monthly_amount || 500,
+          total_collected: 0,
+          cash_collected: 0,
+          bank_collected: 0
+        };
+      });
+
+      allMandalsPaidMonth.forEach(c => {
+        const mode = String(c.payment_mode || 'Cash').toLowerCase().trim();
+        const amt = Number(c.amount || 0);
+        const mId = c.mandal_id ? c.mandal_id.toString() : '';
+
+        grandTotalCollected += amt;
+        if (mode === 'cash') {
+          grandCashCollected += amt;
+        } else {
+          grandBankOnlineCollected += amt;
+        }
+
+        if (mId && mandalStatsMap[mId]) {
+          mandalStatsMap[mId].total_collected += amt;
+          if (mode === 'cash') {
+            mandalStatsMap[mId].cash_collected += amt;
+          } else {
+            mandalStatsMap[mId].bank_collected += amt;
+          }
+        }
+      });
+
+      summaryPayload = {
         month,
         mandal_monthly_amount: mandal.monthly_amount || 500,
         total_members: totalMembers,
@@ -481,12 +611,23 @@ exports.getMonthlyContributions = async (req, res) => {
         pending_amount: pendingAmount,
         cash_collected: cashCollected,
         bank_online_collected: bankOnlineCollected,
-        // All Mandals Grand Total & Individual Breakdown
         grand_total_collected: grandTotalCollected,
         grand_cash_collected: grandCashCollected,
         grand_bank_online_collected: grandBankOnlineCollected,
-        mandals_breakdown: mandalsBreakdown
-      },
+        mandals_breakdown: Object.values(mandalStatsMap)
+      };
+    }
+
+    const formatted = contributions.map(c => ({
+      ...c,
+      id: c._id,
+      member_name: c.member_name || (c.member_id ? `${c.member_id.first_name || ''} ${c.member_id.last_name || ''}`.trim() : 'Unknown Member'),
+      member_number: c.member_number || c.member_id?.number || ''
+    }));
+
+    return apiResponse(res, 200, 'Monthly contributions fetched successfully', {
+      data: formatted,
+      summary: summaryPayload,
       pagination: {
         page,
         limit,
@@ -503,6 +644,8 @@ exports.getMonthlyContributions = async (req, res) => {
 // 9b. Export Month-wise Contributions to Excel (.xlsx)
 exports.exportMonthlyContributions = async (req, res) => {
   try {
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
     const currentMonthStr = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
     const month = req.query.month || currentMonthStr;
@@ -511,6 +654,13 @@ exports.exportMonthlyContributions = async (req, res) => {
     const search = (req.query.search || '').trim();
 
     const mandalMemberIds = mandal.members || [];
+
+    if (!isFullAdmin && userId) {
+      const isEnrolled = mandalMemberIds.some(id => id.toString() === userId.toString());
+      if (!isEnrolled) {
+        return apiResponse(res, 403, 'User is not enrolled in this Mandal');
+      }
+    }
 
     // Ensure all mandal members have a contribution record for this month
     if (mandalMemberIds.length > 0) {
@@ -551,6 +701,10 @@ exports.exportMonthlyContributions = async (req, res) => {
       month: month,
       member_id: { $in: mandalMemberIds }
     };
+
+    if (!isFullAdmin && userId) {
+      query.member_id = userId;
+    }
 
     if (statusFilter && statusFilter !== 'All') {
       query.status = statusFilter;
@@ -663,6 +817,9 @@ exports.exportMonthlyContributions = async (req, res) => {
 // 10. Record / Update Payment for a Member
 exports.recordContribution = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const { id } = req.params;
     const { status, amount, payment_date, payment_mode, transaction_id, notes, receipt_number } = req.body;
 
@@ -698,6 +855,9 @@ exports.recordContribution = async (req, res) => {
 // 11. Bulk Mark Selected or All Pending as Paid for a Month
 exports.bulkMarkPaid = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const { month, mandal_id, contribution_ids, payment_mode = 'Cash', payment_date = new Date() } = req.body;
     const currentMonthStr = new Date().toISOString().slice(0, 7);
     const targetMonth = month || currentMonthStr;
@@ -753,6 +913,8 @@ exports.bulkMarkPaid = async (req, res) => {
 // 12. Payment History (kept for API compatibility if called)
 exports.getPaymentHistory = async (req, res) => {
   try {
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 15;
@@ -764,6 +926,10 @@ exports.getPaymentHistory = async (req, res) => {
       mandal_id: mandal._id,
       status: 'Paid'
     };
+
+    if (!isFullAdmin && userId) {
+      query.member_id = userId;
+    }
 
     if (month) query.month = month;
     if (paymentMode && paymentMode !== 'All') query.payment_mode = paymentMode;
@@ -786,7 +952,7 @@ exports.getPaymentHistory = async (req, res) => {
       .limit(limit)
       .lean();
 
-    const allPaid = await MandalContribution.find({ mandal_id: mandal._id, status: 'Paid' }).lean();
+    const allPaid = await MandalContribution.find(query).lean();
     const totalAmount = allPaid.reduce((sum, p) => sum + (p.amount || 0), 0);
 
     const formatted = payments.map(p => ({
@@ -814,10 +980,89 @@ exports.getPaymentHistory = async (req, res) => {
 // 13. Mandal Dashboard
 exports.getMandalDashboard = async (req, res) => {
   try {
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
     const currentMonthStr = new Date().toISOString().slice(0, 7);
 
     const mandalMemberIds = mandal.members || [];
+    const isEnrolled = mandalMemberIds.some(id => id.toString() === userId?.toString());
+
+    if (!isFullAdmin && userId) {
+      if (!isEnrolled) {
+        return apiResponse(res, 200, 'User not enrolled in this mandal', {
+          mandal: {
+            id: mandal._id,
+            name: mandal.name,
+            monthly_amount: mandal.monthly_amount,
+            due_day: mandal.due_day || 10,
+            mandal_head_name: mandal.mandal_head_name,
+            members_count: 0
+          },
+          metrics: {
+            current_month: currentMonthStr,
+            total_members: 0,
+            month_expected: 0,
+            month_collected: 0,
+            month_pending: 0,
+            total_collection: 0
+          },
+          recent_payments: []
+        });
+      }
+
+      // Member specific metrics
+      const myContrib = await MandalContribution.findOne({
+        mandal_id: mandal._id,
+        month: currentMonthStr,
+        member_id: userId
+      }).lean();
+
+      const isPaid = myContrib?.status === 'Paid';
+      const expAmt = Number(myContrib?.expected_amount || mandal.monthly_amount || 500);
+      const paidAmt = isPaid ? Number(myContrib?.amount || expAmt) : 0;
+      const pendAmt = isPaid ? 0 : expAmt;
+
+      const myAllPaid = await MandalContribution.find({
+        mandal_id: mandal._id,
+        member_id: userId,
+        status: 'Paid'
+      }).lean();
+      const myTotalCollection = myAllPaid.reduce((acc, c) => acc + (c.amount || 0), 0);
+
+      const recentPayments = await MandalContribution.find({
+        mandal_id: mandal._id,
+        member_id: userId,
+        status: 'Paid'
+      })
+        .sort({ payment_date: -1, updatedAt: -1 })
+        .limit(5)
+        .lean();
+
+      return apiResponse(res, 200, 'Mandal dashboard fetched successfully', {
+        mandal: {
+          id: mandal._id,
+          name: mandal.name,
+          monthly_amount: mandal.monthly_amount,
+          due_day: mandal.due_day || 10,
+          mandal_head_name: mandal.mandal_head_name,
+          members_count: 1
+        },
+        metrics: {
+          current_month: currentMonthStr,
+          total_members: 1,
+          month_expected: expAmt,
+          month_collected: paidAmt,
+          month_pending: pendAmt,
+          total_collection: myTotalCollection
+        },
+        recent_payments: recentPayments.map(p => ({
+          ...p,
+          id: p._id
+        }))
+      });
+    }
+
     const totalMembers = mandalMemberIds.length;
 
     // Month metrics
@@ -880,6 +1125,9 @@ exports.getMandalDashboard = async (req, res) => {
 // Sends notification to members who have pending contributions for previous / current month
 exports.sendPendingReminders = async (req, res) => {
   try {
+    if (!isMandalAdminUser(req.user)) {
+      return apiResponse(res, 403, 'Permission denied');
+    }
     const { month, mandal_id } = req.body || {};
     const targetMonth = month || new Date().toISOString().slice(0, 7);
 
@@ -967,6 +1215,283 @@ exports.sendPendingReminders = async (req, res) => {
   } catch (error) {
     console.error('Error in sendPendingReminders:', error);
     return apiResponse(res, 500, error.message || 'Failed to send pending notifications');
+  }
+};
+
+// 15. Get Logged-in User's Mandal Contributions & Pending Dues
+exports.getMyContributions = async (req, res) => {
+  try {
+    const isFullAdmin = isMandalAdminUser(req.user);
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    if (!userId) {
+      return apiResponse(res, 401, 'Unauthorized: User not identified');
+    }
+
+    // Only admin can pass member_id to view another member's contributions
+    let targetUserId = userId;
+    if (isFullAdmin && req.query.member_id && mongoose.isValidObjectId(req.query.member_id)) {
+      targetUserId = new mongoose.Types.ObjectId(req.query.member_id);
+    }
+
+    const userDoc = await User.findById(targetUserId)
+      .select('first_name middle_name last_name number member_id village image profile_image')
+      .lean();
+
+    const userName = userDoc
+      ? `${userDoc.first_name || ''} ${userDoc.middle_name || ''} ${userDoc.last_name || ''}`.trim()
+      : (req.user ? `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() : 'Member');
+    const userNumber = userDoc?.number || req.user?.number || '';
+
+    // Determine target mandal(s)
+    let mandalQuery = { status: 1 };
+    if (req.query.mandal_id && mongoose.isValidObjectId(req.query.mandal_id)) {
+      mandalQuery._id = new mongoose.Types.ObjectId(req.query.mandal_id);
+    }
+
+    // Find mandals where user is listed in members
+    let enrolledMandals = await Mandal.find({ ...mandalQuery, members: targetUserId }).lean();
+
+    // If no mandals found in members, only admin can check fallback
+    if (enrolledMandals.length === 0 && isFullAdmin) {
+      if (req.query.mandal_id && mongoose.isValidObjectId(req.query.mandal_id)) {
+        const singleMandal = await Mandal.findById(req.query.mandal_id).lean();
+        if (singleMandal) {
+          enrolledMandals = [singleMandal];
+        }
+      } else {
+        const contribMandalIds = await MandalContribution.distinct('mandal_id', { member_id: targetUserId });
+        if (contribMandalIds && contribMandalIds.length > 0) {
+          enrolledMandals = await Mandal.find({ _id: { $in: contribMandalIds } }).lean();
+        }
+      }
+    }
+
+    if (!enrolledMandals || enrolledMandals.length === 0) {
+      return apiResponse(res, 200, 'User is not enrolled in any Mandal', {
+        user: {
+          id: targetUserId,
+          name: userName,
+          number: userNumber,
+          village: userDoc?.village || ''
+        },
+        is_enrolled: false,
+        summary: {
+          total_paid_amount: 0,
+          total_pending_amount: 0,
+          total_expected_amount: 0,
+          total_paid_months: 0,
+          total_pending_months: 0,
+          total_months: 0,
+          enrolled_mandals_count: 0
+        },
+        mandals: [],
+        contributions: []
+      });
+    }
+
+    const now = new Date();
+    const currentMonthStr = now.toISOString().slice(0, 7); // e.g. '2026-10'
+
+    const mandalsData = [];
+    const allContributions = [];
+
+    let overallTotalPaid = 0;
+    let overallTotalPending = 0;
+    let overallTotalExpected = 0;
+    let overallTotalPaidMonths = 0;
+    let overallTotalPendingMonths = 0;
+
+    for (const mandal of enrolledMandals) {
+      // Calculate months range from mandal.start_date to current month
+      const start = mandal.start_date ? new Date(mandal.start_date) : now;
+      const validStart = (isNaN(start.getTime()) || start > now) ? now : start;
+
+      const months = [];
+      const iter = new Date(validStart.getFullYear(), validStart.getMonth(), 1);
+      const stop = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      let counter = 0;
+      while (iter <= stop && counter < 60) {
+        months.push(iter.toISOString().slice(0, 7));
+        iter.setMonth(iter.getMonth() + 1);
+        counter++;
+      }
+
+      if (months.length === 0 || !months.includes(currentMonthStr)) {
+        if (!months.includes(currentMonthStr)) {
+          months.push(currentMonthStr);
+        }
+      }
+
+      // Check existing contributions for these months
+      const existingContribs = await MandalContribution.find({
+        mandal_id: mandal._id,
+        member_id: targetUserId,
+        month: { $in: months }
+      }).select('month').lean();
+
+      const existingMonthSet = new Set(existingContribs.map(c => c.month));
+      const missingMonths = months.filter(m => !existingMonthSet.has(m));
+
+      // Auto-insert pending records for missing active months
+      if (missingMonths.length > 0) {
+        const newRecords = missingMonths.map(mStr => ({
+          mandal_id: mandal._id,
+          member_id: targetUserId,
+          member_name: userName,
+          member_number: userNumber,
+          month: mStr,
+          amount: 0,
+          expected_amount: mandal.monthly_amount || 500,
+          status: 'Pending',
+          payment_mode: 'Cash'
+        }));
+
+        await MandalContribution.insertMany(newRecords, { ordered: false }).catch(() => {});
+      }
+
+      // Build query to fetch contributions for this mandal & user
+      let contribFilter = {
+        mandal_id: mandal._id,
+        member_id: targetUserId
+      };
+
+      if (req.query.month) {
+        contribFilter.month = req.query.month;
+      }
+      if (req.query.year) {
+        contribFilter.month = new RegExp(`^${req.query.year}-`);
+      }
+      if (req.query.status && req.query.status !== 'All') {
+        contribFilter.status = req.query.status;
+      }
+
+      const mandalContribs = await MandalContribution.find(contribFilter)
+        .sort({ month: -1 })
+        .lean();
+
+      let mandalPaidAmount = 0;
+      let mandalPendingAmount = 0;
+      let mandalExpectedAmount = 0;
+      let mandalPaidMonths = 0;
+      let mandalPendingMonths = 0;
+
+      const formattedContribs = mandalContribs.map(c => {
+        const expAmt = Number(c.expected_amount || mandal.monthly_amount || 500);
+        const actAmt = Number(c.amount || 0);
+        const isPaid = c.status === 'Paid';
+        const pendingAmt = isPaid ? 0 : Math.max(0, expAmt - actAmt);
+
+        mandalExpectedAmount += expAmt;
+        mandalPaidAmount += actAmt;
+        mandalPendingAmount += pendingAmt;
+
+        if (isPaid) {
+          mandalPaidMonths++;
+        } else {
+          mandalPendingMonths++;
+        }
+
+        const item = {
+          id: c._id,
+          _id: c._id,
+          mandal_id: mandal._id,
+          mandal_name: mandal.name,
+          month: c.month,
+          expected_amount: expAmt,
+          amount: actAmt,
+          paid_amount: actAmt,
+          pending_amount: pendingAmt,
+          status: c.status || 'Pending',
+          payment_date: c.payment_date || null,
+          payment_mode: c.payment_mode || 'Cash',
+          receipt_number: c.receipt_number || '',
+          transaction_id: c.transaction_id || '',
+          notes: c.notes || '',
+          recorded_by_name: c.recorded_by_name || '',
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt
+        };
+
+        allContributions.push(item);
+        return item;
+      });
+
+      // Current month status for this mandal
+      const currentMonthRecord = formattedContribs.find(c => c.month === currentMonthStr);
+      const currentMonthStatus = currentMonthRecord ? currentMonthRecord.status : 'Pending';
+
+      overallTotalPaid += mandalPaidAmount;
+      overallTotalPending += mandalPendingAmount;
+      overallTotalExpected += mandalExpectedAmount;
+      overallTotalPaidMonths += mandalPaidMonths;
+      overallTotalPendingMonths += mandalPendingMonths;
+
+      mandalsData.push({
+        mandal_id: mandal._id,
+        mandal_name: mandal.name,
+        monthly_amount: mandal.monthly_amount || 500,
+        due_day: mandal.due_day || 10,
+        start_date: mandal.start_date || null,
+        mandal_head_name: mandal.mandal_head_name || '',
+        summary: {
+          total_paid_amount: mandalPaidAmount,
+          total_pending_amount: mandalPendingAmount,
+          total_expected_amount: mandalExpectedAmount,
+          paid_months_count: mandalPaidMonths,
+          pending_months_count: mandalPendingMonths,
+          total_months: formattedContribs.length,
+          current_month: currentMonthStr,
+          current_month_status: currentMonthStatus
+        },
+        contributions: formattedContribs
+      });
+    }
+
+    // Sort all contributions across mandals by month desc
+    allContributions.sort((a, b) => (b.month || '').localeCompare(a.month || ''));
+
+    // Optional pagination
+    const page = req.query.page ? parseInt(req.query.page, 10) : null;
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
+
+    let paginatedContributions = allContributions;
+    let paginationInfo = undefined;
+
+    if (page && limit) {
+      const total = allContributions.length;
+      paginatedContributions = allContributions.slice((page - 1) * limit, page * limit);
+      paginationInfo = {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1
+      };
+    }
+
+    return apiResponse(res, 200, 'User contributions retrieved successfully', {
+      user: {
+        id: targetUserId,
+        name: userName,
+        number: userNumber,
+        village: userDoc?.village || ''
+      },
+      is_enrolled: true,
+      summary: {
+        total_paid_amount: overallTotalPaid,
+        total_pending_amount: overallTotalPending,
+        total_expected_amount: overallTotalExpected,
+        total_paid_months: overallTotalPaidMonths,
+        total_pending_months: overallTotalPendingMonths,
+        total_months: allContributions.length,
+        enrolled_mandals_count: mandalsData.length
+      },
+      mandals: mandalsData,
+      contributions: paginatedContributions
+    }, paginationInfo);
+  } catch (error) {
+    console.error('Error in getMyContributions:', error);
+    return apiResponse(res, 500, error.message || 'Failed to fetch user contributions');
   }
 };
 

@@ -72,6 +72,12 @@ router.get('/export/download/:filename', optionalProtect, userController.downloa
 
 router.post('/bulk-import', protect, requirePermission('members.add'), upload.single('file'), userController.bulkImportUsers);
 
+// Death / Vafat Card Download & Link Endpoints (for Mobile App & Web)
+router.get('/death/:id/download', optionalProtect, userController.downloadDeathCard);
+router.get('/death/:id/download-link', optionalProtect, userController.getDeathCardLink);
+router.get('/vafat/:id/download', optionalProtect, userController.downloadDeathCard);
+router.get('/vafat/:id/download-link', optionalProtect, userController.getDeathCardLink);
+
 router.get('/:id', protect, (req, res, next) => {
     return userController.getUserById(req, res, next);
 });

@@ -11,6 +11,37 @@ const queryHelper = require('../utils/queryHelper');
 const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
+const { renderVafatCardHtml } = require('../templates/vafatCardTemplateService');
+const { generatePdfFromHtml, generateImageFromHtml, synchronizedGeneratePdf } = require('../services/pdfService');
+
+function resolveBaseUrl(req) {
+  let base = '';
+  if (process.env.BASE_URL) base = process.env.BASE_URL;
+  else if (process.env.APP_URL) base = process.env.APP_URL;
+  else if (req) {
+    const protocol = req?.headers?.['x-forwarded-proto'] || req?.protocol || 'http';
+    const host = req?.headers?.['x-forwarded-host'] || (typeof req?.get === 'function' ? req.get('host') : '') || 'localhost:5000';
+    base = `${protocol}://${host}`;
+  } else {
+    base = 'http://localhost:5000';
+  }
+  return base.replace(/\/api\/?$/, '').replace(/\/$/, '');
+}
+
+function buildDeathDownloadUrl(userId, req, format = 'png') {
+  const baseUrl = resolveBaseUrl(req);
+  const token = req?.query?.token || '';
+  const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
+
+  const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '';
+  const referer = req?.headers?.['referer'] || '';
+  const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
+                    host.includes('parivar.me') ||
+                    referer.includes('parivar.me');
+
+  const prefix = isApiApi ? '/api/api' : '/api';
+  return `${baseUrl}${prefix}/users/death/${userId}/download?format=${format}${tokenQuery}`;
+}
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
@@ -667,7 +698,10 @@ const getUsers = async (req, res) => {
           is_today: isToday,
           relation: u.relation || '',
           familyHead: Boolean(u.familyHead),
-          family_head: u.family_head || null
+          family_head: u.family_head || null,
+          download_url: buildDeathDownloadUrl(u.id || String(u._id), req, 'png'),
+          png_url: buildDeathDownloadUrl(u.id || String(u._id), req, 'png'),
+          pdf_url: buildDeathDownloadUrl(u.id || String(u._id), req, 'pdf')
         };
       });
 
@@ -1661,6 +1695,152 @@ const downloadExportFile = async (req, res) => {
   }
 };
 
+// Download Death / Vafat Notification Card (PNG or PDF)
+const downloadDeathCard = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const format = String(req.query.format || req.query.type || 'png').toLowerCase();
+    const isInline = String(req.query.inline || req.query.preview || 'false').toLowerCase() === 'true';
+
+    const orConditions = [{ member_id: id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.unshift({ _id: id });
+    }
+
+    const user = await User.findOne({ $or: orConditions })
+      .populate('family_head', 'first_name middle_name last_name name')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Deceased member record not found',
+        data: null
+      });
+    }
+
+    // Resolve community name from query or config
+    let communityName = req.query.community_name || req.query.communityName || '';
+    if (!communityName) {
+      try {
+        const Config = require('../models/configModel');
+        const config = await Config.findOne().lean();
+        communityName = config?.name || config?.web_name || 'Shree Halai Memon Jamat';
+      } catch (_) {
+        communityName = 'Shree Halai Memon Jamat';
+      }
+    }
+
+    const memberName = fullName(user) || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Member';
+    const isFemale = String(user.gender || '').toLowerCase() === 'female';
+    const titlePrefix = isFemale ? 'Marhuma' : 'Marhum';
+    const safeName = memberName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = `vafat_${titlePrefix}_${safeName}`;
+
+    // Render HTML string
+    const htmlContent = await renderVafatCardHtml(user, {
+      communityName,
+      format,
+      isPdf: format === 'pdf'
+    });
+
+    const lockKey = `vafat_card_${id}_${format}`;
+
+    if (format === 'pdf') {
+      const pdfBuffer = await synchronizedGeneratePdf(lockKey, async () => {
+        return generatePdfFromHtml(htmlContent, {
+          filename,
+          format: 'A4',
+          orientation: 'portrait'
+        });
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${filename}.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.status(200).send(pdfBuffer);
+    } else {
+      // Default: High-Resolution PNG image
+      const imageBuffer = await synchronizedGeneratePdf(lockKey, async () => {
+        return generateImageFromHtml(htmlContent, {
+          filename,
+          width: 560,
+          deviceScaleFactor: 2.5
+        });
+      });
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${filename}.png"; filename*=UTF-8''${encodeURIComponent(filename)}.png`);
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.status(200).send(imageBuffer);
+    }
+  } catch (error) {
+    console.error('Error generating vafat card download:', error);
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to generate vafat card',
+      error: error.message
+    });
+  }
+};
+
+// Get Direct Download Links & Metadata for Death Card (for Mobile Apps)
+const getDeathCardLink = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ member_id: id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.unshift({ _id: id });
+    }
+
+    const user = await User.findOne({ $or: orConditions }).lean();
+    if (!user) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Deceased member record not found',
+        data: null
+      });
+    }
+
+    const memberId = String(user._id || user.id);
+    const memberName = fullName(user) || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Member';
+    const isFemale = String(user.gender || '').toLowerCase() === 'female';
+    const titlePrefix = isFemale ? 'Marhuma' : 'Marhum';
+
+    const pngUrl = buildDeathDownloadUrl(memberId, req, 'png');
+    const pdfUrl = buildDeathDownloadUrl(memberId, req, 'pdf');
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Death card download link generated successfully',
+      data: {
+        id: memberId,
+        member_id: user.member_id || '',
+        name: memberName,
+        title_prefix: titlePrefix,
+        download_url: pngUrl,
+        png_url: pngUrl,
+        pdf_url: pdfUrl,
+        death_date: user.death_date || null,
+        janaza_date: user.janaza_date || null,
+        janaza_time: user.janaza_time || '',
+        janaza_place: user.janaza_place || '',
+        kabrastan: user.kabrastan || ''
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to retrieve death card link',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   register,
   // login,
@@ -1674,5 +1854,8 @@ module.exports = {
   bulkUpdateUsers,
   bulkImportUsers,
   exportUsers,
-  downloadExportFile
+  downloadExportFile,
+  downloadDeathCard,
+  getDeathCardLink
 };
+

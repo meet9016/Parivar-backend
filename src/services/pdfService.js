@@ -266,9 +266,83 @@ async function closeBrowser() {
   }
 }
 
+/**
+ * Generate a PNG Image Buffer from HTML content using headless Chrome
+ * @param {string} htmlContent - Clean HTML string
+ * @param {object} options - Configuration options (width, selector, deviceScaleFactor, etc.)
+ * @returns {Promise<Buffer>}
+ */
+async function generateImageFromHtml(htmlContent, options = {}) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+
+  const width = Number(options.width) || 560;
+  const scale = Number(options.deviceScaleFactor || options.pixelRatio) || 2.5;
+
+  try {
+    await page.setViewport({
+      width: width,
+      height: 900,
+      deviceScaleFactor: scale,
+    });
+
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html lang="gu">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${options.filename || 'Vafat Card'}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@500;600;700;800;900&family=Noto+Sans+Gujarati:wght@500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+      </html>
+    `;
+
+    await page.setContent(fullHtml, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000,
+    });
+
+    // Wait for fonts to load
+    await Promise.race([
+      page.evaluateHandle('document.fonts.ready'),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]).catch(() => {});
+
+    const selector = options.selector || '.vafat-card-container';
+    const cardElement = await page.$(selector);
+
+    let imageBuffer;
+    if (cardElement) {
+      imageBuffer = await cardElement.screenshot({
+        type: 'png',
+        omitBackground: true,
+      });
+    } else {
+      imageBuffer = await page.screenshot({
+        type: 'png',
+        fullPage: true,
+      });
+    }
+
+    return Buffer.isBuffer(imageBuffer) ? imageBuffer : Buffer.from(imageBuffer);
+  } finally {
+    try {
+      await page.close();
+    } catch (_) {}
+  }
+}
+
 module.exports = {
   getBrowser,
   generatePdfFromHtml,
+  generateImageFromHtml,
   synchronizedGeneratePdf,
   closeBrowser,
 };
+
