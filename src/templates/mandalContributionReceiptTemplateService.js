@@ -268,151 +268,160 @@ async function renderContributionReceiptHtml(contribution = {}, config = {}) {
   const notesText = c.transaction_id ? `Txn ID: ${c.transaction_id}${c.notes ? ` (${c.notes})` : ''}` : (c.notes || 'નિયમિત માસિક ફાળો (Regular Monthly Contribution)');
 
   return `
-    <div style="width: 210mm; height: 148mm; max-width: 210mm; max-height: 148mm; box-sizing: border-box; background: #ffffff; padding: 7mm 10mm; display: flex; flex-direction: column; justify-content: space-between; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', 'Plus Jakarta Sans', system-ui, sans-serif; color: #1e293b; border: 2.5px solid #1e3a8a; position: relative;">
-      
-      <!-- TOP HEADER -->
-      <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 2px solid #1e3a8a; gap: 14px;">
-        <!-- Left: Logo -->
-        <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+      * {
+        font-family: 'Anek Gujarati', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      }
+    </style>
+    <div class="page-wrapper" style="width: 210mm; height: 148mm; max-width: 210mm; max-height: 148mm; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 5mm; margin: 0 auto; background: #ffffff; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid;">
+      <div class="receipt-container" style="width: 200mm; height: 138mm; max-width: 200mm; max-height: 138mm; box-sizing: border-box; background: #ffffff; padding: 6mm 9mm; display: flex; flex-direction: column; justify-content: space-between; font-family: 'Anek Gujarati', 'Plus Jakarta Sans', sans-serif; color: #1e293b; border: 2.5px solid #1e3a8a; border-radius: 4px; position: relative;">
+        
+        <!-- TOP HEADER (Symmetric 3-Column Grid for True Dead-Centering) -->
+        <div style="display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; padding-bottom: 8px; border-bottom: 2px solid #1e3a8a; gap: 10px; width: 100%;">
+          <!-- Left: Logo (aligned left) -->
+          <div style="display: flex; align-items: center; justify-content: flex-start; width: 80px;">
+            <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+            </div>
+          </div>
+
+          <!-- Center: Organization Details (100% Dead Centered) -->
+          <div style="text-align: center;">
+            <div style="font-size: 24px; font-weight: 800; color: #1e3a8a; line-height: 1.15; letter-spacing: 0.3px;">
+              ${escapeHtml(communityNameGuj)}
+            </div>
+            <div style="font-size: 11.5px; font-weight: 600; color: #334155; margin-top: 3px;">
+              ${escapeHtml(trustRegLine)}
+            </div>
+            <div style="font-size: 11px; font-weight: 500; color: #64748b; margin-top: 2px;">
+              ${escapeHtml(officeAddress)} ${contactPhone ? `• ✆ ${escapeHtml(contactPhone)}` : ''}
+            </div>
+          </div>
+
+          <!-- Right: Circular Receipt Badge (aligned right, matching logo size) -->
+          <div style="display: flex; align-items: center; justify-content: flex-end; width: 80px;">
+            <div style="width: 62px; height: 62px; border-radius: 50%; background: #1e3a8a; border: 2px solid #1e3a8a; outline: 1.5px dashed #93c5fd; outline-offset: -4px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #ffffff; flex-shrink: 0; box-shadow: 0 2px 6px rgba(30,58,138,0.18);">
+              <div style="font-size: 7.5px; font-weight: 800; letter-spacing: 0.6px; line-height: 1.1; text-transform: uppercase;">MONTHLY</div>
+              <div style="font-size: 7px; font-weight: 800; letter-spacing: 0.4px; line-height: 1.1; text-transform: uppercase;">CONTRIBUTION</div>
+              <div style="font-size: 7.5px; font-weight: 700; color: #bfdbfe; margin-top: 1.5px; line-height: 1;">માસિક પહોંચ</div>
+            </div>
+          </div>
         </div>
 
-        <!-- Center: Organization Details -->
-        <div style="flex: 1; text-align: center;">
-          <div style="font-family: 'Anek Gujarati', 'Noto Sans Gujarati', sans-serif; font-size: 23px; font-weight: 900; color: #1e3a8a; line-height: 1.2;">
-            ${escapeHtml(communityNameGuj)}
+        <!-- RECEIPT NO, DATE & MANDAL -->
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1.2px solid #cbd5e1; border-radius: 6px; padding: 5px 14px; font-size: 13px; font-weight: 600;">
+          <div>
+            <span style="color: #64748b;">Receipt No.: </span>
+            <span style="color: #1e3a8a; font-weight: 800; font-size: 14px;">${escapeHtml(receiptNo)}</span>
           </div>
-          <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-top: 3px;">
-            ${escapeHtml(trustRegLine)}
+          <div>
+            <span style="color: #64748b;">Mandal: </span>
+            <span style="color: #0f172a; font-weight: 800; font-size: 13.5px;">${escapeHtml(mandalName)}</span>
           </div>
-          <div style="font-size: 11px; font-weight: 600; color: #475569; margin-top: 2px;">
-            ${escapeHtml(officeAddress)} ${contactPhone ? `• ✆ ${escapeHtml(contactPhone)}` : ''}
+          <div>
+            <span style="color: #64748b;">Date: </span>
+            <span style="color: #0f172a; font-weight: 800; font-size: 13px;">${escapeHtml(formattedDate)}</span>
           </div>
         </div>
 
-        <!-- Right: Receipt Badge -->
-        <div style="text-align: right; flex-shrink: 0; min-width: 140px;">
-          <div style="display: inline-block; background: #1e3a8a; color: #ffffff; font-size: 13px; font-weight: 800; padding: 5px 12px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
-            MONTHLY CONTRIBUTION
+        <!-- PARTICULARS TABLE -->
+        <div style="border: 1.2px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <tbody>
+              <!-- Row 1: Member Name -->
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="width: 28%; white-space: nowrap; padding: 6.5px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
+                  સભ્યશ્રીનું નામ (Member):
+                </td>
+                <td style="padding: 6.5px 14px; font-size: 16.5px; font-weight: 800; color: #0f172a;">
+                  ${escapeHtml(memberName)}
+                  ${memberMeta ? `<span style="font-size: 12.5px; font-weight: 600; color: #64748b; margin-left: 8px;">(${escapeHtml(memberMeta)})</span>` : ''}
+                </td>
+              </tr>
+
+              <!-- Row 2: Month of Contribution -->
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="width: 28%; white-space: nowrap; padding: 6.5px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
+                  યોગદાન માસ (Month):
+                </td>
+                <td style="padding: 6.5px 14px; font-size: 14px; font-weight: 700; color: #1e293b;">
+                  ${escapeHtml(formattedMonth)}
+                </td>
+              </tr>
+
+              <!-- Row 3: Amount in Numbers & Payment Mode -->
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="width: 28%; white-space: nowrap; padding: 6.5px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
+                  ભરેલ રકમ (Amount):
+                </td>
+                <td style="padding: 6.5px 14px;">
+                  <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <span style="font-size: 21px; font-weight: 800; color: #16a34a;">
+                      ₹ ${formattedAmount} /-
+                    </span>
+                    <span style="font-size: 12px; font-weight: 700; color: ${modeColor}; background: ${modeBg}; border: 1px solid ${modeBorder}; padding: 3px 12px; border-radius: 4px;">
+                      ${escapeHtml(modeGuj)}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Row 4: Amount in Words -->
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="width: 28%; white-space: nowrap; padding: 6.5px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
+                  અંકે રૂપિયા (In Words):
+                </td>
+                <td style="padding: 6.5px 14px; font-size: 13.5px; font-weight: 700; color: #1e293b; line-height: 1.35;">
+                  ${escapeHtml(gujaratiWords)} <span style="font-size: 12px; color: #64748b; font-weight: 600;">(${escapeHtml(englishWords)})</span>
+                </td>
+              </tr>
+
+              <!-- Row 5: Notes / Transaction -->
+              <tr>
+                <td style="width: 28%; white-space: nowrap; padding: 6.5px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
+                  નોંધ / રેફરન્સ (Remarks):
+                </td>
+                <td style="padding: 6.5px 14px; font-size: 13px; font-weight: 600; color: #334155;">
+                  ${escapeHtml(notesText)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- GRATITUDE MESSAGE -->
+        <div style="padding: 6px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; font-weight: 700; color: #1e40af; text-align: center;">
+          આપના નિયમિત માસિક સહયોગ અને મંડળ પ્રત્યેની નિષ્ઠા બદલ મંડળ કમિટી આપનો હૃદયપૂર્વક આભાર વ્યક્ત કરે છે.
+        </div>
+
+        <!-- SIGNATURES -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 4px 36px 2px;">
+          <!-- Left: Coordinator / Mandal Head -->
+          <div style="text-align: center; width: 190px;">
+            <div style="height: 24px;"></div>
+            <div style="border-top: 1.5px solid #334155; padding-top: 3px;">
+              <div style="font-size: 13.5px; font-weight: 800; color: #0f172a;">મંડળ સંયોજક / પ્રમુખ</div>
+              <div style="font-size: 10.5px; color: #64748b; font-weight: 600;">(Mandal Head / Coordinator)</div>
+            </div>
           </div>
-          <div style="font-size: 10.5px; font-weight: 700; color: #1e3a8a; margin-top: 2px; text-align: center;">
-            માસિક ફાળો પહોંચ
+
+          <!-- Right: Treasurer / Admin -->
+          <div style="text-align: center; width: 190px;">
+            <div style="height: 24px;"></div>
+            <div style="border-top: 1.5px solid #334155; padding-top: 3px;">
+              <div style="font-size: 13.5px; font-weight: 800; color: #0f172a;">ખજાનચી / એડમિન</div>
+              <div style="font-size: 10.5px; color: #64748b; font-weight: 600;">(Treasurer / Admin)</div>
+            </div>
           </div>
         </div>
+
+        <!-- FOOTER NOTE -->
+        <div style="text-align: center; font-size: 10px; font-weight: 500; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 3px;">
+          * આ કમ્પ્યુટરાઈઝ્ડ સત્તાવાર ઈ-પહોંચ છે અને માન્ય ગણાશે • Computerized Official Mandal Contribution Receipt
+        </div>
+
       </div>
-
-      <!-- RECEIPT NO, DATE & MANDAL -->
-      <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1.2px solid #cbd5e1; border-radius: 6px; padding: 5px 14px; font-size: 13px; font-weight: 700;">
-        <div>
-          <span style="color: #64748b;">Receipt No. : </span>
-          <span style="color: #1e3a8a; font-family: monospace; font-size: 14.5px; font-weight: 900;">${escapeHtml(receiptNo)}</span>
-        </div>
-        <div>
-          <span style="color: #64748b;">Mandal : </span>
-          <span style="color: #0f172a; font-weight: 800; font-size: 13.5px;">${escapeHtml(mandalName)}</span>
-        </div>
-        <div>
-          <span style="color: #64748b;">Date: </span>
-          <span style="color: #0f172a; font-weight: 800;">${escapeHtml(formattedDate)}</span>
-        </div>
-      </div>
-
-      <!-- PARTICULARS TABLE -->
-      <div style="border: 1.2px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #ffffff;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-          <tbody>
-            <!-- Row 1: Member Name -->
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="width: 26%; padding: 7px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
-                સભ્યશ્રીનું નામ (Member) :
-              </td>
-              <td style="padding: 7px 14px; font-size: 17px; font-weight: 900; color: #0f172a;">
-                ${escapeHtml(memberName)}
-                ${memberMeta ? `<span style="font-size: 12px; font-weight: 600; color: #64748b; margin-left: 8px;">(${escapeHtml(memberMeta)})</span>` : ''}
-              </td>
-            </tr>
-
-            <!-- Row 2: Month of Contribution -->
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 7px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
-                યોગદાન માસ (Month) :
-              </td>
-              <td style="padding: 7px 14px; font-size: 14px; font-weight: 800; color: #1e293b;">
-                ${escapeHtml(formattedMonth)}
-              </td>
-            </tr>
-
-            <!-- Row 3: Amount in Numbers & Payment Mode -->
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 7px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
-                ભરેલ રકમ (Amount) :
-              </td>
-              <td style="padding: 7px 14px;">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                  <span style="font-size: 21px; font-weight: 900; color: #16a34a;">
-                    ₹ ${formattedAmount} /-
-                  </span>
-                  <span style="font-size: 12px; font-weight: 800; color: ${modeColor}; background: ${modeBg}; border: 1px solid ${modeBorder}; padding: 3px 12px; border-radius: 4px;">
-                    ${escapeHtml(modeGuj)}
-                  </span>
-                </div>
-              </td>
-            </tr>
-
-            <!-- Row 4: Amount in Words -->
-            <tr style="border-bottom: 1px solid #e2e8f0;">
-              <td style="padding: 7px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
-                અંકે રૂપિયા (In Words) :
-              </td>
-              <td style="padding: 7px 14px; font-size: 13.5px; font-weight: 800; color: #1e293b; line-height: 1.4;">
-                ${escapeHtml(gujaratiWords)} <span style="font-size: 11.5px; color: #64748b; font-weight: 700;">(${escapeHtml(englishWords)})</span>
-              </td>
-            </tr>
-
-            <!-- Row 5: Notes / Transaction -->
-            <tr>
-              <td style="padding: 7px 14px; font-weight: 700; color: #475569; background: #f8fafc;">
-                નોંધ / રેફરન્સ (Remarks) :
-              </td>
-              <td style="padding: 7px 14px; font-size: 13px; font-weight: 700; color: #334155;">
-                ${escapeHtml(notesText)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- GRATITUDE MESSAGE -->
-      <div style="padding: 6px 14px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 12px; font-weight: 700; color: #1e40af; text-align: center;">
-        આપના નિયમિત માસિક સહયોગ અને મંડળ પ્રત્યેની નિષ્ઠા બદલ મંડળ કમિટી આપનો હૃદયપૂર્વક આભાર વ્યક્ત કરે છે.
-      </div>
-
-      <!-- SIGNATURES -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 4px 36px 2px;">
-        <!-- Left: Coordinator / Mandal Head -->
-        <div style="text-align: center; width: 190px;">
-          <div style="height: 24px;"></div>
-          <div style="border-top: 1.5px solid #334155; padding-top: 3px;">
-            <div style="font-size: 13.5px; font-weight: 900; color: #0f172a;">મંડળ સંયોજક / પ્રમુખ</div>
-            <div style="font-size: 10.5px; color: #64748b; font-weight: 700;">(Mandal Head / Coordinator)</div>
-          </div>
-        </div>
-
-        <!-- Right: Treasurer / Admin -->
-        <div style="text-align: center; width: 190px;">
-          <div style="height: 24px;"></div>
-          <div style="border-top: 1.5px solid #334155; padding-top: 3px;">
-            <div style="font-size: 13.5px; font-weight: 900; color: #0f172a;">ખજાનચી / એડમિન</div>
-            <div style="font-size: 10.5px; color: #64748b; font-weight: 700;">(Treasurer / Admin)</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- FOOTER NOTE -->
-      <div style="text-align: center; font-size: 10px; font-weight: 600; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 3px;">
-        * આ કમ્પ્યુટરાઈઝ્ડ સત્તાવાર ઈ-પહોંચ છે અને માન્ય ગણાશે • Computerized Official Mandal Contribution Receipt
-      </div>
-
     </div>
   `;
 }

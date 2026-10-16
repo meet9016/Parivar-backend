@@ -100,7 +100,7 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
-            font-family: 'Noto Sans Gujarati', 'Anek Gujarati', 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Anek Gujarati', 'Plus Jakarta Sans', 'Noto Sans Gujarati', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             -webkit-font-smoothing: antialiased;
             text-rendering: optimizeLegibility;
           }
@@ -154,15 +154,24 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
       </html>
     `;
 
-    await page.setContent(fullHtml, {
-      waitUntil: 'domcontentloaded',
-      timeout: 15000,
-    });
+    try {
+      await page.setContent(fullHtml, {
+        waitUntil: 'networkidle0',
+        timeout: 9000,
+      });
+    } catch (_) {
+      try {
+        await page.setContent(fullHtml, {
+          waitUntil: 'domcontentloaded',
+          timeout: 5000,
+        });
+      } catch (__) { }
+    }
 
-    // Wait for fonts to load with a max 2.5s race condition so it never hangs
+    // Wait for fonts to load with a max 3s race condition so it never hangs
     await Promise.race([
       page.evaluateHandle('document.fonts.ready'),
-      new Promise((resolve) => setTimeout(resolve, 2500)),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
     ]).catch(() => {});
 
     // Dynamic adaptation: wrap each .certificate-page into an exact A4 page container

@@ -223,35 +223,46 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
   }
 
   return `
-    <div style="width: 210mm; height: 148mm; max-width: 210mm; max-height: 148mm; box-sizing: border-box; background: #ffffff; padding: 7mm 10mm; display: flex; flex-direction: column; justify-content: space-between; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', 'Plus Jakarta Sans', system-ui, sans-serif; color: #1e293b; border: 2.5px solid #065f46; position: relative;">
-      
-      <!-- TOP HEADER -->
-      <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 2px solid #065f46; gap: 14px;">
-        <!-- Left: Logo -->
-        <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
-        </div>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+      * {
+        font-family: 'Anek Gujarati', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      }
+    </style>
+    <div class="page-wrapper" style="width: 210mm; height: 148mm; max-width: 210mm; max-height: 148mm; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 5mm; margin: 0 auto; background: #ffffff; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid;">
+      <div class="receipt-container" style="width: 200mm; height: 138mm; max-width: 200mm; max-height: 138mm; box-sizing: border-box; background: #ffffff; padding: 6mm 9mm; display: flex; flex-direction: column; justify-content: space-between; font-family: 'Anek Gujarati', 'Plus Jakarta Sans', sans-serif; color: #1e293b; border: 2.5px solid #065f46; border-radius: 4px; position: relative;">
+        
+        <!-- TOP HEADER (Symmetric 3-Column Grid for True Dead-Centering) -->
+        <div style="display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; padding-bottom: 8px; border-bottom: 2px solid #065f46; gap: 10px; width: 100%;">
+          <!-- Left: Logo (aligned left) -->
+          <div style="display: flex; align-items: center; justify-content: flex-start; width: 80px;">
+            <div style="width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <img src="${logoBase64}" alt="Logo" style="width: 100%; height: 100%; object-fit: contain;" />
+            </div>
+          </div>
 
-        <!-- Center: Organization Details -->
-        <div style="flex: 1; text-align: center;">
-          <div style="font-family: 'Anek Gujarati', 'Noto Sans Gujarati', sans-serif; font-size: 24px; font-weight: 900; color: #065f46; line-height: 1.2;">
-            ${escapeHtml(communityNameGuj)}
+          <!-- Center: Organization Details (100% Dead Centered) -->
+          <div style="text-align: center;">
+            <div style="font-size: 24px; font-weight: 800; color: #065f46; line-height: 1.15; letter-spacing: 0.3px;">
+              ${escapeHtml(communityNameGuj)}
+            </div>
+            <div style="font-size: 11.5px; font-weight: 600; color: #334155; margin-top: 3px;">
+              ${escapeHtml(trustRegLine)}
+            </div>
+            <div style="font-size: 11px; font-weight: 500; color: #64748b; margin-top: 2px;">
+              ${escapeHtml(officeAddress)} ${contactPhone ? `• ✆ ${escapeHtml(contactPhone)}` : ''}
+            </div>
           </div>
-          <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-top: 3px;">
-            ${escapeHtml(trustRegLine)}
-          </div>
-          <div style="font-size: 11px; font-weight: 600; color: #475569; margin-top: 2px;">
-            ${escapeHtml(officeAddress)} ${contactPhone ? `• ✆ ${escapeHtml(contactPhone)}` : ''}
-          </div>
-        </div>
 
-        <!-- Right: Receipt Badge -->
-        <div style="text-align: right; flex-shrink: 0; min-width: 135px;">
-          <div style="display: inline-block; background: #065f46; color: #ffffff; font-size: 14px; font-weight: 800; padding: 5px 14px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;">
-            DONATION RECEIPT
+          <!-- Right: Circular Receipt Badge (aligned right, matching logo size) -->
+          <div style="display: flex; align-items: center; justify-content: flex-end; width: 80px;">
+            <div style="width: 62px; height: 62px; border-radius: 50%; background: #065f46; border: 2px solid #065f46; outline: 1.5px dashed #a7f3d0; outline-offset: -4px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #ffffff; flex-shrink: 0; box-shadow: 0 2px 6px rgba(6,95,70,0.18);">
+              <div style="font-size: 8px; font-weight: 800; letter-spacing: 0.6px; line-height: 1.1; text-transform: uppercase;">DONATION</div>
+              <div style="font-size: 7.5px; font-weight: 800; letter-spacing: 0.4px; line-height: 1.1; text-transform: uppercase;">RECEIPT</div>
+              <div style="font-size: 7.5px; font-weight: 700; color: #a7f3d0; margin-top: 1.5px; line-height: 1;">દાન પહોંચ</div>
+            </div>
           </div>
         </div>
-      </div>
 
       <!-- RECEIPT NO & DATE -->
       <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1.2px solid #cbd5e1; border-radius: 6px; padding: 6px 14px; font-size: 13.5px; font-weight: 700;">
@@ -350,6 +361,7 @@ async function renderDonationReceiptHtml(donation = {}, config = {}) {
         * આ કમ્પ્યુટરાઈઝ્ડ સત્તાવાર ઈ-પહોંચ છે અને માન્ય ગણાશે • Computerized Official Donation Receipt
       </div>
 
+      </div>
     </div>
   `;
 }

@@ -1714,11 +1714,7 @@ exports.bulkDownloadContributionReceipts = async (req, res) => {
     const renderedPages = [];
     for (const record of records) {
       const singleHtml = await renderReceiptFn(record, config || {});
-      renderedPages.push(`
-        <div style="width: 210mm; height: 148mm; max-height: 148mm; overflow: hidden; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; margin: 0; padding: 0;">
-          ${singleHtml}
-        </div>
-      `);
+      renderedPages.push(singleHtml);
     }
 
     const combinedHtml = renderedPages.join('\n');
