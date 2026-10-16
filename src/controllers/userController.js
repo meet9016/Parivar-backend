@@ -612,7 +612,7 @@ const getUsers = async (req, res) => {
       baseQuery: query,
       searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'],
       filterFields: ['gender', 'blood_group', 'is_committee', 'committee_role', 'role_id', 'status', 'familyHead'],
-      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : death ? '_id member_id first_name middle_name last_name number email dob gender village address profile_image image is_deceased death_date death_time death_place death_note janaza_date janaza_time janaza_place kabrastan ziyarat_date ziyarat_time ziyarat_place besnu_date besnu_time besnu_place relation familyHead family_head status' : '-password',
+      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : death ? '_id member_id first_name middle_name last_name number email dob gender village address profile_image image is_deceased death_date death_time death_place death_note janaza_date janaza_time janaza_place kabrastan islamic_date vaar ziyarat_date ziyarat_time ziyarat_place besnu_date besnu_time besnu_place relation familyHead family_head status' : '-password',
       populate: (birthday || anniversary || death) ? '' : 'role_id',
       defaultSort: { createdAt: -1 },
       lean: false
@@ -689,6 +689,8 @@ const getUsers = async (req, res) => {
           janaza_time: u.janaza_time || '',
           janaza_place: u.janaza_place || '',
           kabrastan: u.kabrastan || '',
+          islamic_date: u.islamic_date || '',
+          vaar: u.vaar || '',
           ziyarat_date: u.ziyarat_date || u.besnu_date || null,
           ziyarat_time: u.ziyarat_time || u.besnu_time || '',
           ziyarat_place: u.ziyarat_place || u.besnu_place || '',
@@ -969,6 +971,8 @@ const updateUser = async (req, res) => {
     if (req.body.janaza_time !== undefined) user.janaza_time = req.body.janaza_time;
     if (req.body.janaza_place !== undefined) user.janaza_place = req.body.janaza_place;
     if (req.body.kabrastan !== undefined) user.kabrastan = req.body.kabrastan;
+    if (req.body.islamic_date !== undefined) user.islamic_date = req.body.islamic_date;
+    if (req.body.vaar !== undefined) user.vaar = req.body.vaar;
     if (req.body.ziyarat_date !== undefined) {
       user.ziyarat_date = req.body.ziyarat_date ? new Date(req.body.ziyarat_date) : null;
       user.besnu_date = user.ziyarat_date;
@@ -1829,7 +1833,11 @@ const getDeathCardLink = async (req, res) => {
         janaza_date: user.janaza_date || null,
         janaza_time: user.janaza_time || '',
         janaza_place: user.janaza_place || '',
-        kabrastan: user.kabrastan || ''
+        kabrastan: user.kabrastan || '',
+        islamic_date: user.islamic_date || '',
+        vaar: user.vaar || '',
+        address: user.address || '',
+        village: user.village || ''
       }
     });
   } catch (error) {
