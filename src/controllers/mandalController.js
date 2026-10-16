@@ -7,6 +7,37 @@ const { uploadToExternalService } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
 const XLSX = require('xlsx');
 const { createAndBroadcast } = require('./notificationController');
+const { generatePdfFromHtml } = require('../services/pdfService');
+const { renderContributionReceiptHtml } = require('../templates/mandalContributionReceiptTemplateService');
+
+function resolveBaseUrl(req) {
+  let base = process.env.BASE_URL;
+  if (base) return base.replace(/\/api\/?$/, '').replace(/\/$/, '');
+
+  if (req) {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:5000';
+    base = `${protocol}://${host}`;
+  } else {
+    base = 'http://localhost:5000';
+  }
+  return base.replace(/\/api\/?$/, '').replace(/\/$/, '');
+}
+
+function buildContributionDownloadUrl(recId, req) {
+  const baseUrl = resolveBaseUrl(req);
+  const token = req?.query?.token || '';
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+
+  const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '';
+  const referer = req?.headers?.['referer'] || '';
+  const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
+                    host.includes('parivar.me') ||
+                    referer.includes('parivar.me');
+
+  const prefix = isApiApi ? '/api/api' : '/api';
+  return `${baseUrl}${prefix}/mandal/contributions/receipt/${recId}/download${tokenQuery}`;
+}
 
 // Helper to resolve mandal by ID or fallback to default
 async function resolveMandal(mandalId) {
@@ -618,12 +649,18 @@ exports.getMonthlyContributions = async (req, res) => {
       };
     }
 
-    const formatted = contributions.map(c => ({
-      ...c,
-      id: c._id,
-      member_name: c.member_name || (c.member_id ? `${c.member_id.first_name || ''} ${c.member_id.last_name || ''}`.trim() : 'Unknown Member'),
-      member_number: c.member_number || c.member_id?.number || ''
-    }));
+    const formatted = contributions.map(c => {
+      const recId = String(c._id || c.id);
+      const downloadUrl = buildContributionDownloadUrl(recId, req);
+      return {
+        ...c,
+        id: c._id,
+        member_name: c.member_name || (c.member_id ? `${c.member_id.first_name || ''} ${c.member_id.last_name || ''}`.trim() : 'Unknown Member'),
+        member_number: c.member_number || c.member_id?.number || '',
+        download_url: downloadUrl,
+        receipt_url: downloadUrl
+      };
+    });
 
     return apiResponse(res, 200, 'Monthly contributions fetched successfully', {
       data: formatted,
@@ -1392,6 +1429,9 @@ exports.getMyContributions = async (req, res) => {
           mandalPendingMonths++;
         }
 
+        const recId = String(c._id || c.id);
+        const downloadUrl = buildContributionDownloadUrl(recId, req);
+
         const item = {
           id: c._id,
           _id: c._id,
@@ -1409,6 +1449,8 @@ exports.getMyContributions = async (req, res) => {
           transaction_id: c.transaction_id || '',
           notes: c.notes || '',
           recorded_by_name: c.recorded_by_name || '',
+          download_url: downloadUrl,
+          receipt_url: downloadUrl,
           createdAt: c.createdAt,
           updatedAt: c.updatedAt
         };
@@ -1492,6 +1534,267 @@ exports.getMyContributions = async (req, res) => {
   } catch (error) {
     console.error('Error in getMyContributions:', error);
     return apiResponse(res, 500, error.message || 'Failed to fetch user contributions');
+  }
+};
+
+// 15. Download Mandal Monthly Contribution Receipt PDF
+exports.downloadContributionReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.push({ _id: id });
+    }
+
+    const contrib = await MandalContribution.findOne({
+      $or: orConditions
+    }).populate('mandal_id').populate('member_id');
+
+    if (!contrib) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Contribution record not found',
+        data: null
+      });
+    }
+
+    // Resolve tenant / community config if available
+    let config = null;
+    try {
+      const Config = require('../models/configModel');
+      config = await Config.findOne().lean();
+    } catch (_) { }
+
+    let renderReceiptFn = renderContributionReceiptHtml;
+    try {
+      delete require.cache[require.resolve('../templates/mandalContributionReceiptTemplateService')];
+      renderReceiptFn = require('../templates/mandalContributionReceiptTemplateService').renderContributionReceiptHtml;
+    } catch (_) { }
+
+    const html = await renderReceiptFn(contrib, config || {});
+
+    const cleanMember = (contrib.member_name || 'Member').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const recId = String(contrib.id || contrib._id).slice(-6).toUpperCase();
+    const filename = `Mandal_Contribution_Receipt_${cleanMember}_${recId}`;
+
+    const pdfBuffer = await generatePdfFromHtml(html, {
+      filename,
+      format: 'A5',
+      landscape: true,
+    });
+
+    const isInline = req.query.view === 'true' || req.query.inline === 'true' || req.path.includes('/view');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${filename}.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.status(200).send(pdfBuffer);
+  } catch (error) {
+    console.error('Error generating contribution receipt PDF:', error);
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to generate contribution receipt PDF',
+      error: error.message
+    });
+  }
+};
+
+// 16. Get Receipt Download Link
+exports.getContributionReceiptLink = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.push({ _id: id });
+    }
+
+    const contrib = await MandalContribution.findOne({
+      $or: orConditions
+    });
+
+    if (!contrib) {
+      return res.status(404).json({
+        status: 404,
+        message: 'Contribution record not found',
+        data: null
+      });
+    }
+
+    const recId = String(contrib.id || contrib._id);
+    const downloadUrl = buildContributionDownloadUrl(recId, req);
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Receipt download link generated successfully',
+      data: {
+        id: recId,
+        member_name: contrib.member_name || '',
+        receipt_number: contrib.receipt_number || `MNDL-${recId.slice(-6).toUpperCase()}`,
+        download_url: downloadUrl
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to retrieve receipt link',
+      error: error.message
+    });
+  }
+};
+
+// 17. Bulk Download Contribution Receipts as Combined PDF
+exports.bulkDownloadContributionReceipts = async (req, res) => {
+  try {
+    const params = (req.method === 'POST' ? req.body : req.query) || {};
+    const { ids, month, mandal_id, search, payment_mode } = params;
+
+    let query = {};
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      const validIds = ids.map(id => mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id);
+      query._id = { $in: validIds };
+    } else if (typeof ids === 'string' && ids.trim()) {
+      const splitIds = ids.split(',').map(s => s.trim()).filter(Boolean);
+      const validIds = splitIds.map(id => mongoose.isValidObjectId(id) ? new mongoose.Types.ObjectId(id) : id);
+      query._id = { $in: validIds };
+    } else {
+      if (month && month !== 'All') {
+        query.month = month;
+      }
+      if (mandal_id && mongoose.isValidObjectId(mandal_id)) {
+        query.mandal_id = mandal_id;
+      }
+      if (payment_mode && payment_mode !== 'All') {
+        query.payment_mode = payment_mode;
+      }
+      if (search && search.trim()) {
+        const regex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        query.$or = [
+          { member_name: regex },
+          { member_number: regex },
+          { receipt_number: regex },
+          { transaction_id: regex }
+        ];
+      }
+    }
+
+    // Only download receipts for Paid records
+    query.status = 'Paid';
+
+    const records = await MandalContribution.find(query)
+      .populate('mandal_id')
+      .populate('member_id')
+      .sort({ payment_date: -1, createdAt: -1 })
+      .lean();
+
+    if (!records || records.length === 0) {
+      return res.status(404).json({
+        status: 404,
+        message: 'No paid contribution records found to generate receipts',
+        data: null
+      });
+    }
+
+    // Resolve tenant / community config if available
+    let config = null;
+    try {
+      const Config = require('../models/configModel');
+      config = await Config.findOne().lean();
+    } catch (_) { }
+
+    let renderReceiptFn = renderContributionReceiptHtml;
+    try {
+      delete require.cache[require.resolve('../templates/mandalContributionReceiptTemplateService')];
+      renderReceiptFn = require('../templates/mandalContributionReceiptTemplateService').renderContributionReceiptHtml;
+    } catch (_) { }
+
+    // Render each receipt wrapped in page container with page breaks
+    const renderedPages = [];
+    for (const record of records) {
+      const singleHtml = await renderReceiptFn(record, config || {});
+      renderedPages.push(`
+        <div style="width: 210mm; height: 148mm; max-height: 148mm; overflow: hidden; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; margin: 0; padding: 0;">
+          ${singleHtml}
+        </div>
+      `);
+    }
+
+    const combinedHtml = renderedPages.join('\n');
+    const safeMonth = (month || 'Selected').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = `Mandal_Contribution_Receipts_${safeMonth}_Total_${records.length}`;
+
+    const pdfBuffer = await generatePdfFromHtml(combinedHtml, {
+      filename,
+      format: 'A5',
+      landscape: true,
+    });
+
+    const isInline = req.query?.view === 'true' || req.query?.inline === 'true';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${isInline ? 'inline' : 'attachment'}; filename="${filename}.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
+    return res.status(200).send(pdfBuffer);
+  } catch (error) {
+    console.error('Error in bulkDownloadContributionReceipts:', error);
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to generate bulk contribution receipts PDF',
+      error: error.message
+    });
+  }
+};
+
+// 18. Get Bulk Receipts Download Link
+exports.getBulkContributionReceiptsLink = async (req, res) => {
+  try {
+    const params = (req.method === 'POST' ? req.body : req.query) || {};
+    const { ids, month, mandal_id, search, payment_mode } = params;
+
+    const baseUrl = resolveBaseUrl(req);
+    const token = req?.query?.token || '';
+    const tokenQuery = token ? `token=${encodeURIComponent(token)}` : '';
+
+    const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '';
+    const referer = req?.headers?.['referer'] || '';
+    const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
+                      host.includes('parivar.me') ||
+                      referer.includes('parivar.me');
+
+    const prefix = isApiApi ? '/api/api' : '/api';
+
+    const queryParams = [];
+    if (tokenQuery) queryParams.push(tokenQuery);
+    if (Array.isArray(ids) && ids.length > 0) {
+      queryParams.push(`ids=${encodeURIComponent(ids.join(','))}`);
+    } else if (typeof ids === 'string' && ids.trim()) {
+      queryParams.push(`ids=${encodeURIComponent(ids)}`);
+    }
+    if (month) queryParams.push(`month=${encodeURIComponent(month)}`);
+    if (mandal_id) queryParams.push(`mandal_id=${encodeURIComponent(mandal_id)}`);
+    if (payment_mode) queryParams.push(`payment_mode=${encodeURIComponent(payment_mode)}`);
+    if (search) queryParams.push(`search=${encodeURIComponent(search)}`);
+
+    const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
+    const downloadUrl = `${baseUrl}${prefix}/mandal/contributions/receipts/bulk-download${queryString}`;
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Bulk receipts download link generated successfully',
+      data: {
+        download_url: downloadUrl
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 500,
+      message: 'Failed to generate bulk receipts link',
+      error: error.message
+    });
   }
 };
 

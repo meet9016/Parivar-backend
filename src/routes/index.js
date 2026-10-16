@@ -41,6 +41,7 @@ router.use('/bank-details', require('./bankDetailRoutes'));
 router.use('/content', require('./contentRoutes'));
 router.use('/masters', require('./masterRoutes'));
 router.use('/mandal', require('./mandalRoutes'));
+router.use('/mandals', require('./mandalRoutes'));
 router.use('/certificates', require('./certificateRoutes'));
 router.use('/register-parivar', require('./tenantRoutes'));
 

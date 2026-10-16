@@ -48,10 +48,12 @@ const imageBase64Cache = new Map();
 
 async function resolveImageBase64(imageUrl) {
   if (!imageUrl) return '';
-  if (imageUrl.startsWith('data:image')) return imageUrl;
+  const cleanUrl = Array.isArray(imageUrl) ? imageUrl[0] : imageUrl;
+  if (!cleanUrl || typeof cleanUrl !== 'string') return '';
+  if (cleanUrl.startsWith('data:image')) return cleanUrl;
 
-  if (imageBase64Cache.has(imageUrl)) {
-    return imageBase64Cache.get(imageUrl);
+  if (imageBase64Cache.has(cleanUrl)) {
+    return imageBase64Cache.get(cleanUrl);
   }
 
   try {
@@ -100,7 +102,7 @@ async function renderVafatCardHtml(member, options = {}) {
   const subtitleText = subtitleItems.join(' • ');
 
   // Photo
-  const rawImage = member?.profile_image || member?.image || '';
+  const rawImage = member?.profile_image || member?.image || member?.photo || member?.avatar || '';
   let imageBase64 = '';
   if (rawImage) {
     imageBase64 = await resolveImageBase64(rawImage);
