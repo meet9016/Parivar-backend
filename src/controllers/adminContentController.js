@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const GalleryCategory = require('../models/galleryCategoryModel');
 const Banner = require('../models/bannerModel');
-const ContactInquiry = require('../models/contactInquiryModel');
 const BusinessCategory = require('../models/businessCategoryModel');
 const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
@@ -130,35 +129,6 @@ const formatBanner = (req, item) => ({
   link: item.link || '',
   status: Number(item.status ?? 1)
 });
-
-const formatInquiry = (req, item) => ({
-  id: item.id || String(item._id),
-  name: item.name || '',
-  email: item.email || '',
-  phone: item.phone || '',
-  subject: item.subject || '',
-  message: item.message || '',
-  status: Number(item.status ?? 1),
-  createdAt: item.createdAt || ''
-});
-
-const saveInquiry = async (req, res) => {
-  try {
-    const existing = req.params.id ? await findById(ContactInquiry, req.params.id) : null;
-    const doc = existing || new ContactInquiry();
-    if (!existing) doc.id = await nextPublicId(ContactInquiry, 'INQ');
-    doc.set(req.body);
-    if (!existing) {
-      doc.set('status', req.body.status !== undefined ? Number(req.body.status) : 1);
-    } else if (req.body.status !== undefined) {
-      doc.set('status', Number(req.body.status));
-    }
-    await doc.save();
-    return apiResponse(res, existing ? 200 : 201, 'Contact inquiry saved successfully', formatInquiry(req, doc.toObject()));
-  } catch (error) {
-    return apiResponse(res, 500, 'Error saving contact inquiry', { error: error.message });
-  }
-};
 
 const masterConfig = {
   business: { Model: BusinessCategory, nameKeys: ['business', 'name'], parentKey: 'state_id', skipCustomId: true },
@@ -441,9 +411,6 @@ module.exports = {
   getBanners: listContent(Banner, formatBanner, 'Banners'),
   saveBanner: saveContent(Banner, bannerPayload, formatBanner, 'Banner', 'BAN'),
   deleteBanner: deleteContent(Banner, 'Banner'),
-  getInquiries: listContent(ContactInquiry, formatInquiry, 'Contact inquiries'),
-  saveInquiry,
-  deleteInquiry: deleteContent(ContactInquiry, 'Contact inquiry'),
   getMasters,
   getMasterById,
   saveMaster,

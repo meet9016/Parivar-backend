@@ -23,10 +23,4 @@ router.post('/banners', protect, requirePermission('banners.add'), parseForm, ad
 router.put('/banners/:id', protect, requirePermission('banners.edit'), parseForm, adminContent.saveBanner);
 router.delete('/banners/:id', protect, requirePermission('banners.delete'), adminContent.deleteBanner);
 
-// Contact inquiry routes
-router.get('/contact-inquiries', protect, requirePermission('contact-inquiries.list'), adminContent.getInquiries);
-router.post('/contact-inquiries', protect, requirePermission('contact-inquiries.edit'), parseForm, adminContent.saveInquiry);
-router.put('/contact-inquiries/:id', protect, requirePermission('contact-inquiries.edit'), parseForm, adminContent.saveInquiry);
-router.delete('/contact-inquiries/:id', protect, requirePermission('contact-inquiries.delete'), adminContent.deleteInquiry);
-
 module.exports = router;

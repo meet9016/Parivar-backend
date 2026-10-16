@@ -21,8 +21,7 @@ const PERMISSION_MODULES = [
   { key: 'masters', label: 'Masters' },
   { key: 'birthday', label: 'Birthdays' },
   { key: 'job-vacancy', label: 'Job Vacancies' },
-  { key: 'posts', label: 'Posts' },
-  { key: 'contact-inquiries', label: 'Contact Inquiries' }
+  { key: 'posts', label: 'Posts' }
 ];
 
 const PERMISSIONS = [
@@ -50,7 +49,6 @@ const LEGACY_PERMISSION_KEYS = [
   'businesses.manage',
   'news.manage',
   'posts.manage',
-  'contact-inquiries.manage',
   'masters.manage',
   'matrimonies.manage',
   'settings.manage',
