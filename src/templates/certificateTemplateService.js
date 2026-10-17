@@ -644,23 +644,6 @@ function renderLetterheadHtml(data = {}) {
               <!-- Footer on Last Page OR Forward Note -->
               ${isLastPage ? `
                 <div style="page-break-inside: avoid; break-inside: avoid; width: 100%; margin-bottom: 12px;">
-                  <!-- Signatures Row -->
-                  <div style="display: flex; justify-content: space-between; align-items: flex-end; padding: 2px 44px 2px; border-top: 1px solid #e2e8f0; margin-top: 2px;">
-                    <div style="text-align: center; min-width: 120px;">
-                      <div style="border-top: 1.2px solid #8b181b; padding-top: 2px; margin-bottom: 2px; margin-top: 10px;"></div>
-                      <div style="font-weight: 900; font-size: 11.5px; color: #8b181b; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', sans-serif;">પ્રમુખશ્રી</div>
-                      <div style="font-size: 10px; color: #333; font-weight: 700; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', sans-serif;">રાધનપુર મેમણ જમાત</div>
-                    </div>
-                    <div style="width: 48px; height: 48px; border: 1.5px dashed #b8860b; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8.5px; font-weight: 900; color: #8b181b; text-align: center; line-height: 1.2; background: rgba(184, 134, 11, 0.04); font-family: 'Noto Sans Gujarati', 'Anek Gujarati', sans-serif;">
-                      સહી સિક્કો<br />(Seal)
-                    </div>
-                    <div style="text-align: center; min-width: 120px;">
-                      <div style="border-top: 1.2px solid #8b181b; padding-top: 2px; margin-bottom: 2px; margin-top: 10px;"></div>
-                      <div style="font-weight: 900; font-size: 11.5px; color: #8b181b; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', sans-serif;">સેક્રેટરીશ્રી</div>
-                      <div style="font-size: 10px; color: #333; font-weight: 700; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', sans-serif;">રાધનપુર મેમણ જમાત</div>
-                    </div>
-                  </div>
-
                   <!-- Footer Terms -->
                   <div style="background: #fffdf8; border: 1px solid #fde68a; border-radius: 3px; margin: 2px 54px 2px; padding: 3px 10px 3px; font-size: 8.5px; color: #333; line-height: 1.3; font-family: 'Noto Sans Gujarati', 'Anek Gujarati', sans-serif;">
                     <div style="font-weight: 900; font-size: 9.5px; color: #8b181b; margin-bottom: 1px; text-align: center;">
@@ -676,7 +659,7 @@ function renderLetterheadHtml(data = {}) {
                 </div>
               ` : `
                 <div style="padding: 6px 20px; text-align: center; font-size: 11px; font-weight: 800; color: #15803d; border-top: 1px dashed #cbd5e1; font-style: italic;">
-                  [ પૃષ્ઠ ${toGujaratiDigits(pageIdx + 1)} / ${toGujaratiDigits(totalPages)} &bull; આગળનું લખાણ ${pageIdx + 2 === totalPages ? 'તથા સહી-સિક્કો પાછળના પૃષ્ઠ' : 'આગળના પૃષ્ઠ'} ${toGujaratiDigits(pageIdx + 2)} પર જુઓ &rarr; ]
+                  [ પૃષ્ઠ ${toGujaratiDigits(pageIdx + 1)} / ${toGujaratiDigits(totalPages)} &bull; આગળનું લખાણ ${pageIdx + 2 === totalPages ? 'પાછળના પૃષ્ઠ' : 'આગળના પૃષ્ઠ'} ${toGujaratiDigits(pageIdx + 2)} પર જુઓ &rarr; ]
                 </div>
               `}
             </div>

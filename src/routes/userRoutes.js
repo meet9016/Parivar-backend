@@ -92,6 +92,10 @@ router.put('/:id', protect, parseForm, (req, res, next) => {
             req.body.janaza_time !== undefined ||
             req.body.janaza_place !== undefined ||
             req.body.kabrastan !== undefined ||
+            req.body.islamic_date !== undefined ||
+            req.body.vaar !== undefined ||
+            req.body.address !== undefined ||
+            req.body.village !== undefined ||
             req.body.death_note !== undefined
         )
     );

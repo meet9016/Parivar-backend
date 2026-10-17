@@ -104,6 +104,58 @@ const configSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+
+  // Monday Scheduled Push Notification
+  mondayPushEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  mondayPushTime: {
+    type: String,
+    default: "09:00",
+  },
+  mondayPushKey: {
+    type: String,
+    default: "monday_weekly",
+  },
+  mondayPushTitle: {
+    type: String,
+    default: "",
+  },
+  mondayPushBody: {
+    type: String,
+    default: "",
+  },
+  lastMondayPushDate: {
+    type: String,
+    default: "",
+  },
+
+  // Friday Scheduled Push Notification (Auto 5:00 PM)
+  fridayPushEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  fridayPushKey: {
+    type: String,
+    default: "jummah_mubarak",
+  },
+  fridayPushTime: {
+    type: String,
+    default: "10:00",
+  },
+  fridayPushTitle: {
+    type: String,
+    default: "",
+  },
+  fridayPushBody: {
+    type: String,
+    default: "",
+  },
+  lastFridayPushDate: {
+    type: String,
+    default: "",
+  },
 }, {
   timestamps: true,
   strict: false,

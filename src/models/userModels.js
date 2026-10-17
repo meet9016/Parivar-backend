@@ -100,6 +100,16 @@ const userSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  islamic_date: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  vaar: {
+    type: String,
+    default: '',
+    trim: true
+  },
   ziyarat_date: {
     type: Date,
     default: null
