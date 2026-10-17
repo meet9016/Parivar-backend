@@ -106,7 +106,8 @@ const configSchema = new mongoose.Schema({
   },
 }, {
   timestamps: true,
-  strict: false, id: false
+  strict: false,
+  id: false
 });
 
 module.exports = createTenantProxy('Config', configSchema);

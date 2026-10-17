@@ -68,6 +68,7 @@ const formatBusiness = (req, b, categoryName = 'Community Enterprise', extra = {
   state_name: extra.state_name || '',
   city_id: b.city_id || '',
   city_name: extra.city_name || '',
+  pincode: b.pincode || '',
   address: b.address || '',
   location_link: b.location_link || '',
   about_us: b.about_us || '',
@@ -299,7 +300,7 @@ const galleryPath = (req, key) => {
 const addBusinessDetails = async (req, res) => {
   try {
     const { id } = req.params || req.body;
-    const { business_category_id, business_name, number, whatsapp_number, GST_number, email, country_id, state_id, city_id, address, location_link, about_us, facebook, instagram, pinterest, youtube, website, status } = requestData(req);
+    const { business_category_id, business_name, number, whatsapp_number, GST_number, email, country_id, state_id, city_id, pincode, address, location_link, about_us, facebook, instagram, pinterest, youtube, website, status } = requestData(req);
 
     if (!business_category_id || !business_name || !number || !email || !country_id || !state_id || !city_id) {
       return apiResponse(res, 400, 'All required fields must be provided');
@@ -331,6 +332,7 @@ const addBusinessDetails = async (req, res) => {
       country_id,
       state_id,
       city_id,
+      pincode: pincode || '',
       address: address || '',
       location_link: location_link || '',
       about_us: about_us || '',
