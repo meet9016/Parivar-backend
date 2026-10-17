@@ -102,10 +102,32 @@ function getGujaratiDay(dateStr) {
 function getAutoIslamicDate(dateStr) {
   const d = parseAnyDate(dateStr);
   if (!d) return '';
-  const day = d.getDate();
-  const month = d.getMonth() + 1; // 1 to 12
-  const monthName = ISLAMIC_MONTHS[month - 1] || '';
-  return monthName ? `${day} ${monthName}` : '';
+  try {
+    const formatter = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric'
+    });
+    const parts = formatter.formatToParts(d);
+    const day = parts.find(p => p.type === 'day')?.value;
+    const month = parseInt(parts.find(p => p.type === 'month')?.value, 10);
+    const monthName = ISLAMIC_MONTHS[month - 1] || '';
+    return monthName ? `${day} ${monthName}` : '';
+  } catch (e) {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-u-ca-islamic', {
+        day: 'numeric',
+        month: 'numeric',
+        year: 'numeric'
+      });
+      const parts = formatter.formatToParts(d);
+      const day = parts.find(p => p.type === 'day')?.value;
+      const month = parseInt(parts.find(p => p.type === 'month')?.value, 10);
+      const monthName = ISLAMIC_MONTHS[month - 1] || '';
+      return monthName ? `${day} ${monthName}` : '';
+    } catch (_) {}
+  }
+  return '';
 }
 
 /**
@@ -145,17 +167,19 @@ async function renderVafatCardHtml(member, options = {}) {
           <h1 class="header-title">મૈયત સમાચાર</h1>
         </div>
 
-        <!-- Metadata Section: ગામ, તારીખ, વાર -->
+        <!-- Metadata Section in ONE Line: ગામ | તારીખ | વાર -->
         <div class="meta-section">
-          <div class="meta-row">
+          <div class="meta-item">
             <span class="meta-label">ગામ -</span>
             <span class="meta-val">${escapeHtml(villageText)}</span>
           </div>
-          <div class="meta-row">
+          <div class="meta-divider">|</div>
+          <div class="meta-item">
             <span class="meta-label">તારીખ:</span>
             <span class="meta-val">${escapeHtml(dateDisplay)}</span>
           </div>
-          <div class="meta-row">
+          <div class="meta-divider">|</div>
+          <div class="meta-item">
             <span class="meta-label">વાર:</span>
             <span class="meta-val">${escapeHtml(vaarText)}</span>
           </div>
@@ -172,9 +196,11 @@ async function renderVafatCardHtml(member, options = {}) {
         </div>
 
         <!-- Address Line -->
+        ${addressText && addressText !== '-' ? `
         <div class="address-line">
           *એડ્રેસ: ${escapeHtml(addressText)}*
         </div>
+        ` : ''}
 
         <!-- Calligraphy: Inna Lillahi -->
         <div class="calligraphy-block">
@@ -224,7 +250,7 @@ async function renderVafatCardHtml(member, options = {}) {
 
       .vafat-card-wrapper {
         width: 100%;
-        max-width: 660px;
+        max-width: 780px;
         margin: 0 auto;
         display: flex;
         justify-content: center;
@@ -241,8 +267,8 @@ async function renderVafatCardHtml(member, options = {}) {
         width: 100%;
         background: #ffffff !important;
         border: 2.5px solid #1c1917 !important;
-        border-radius: 22px;
-        padding: 34px 30px;
+        border-radius: 20px;
+        padding: 24px 28px;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1) !important;
         text-align: center;
         position: relative;
@@ -251,12 +277,12 @@ async function renderVafatCardHtml(member, options = {}) {
 
       .header-box {
         border-bottom: 2px solid #1c1917;
-        padding-bottom: 14px;
-        margin-bottom: 22px;
+        padding-bottom: 10px;
+        margin-bottom: 12px;
       }
 
       .header-title {
-        font-size: 30px;
+        font-size: 28px;
         font-weight: 900;
         color: #0c0a09;
         letter-spacing: 0.8px;
@@ -264,36 +290,53 @@ async function renderVafatCardHtml(member, options = {}) {
       }
 
       .meta-section {
-        text-align: left;
-        margin-bottom: 20px;
-        padding: 0 6px;
         display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-
-      .meta-row {
-        font-size: 17px;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        padding: 8px 14px;
+        margin-bottom: 12px;
+        background: #fafaf9;
+        border: 1px solid #e7e5e4;
+        border-radius: 12px;
+        font-size: 15px;
         font-weight: 700;
         color: #1c1917;
-        line-height: 1.4;
+      }
+
+      .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .meta-divider {
+        color: #d6d3d1;
+        font-weight: 300;
       }
 
       .meta-label {
         font-weight: 900;
         color: #0c0a09;
-        margin-right: 8px;
+        margin-right: 2px;
+      }
+
+      .meta-val {
+        color: #1c1917;
       }
 
       .name-block {
         border-top: 1px dashed #a8a29e;
         border-bottom: 1px dashed #a8a29e;
-        padding: 14px 0;
-        margin: 18px 0;
+        background: #fafaf9;
+        border-radius: 8px;
+        padding: 10px 0;
+        margin: 10px 0;
       }
 
       .marhum-name {
-        font-size: 26px;
+        font-size: 24px;
         font-weight: 900;
         color: #0c0a09;
         letter-spacing: -0.2px;
@@ -301,11 +344,11 @@ async function renderVafatCardHtml(member, options = {}) {
       }
 
       .janaza-line {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 700;
         color: #1c1917;
-        line-height: 1.65;
-        margin: 20px 0;
+        line-height: 1.5;
+        margin: 10px 0;
         padding: 0 10px;
       }
 
@@ -320,68 +363,68 @@ async function renderVafatCardHtml(member, options = {}) {
       }
 
       .address-line {
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 900;
         color: #0c0a09;
-        margin: 16px 0;
+        margin: 8px 0;
         padding: 0 10px;
       }
 
       .calligraphy-block {
         border-top: 1px solid #e7e5e4;
-        padding-top: 20px;
-        margin-top: 20px;
+        padding-top: 10px;
+        margin-top: 10px;
       }
 
       .arabic-verse {
         font-family: 'Amiri', 'Traditional Arabic', serif;
-        font-size: 25px;
+        font-size: 23px;
         font-weight: 700;
         color: #0c0a09;
-        margin-bottom: 6px;
-        line-height: 1.4;
+        margin-bottom: 4px;
+        line-height: 1.3;
       }
 
       .gujarati-verse {
-        font-size: 16px;
+        font-size: 14px;
         font-weight: 700;
         color: #292524;
-        line-height: 1.4;
+        line-height: 1.3;
       }
 
       .dua-body {
-        font-size: 14.5px;
+        font-size: 13px;
         font-weight: 600;
         color: #44403c;
-        line-height: 1.75;
-        margin: 18px 0;
-        padding: 0 16px;
+        line-height: 1.65;
+        margin: 10px 0;
+        padding: 0 12px;
       }
 
       .aameen-block {
-        margin: 18px 0 14px;
+        margin: 10px 0 8px;
       }
 
       .arabic-aameen {
         font-family: 'Amiri', 'Traditional Arabic', serif;
-        font-size: 22px;
+        font-size: 19px;
         font-weight: 700;
         color: #0c0a09;
-        line-height: 1.3;
+        line-height: 1.25;
       }
 
       .gujarati-aameen {
-        font-size: 14.5px;
+        font-size: 13px;
         font-weight: 700;
         color: #292524;
-        margin-top: 5px;
+        margin-top: 3px;
       }
 
       .card-footer {
         border-top: 1px solid #e7e5e4;
-        padding-top: 14px;
-        margin-top: 18px;
-        font-size: 12.5px;
+        padding-top: 10px;
+        margin-top: 10px;
+        font-size: 12px;
         font-weight: 700;
         color: #78716c;
         letter-spacing: 0.5px;

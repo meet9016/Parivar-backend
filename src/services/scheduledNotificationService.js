@@ -3,6 +3,8 @@ const { getRegistryConnection, getTenantConnection } = require('../config/regist
 const tenantSchema = require('../models/tenantSchema');
 const { createAndBroadcast } = require('../controllers/notificationController');
 const { publicUrl } = require('../utils/apiResponse');
+const { tenantContext } = require('../utils/tenantContext');
+const Config = require('../models/configModel');
 
 let schedulerInterval = null;
 let isRunning = false;
@@ -45,8 +47,9 @@ const checkAndSendScheduledNotifications = async () => {
     for (const { conn, name } of connectionsToCheck) {
       if (!conn || conn.readyState !== 1) continue;
 
-      const Event = conn.models.Event;
-      const News = conn.models.News;
+      await tenantContext.run({ tenantConn: conn }, async () => {
+        const Event = conn.models.Event;
+        const News = conn.models.News;
 
       // Process Events
       if (Event) {
@@ -291,7 +294,96 @@ const checkAndSendScheduledNotifications = async () => {
           console.error(`[Scheduler Mandal Overdue Error in ${name}]:`, mandalErr.message);
         }
       }
-    }
+
+      // -------------------------------------------------------------
+      // Process Weekly Scheduled Push Notifications (Monday & Friday)
+      // -------------------------------------------------------------
+      try {
+        let cfg = await Config.findOne();
+        if (!cfg) {
+          try {
+            cfg = await Config.create({ name: 'Parivar' });
+          } catch (_) {
+            cfg = {
+              mondayPushEnabled: true,
+              mondayPushTime: '09:00',
+              fridayPushEnabled: true,
+              fridayPushKey: 'jummah_mubarak',
+              fridayPushTime: '10:00'
+            };
+          }
+        }
+
+        if (cfg) {
+          // Calculate current time & date in Asia/Kolkata
+          const kolkataFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            hourCycle: 'h23',
+            weekday: 'short'
+          });
+          const parts = kolkataFormatter.formatToParts(now);
+          const partMap = {};
+          parts.forEach(p => { partMap[p.type] = p.value; });
+          const currentTimeStr = `${partMap.hour}:${partMap.minute}`;
+          const todayDateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
+          const currentDayName = partMap.weekday; // 'Mon', 'Fri', etc.
+
+          // 1. Monday Scheduled Push Notification
+          if (currentDayName === 'Mon' && cfg.mondayPushEnabled !== false) {
+            const targetMondayTime = (cfg.mondayPushTime || '09:00').trim();
+            if (cfg.lastMondayPushDate !== todayDateStr && currentTimeStr >= targetMondayTime) {
+              console.log(`[Scheduler] 🚀 [${name}] Auto-triggering Monday Push Notification at ${currentTimeStr} (scheduled: ${targetMondayTime})`);
+              await Config.updateOne({ _id: cfg._id }, { $set: { lastMondayPushDate: todayDateStr } });
+
+              const mondayKey = (cfg.mondayPushKey || 'monday_weekly').trim();
+              await createAndBroadcast({
+                title: cfg.mondayPushTitle || `${cfg.name || 'Parivar'} - સાપ્તાહિક અપડેટ`,
+                body: cfg.mondayPushBody || `નવા અઠવાડિયાની શુભકામનાઓ! સમુદાયની નવીનતમ માહિતી અને ગતિવિધિઓ જુઓ.`,
+                type: 'weekly_monday',
+                target_type: 'all',
+                target_users: [],
+                date: now,
+                key: mondayKey,
+                monday_key: mondayKey,
+                monday_time: targetMondayTime
+              });
+            }
+          }
+
+          // 2. Friday Scheduled Push Notification (Auto 10:00 AM / targetFridayTime)
+          if (currentDayName === 'Fri' && cfg.fridayPushEnabled !== false) {
+            const targetFridayTime = (cfg.fridayPushTime || '10:00').trim();
+            if (cfg.lastFridayPushDate !== todayDateStr && currentTimeStr >= targetFridayTime) {
+              const fridayKey = (cfg.fridayPushKey || 'jummah_mubarak').trim();
+              console.log(`[Scheduler] 🚀 [${name}] Auto-triggering Friday Push Notification at ${currentTimeStr} with key [${fridayKey}] (scheduled: ${targetFridayTime})`);
+              await Config.updateOne({ _id: cfg._id }, { $set: { lastFridayPushDate: todayDateStr } });
+
+              await createAndBroadcast({
+                title: cfg.fridayPushTitle || `${cfg.name || 'Parivar'} - શુક્રવાર સંદેશ`,
+                body: cfg.fridayPushBody || `આપ સૌને શુક્રવાર મુબારક! અઠવાડિયાની વિશેષ માહિતી અને અપડેટ્સ તપાસો.`,
+                type: 'weekly_friday',
+                target_type: 'all',
+                target_users: [],
+                date: now,
+                key: fridayKey,
+                friday_key: fridayKey,
+                friday_push_key: fridayKey,
+                push_key: fridayKey
+              });
+            }
+          }
+        }
+      } catch (weeklyErr) {
+        console.error(`[Scheduler Weekly Push Error in ${name}]:`, weeklyErr.message);
+      }
+    });
+  }
   } catch (globalErr) {
     console.error('[ScheduledNotificationService Global Error]:', globalErr.message);
   } finally {
