@@ -3,6 +3,23 @@ const { getRegistryConnection } = require('../config/registryDb');
 const tenantSchema = require('../models/tenantSchema');
 const { publicUrl } = require('../utils/apiResponse');
 
+// Helper to convert any time string into 12-hour format with explicit AM/PM (e.g. "00:00" -> "12:00 AM", "12:00" -> "12:00 PM")
+const formatTimeTo12Hour = (timeStr) => {
+  if (!timeStr) return '';
+  const trimmed = String(timeStr).trim();
+  if (/am|pm/i.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return trimmed;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const period = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12; // 00:00 becomes 12:00 AM
+  return `${String(hours).padStart(2, '0')}:${minutes} ${period}`;
+};
+
 const formatConfig = (req, config) => {
   if (!config) return null;
   const obj = config.toObject ? config.toObject() : { ...config };
@@ -31,25 +48,28 @@ const formatConfig = (req, config) => {
   obj.appstore_url = appLink;
   obj.ios_app_link = appLink;
 
-  // Monday scheduled push settings
-  obj.mondayPushEnabled = obj.mondayPushEnabled !== false;
-  obj.mondayPushTime = obj.mondayPushTime || '09:00';
-  obj.mondayPushKey = obj.mondayPushKey || 'monday_weekly';
-  obj.mondayPushTitle = obj.mondayPushTitle || '';
-  obj.mondayPushBody = obj.mondayPushBody || '';
-  obj.monday_push_time = obj.mondayPushTime;
-  obj.monday_push_key = obj.mondayPushKey;
-  obj.monday_push_enabled = obj.mondayPushEnabled;
+  // Monday & Friday scheduled push settings - ONLY 3 keys kept
+  obj.mondayPushTime = formatTimeTo12Hour(obj.mondayPushTime || '09:00 AM');
+  obj.fridayPushKey = (obj.fridayPushKey || 'jummah_mubarak').trim();
+  obj.fridayPushTime = formatTimeTo12Hour(obj.fridayPushTime || '10:00 AM');
 
-  // Friday scheduled push settings (auto 10:00 AM)
-  obj.fridayPushEnabled = obj.fridayPushEnabled !== false;
-  obj.fridayPushKey = obj.fridayPushKey || 'jummah_mubarak';
-  obj.fridayPushTime = obj.fridayPushTime || '10:00';
-  obj.fridayPushTitle = obj.fridayPushTitle || '';
-  obj.fridayPushBody = obj.fridayPushBody || '';
-  obj.friday_push_key = obj.fridayPushKey;
-  obj.friday_push_time = obj.fridayPushTime;
-  obj.friday_push_enabled = obj.fridayPushEnabled;
+  // Strip all extra Monday and Friday keys
+  delete obj.mondayPushEnabled;
+  delete obj.mondayPushKey;
+  delete obj.mondayPushTitle;
+  delete obj.mondayPushBody;
+  delete obj.monday_push_time;
+  delete obj.monday_push_key;
+  delete obj.monday_push_enabled;
+  delete obj.lastMondayPushDate;
+
+  delete obj.fridayPushEnabled;
+  delete obj.fridayPushTitle;
+  delete obj.fridayPushBody;
+  delete obj.friday_push_key;
+  delete obj.friday_push_time;
+  delete obj.friday_push_enabled;
+  delete obj.lastFridayPushDate;
 
   return obj;
 };
@@ -143,32 +163,20 @@ const updateConfig = async (req, res) => {
       config.appstore_url = appLink;
     }
 
-    // Monday Settings
+    // Monday Settings - ONLY mondayPushTime (saved formatted with AM/PM)
     const mTime = req.body.mondayPushTime !== undefined ? req.body.mondayPushTime : req.body.monday_push_time;
-    if (mTime !== undefined) config.mondayPushTime = mTime;
-    const mKey = req.body.mondayPushKey !== undefined ? req.body.mondayPushKey : req.body.monday_push_key;
-    if (mKey !== undefined) config.mondayPushKey = mKey;
-    const mTitle = req.body.mondayPushTitle !== undefined ? req.body.mondayPushTitle : req.body.monday_push_title;
-    if (mTitle !== undefined) config.mondayPushTitle = mTitle;
-    const mBody = req.body.mondayPushBody !== undefined ? req.body.mondayPushBody : req.body.monday_push_body;
-    if (mBody !== undefined) config.mondayPushBody = mBody;
-    const mEnabled = req.body.mondayPushEnabled !== undefined ? req.body.mondayPushEnabled : req.body.monday_push_enabled;
-    if (mEnabled !== undefined) {
-      config.mondayPushEnabled = mEnabled === true || mEnabled === 'true' || mEnabled === 1 || mEnabled === '1';
+    if (mTime !== undefined && mTime !== null) {
+      config.mondayPushTime = formatTimeTo12Hour(mTime);
     }
 
-    // Friday Settings
+    // Friday Settings - ONLY fridayPushKey & fridayPushTime
     const fKey = req.body.fridayPushKey !== undefined ? req.body.fridayPushKey : req.body.friday_push_key;
-    if (fKey !== undefined) config.fridayPushKey = fKey;
+    if (fKey !== undefined && fKey !== null) {
+      config.fridayPushKey = String(fKey).trim() || 'jummah_mubarak';
+    }
     const fTime = req.body.fridayPushTime !== undefined ? req.body.fridayPushTime : req.body.friday_push_time;
-    if (fTime !== undefined) config.fridayPushTime = fTime;
-    const fTitle = req.body.fridayPushTitle !== undefined ? req.body.fridayPushTitle : req.body.friday_push_title;
-    if (fTitle !== undefined) config.fridayPushTitle = fTitle;
-    const fBody = req.body.fridayPushBody !== undefined ? req.body.fridayPushBody : req.body.friday_push_body;
-    if (fBody !== undefined) config.fridayPushBody = fBody;
-    const fEnabled = req.body.fridayPushEnabled !== undefined ? req.body.fridayPushEnabled : req.body.friday_push_enabled;
-    if (fEnabled !== undefined) {
-      config.fridayPushEnabled = fEnabled === true || fEnabled === 'true' || fEnabled === 1 || fEnabled === '1';
+    if (fTime !== undefined && fTime !== null) {
+      config.fridayPushTime = formatTimeTo12Hour(fTime);
     }
 
     await config.save();
@@ -192,9 +200,10 @@ const testScheduledPush = async (req, res) => {
 
     if (day === 'friday') {
       const fridayKey = (config?.fridayPushKey || 'jummah_mubarak').trim();
+      const fridayTime = formatTimeTo12Hour(config?.fridayPushTime || '10:00 AM');
       await createAndBroadcast({
-        title: config?.fridayPushTitle || `${config?.name || 'Parivar'} - શુક્રવાર સંદેશ`,
-        body: config?.fridayPushBody || `આપ સૌને શુક્રવાર મુબારક! અઠવાડિયાની વિશેષ માહિતી અને અપડેટ્સ તપાસો.`,
+        title: `${config?.name || 'Parivar'} - શુક્રવાર સંદેશ`,
+        body: `આપ સૌને શુક્રવાર મુબારક! અઠવાડિયાની વિશેષ માહિતી અને અપડેટ્સ તપાસો.`,
         type: 'weekly_friday',
         target_type: 'all',
         target_users: [],
@@ -202,31 +211,29 @@ const testScheduledPush = async (req, res) => {
         key: fridayKey,
         friday_key: fridayKey,
         friday_push_key: fridayKey,
-        push_key: fridayKey
+        push_key: fridayKey,
+        friday_time: fridayTime
       });
       return res.status(200).json({
-        message: `Friday test push notification sent successfully (Key: ${fridayKey})`,
-        key: fridayKey
+        message: `Friday test push notification sent successfully (Key: ${fridayKey}, Time: ${fridayTime})`,
+        fridayPushKey: fridayKey,
+        fridayPushTime: fridayTime
       });
     } else {
       // Default to Monday
-      const mondayTime = config?.mondayPushTime || '09:00';
-      const mondayKey = config?.mondayPushKey || 'monday_weekly';
+      const mondayTime = formatTimeTo12Hour(config?.mondayPushTime || '09:00 AM');
       await createAndBroadcast({
-        title: config?.mondayPushTitle || `${config?.name || 'Parivar'} - સાપ્તાહિક અપડેટ`,
-        body: config?.mondayPushBody || `નવા અઠવાડિયાની શુભકામનાઓ! સમુદાયની નવીનતમ માહિતી અને ગતિવિધિઓ જુઓ.`,
+        title: `${config?.name || 'Parivar'} - સાપ્તાહિક અપડેટ`,
+        body: `નવા અઠવાડિયાની શુભકામનાઓ! સમુદાયની નવીનતમ માહિતી અને ગતિવિધિઓ જુઓ.`,
         type: 'weekly_monday',
         target_type: 'all',
         target_users: [],
         date: now,
-        key: mondayKey,
-        monday_key: mondayKey,
         monday_time: mondayTime
       });
       return res.status(200).json({
-        message: `Monday test push notification sent successfully (Time: ${mondayTime}, Key: ${mondayKey})`,
-        monday_time: mondayTime,
-        key: mondayKey
+        message: `Monday test push notification sent successfully (Time: ${mondayTime})`,
+        mondayPushTime: mondayTime
       });
     }
   } catch (err) {

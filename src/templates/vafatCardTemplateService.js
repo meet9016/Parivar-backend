@@ -204,7 +204,6 @@ async function renderVafatCardHtml(member, options = {}) {
 
         <!-- Calligraphy: Inna Lillahi -->
         <div class="calligraphy-block">
-          <div class="arabic-verse">إِنَّا لِلَّهِ وَإِنَّا إِلَيْهِ رَاجِعُونَ</div>
           <div class="gujarati-verse">ઈન્ના લિલ્લાહી વ ઈન્ના ઈલયહી રાજેઊન...</div>
         </div>
 
@@ -217,11 +216,6 @@ async function renderVafatCardHtml(member, options = {}) {
         <div class="aameen-block">
           <div class="arabic-aameen">آمین بجاه شفیع المذنبین ﷺ</div>
           <div class="gujarati-aameen">આમીન... યા રબ્બુલ આલમીન.</div>
-        </div>
-
-        <!-- Community Signature Footer -->
-        <div class="card-footer">
-          — ${escapeHtml(communityName)} —
         </div>
 
       </div>

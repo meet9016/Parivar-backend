@@ -333,40 +333,50 @@ const checkAndSendScheduledNotifications = async () => {
           const currentTimeStr = `${partMap.hour}:${partMap.minute}`;
           const todayDateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
           const currentDayName = partMap.weekday; // 'Mon', 'Fri', etc.
+          // Helper to convert 12-hour (or 24-hour) string to 24-hour HH:mm for reliable comparison
+          const parseTimeTo24Hour = (timeStr) => {
+            if (!timeStr) return '09:00';
+            const trimmed = String(timeStr).trim();
+            const ampmMatch = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+            if (!ampmMatch) return trimmed;
+            let hours = parseInt(ampmMatch[1], 10);
+            const minutes = ampmMatch[2];
+            const period = ampmMatch[3]?.toUpperCase();
+            if (period === 'PM' && hours < 12) hours += 12;
+            if (period === 'AM' && hours === 12) hours = 0;
+            return `${String(hours).padStart(2, '0')}:${minutes}`;
+          };
 
           // 1. Monday Scheduled Push Notification
-          if (currentDayName === 'Mon' && cfg.mondayPushEnabled !== false) {
-            const targetMondayTime = (cfg.mondayPushTime || '09:00').trim();
+          if (currentDayName === 'Mon') {
+            const targetMondayTime = parseTimeTo24Hour(cfg.mondayPushTime || '09:00');
             if (cfg.lastMondayPushDate !== todayDateStr && currentTimeStr >= targetMondayTime) {
-              console.log(`[Scheduler] 🚀 [${name}] Auto-triggering Monday Push Notification at ${currentTimeStr} (scheduled: ${targetMondayTime})`);
+              console.log(`[Scheduler] 🚀 [${name}] Auto-triggering Monday Push Notification at ${currentTimeStr} (scheduled: ${cfg.mondayPushTime || targetMondayTime})`);
               await Config.updateOne({ _id: cfg._id }, { $set: { lastMondayPushDate: todayDateStr } });
 
-              const mondayKey = (cfg.mondayPushKey || 'monday_weekly').trim();
               await createAndBroadcast({
-                title: cfg.mondayPushTitle || `${cfg.name || 'Parivar'} - સાપ્તાહિક અપડેટ`,
-                body: cfg.mondayPushBody || `નવા અઠવાડિયાની શુભકામનાઓ! સમુદાયની નવીનતમ માહિતી અને ગતિવિધિઓ જુઓ.`,
+                title: `${cfg.name || 'Parivar'} - સાપ્તાહિક અપડેટ`,
+                body: `નવા અઠવાડિયાની શુભકામનાઓ! સમુદાયની નવીનતમ માહિતી અને ગતિવિધિઓ જુઓ.`,
                 type: 'weekly_monday',
                 target_type: 'all',
                 target_users: [],
                 date: now,
-                key: mondayKey,
-                monday_key: mondayKey,
-                monday_time: targetMondayTime
+                monday_time: cfg.mondayPushTime || targetMondayTime
               });
             }
           }
 
-          // 2. Friday Scheduled Push Notification (Auto 10:00 AM / targetFridayTime)
-          if (currentDayName === 'Fri' && cfg.fridayPushEnabled !== false) {
-            const targetFridayTime = (cfg.fridayPushTime || '10:00').trim();
+          // 2. Friday Scheduled Push Notification
+          if (currentDayName === 'Fri') {
+            const targetFridayTime = parseTimeTo24Hour(cfg.fridayPushTime || '10:00');
             if (cfg.lastFridayPushDate !== todayDateStr && currentTimeStr >= targetFridayTime) {
               const fridayKey = (cfg.fridayPushKey || 'jummah_mubarak').trim();
-              console.log(`[Scheduler] 🚀 [${name}] Auto-triggering Friday Push Notification at ${currentTimeStr} with key [${fridayKey}] (scheduled: ${targetFridayTime})`);
+              console.log(`[Scheduler] 🚀 [${name}] Auto-triggering Friday Push Notification at ${currentTimeStr} with key [${fridayKey}] (scheduled: ${cfg.fridayPushTime || targetFridayTime})`);
               await Config.updateOne({ _id: cfg._id }, { $set: { lastFridayPushDate: todayDateStr } });
 
               await createAndBroadcast({
-                title: cfg.fridayPushTitle || `${cfg.name || 'Parivar'} - શુક્રવાર સંદેશ`,
-                body: cfg.fridayPushBody || `આપ સૌને શુક્રવાર મુબારક! અઠવાડિયાની વિશેષ માહિતી અને અપડેટ્સ તપાસો.`,
+                title: `${cfg.name || 'Parivar'} - શુક્રવાર સંદેશ`,
+                body: `આપ સૌને શુક્રવાર મુબારક! અઠવાડિયાની વિશેષ માહિતી અને અપડેટ્સ તપાસો.`,
                 type: 'weekly_friday',
                 target_type: 'all',
                 target_users: [],
