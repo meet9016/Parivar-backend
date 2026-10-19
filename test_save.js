@@ -4,9 +4,7 @@ const Expense = require('./src/models/expenseModel');
 
 async function test() {
   try {
-    console.log('Connecting to MongoDB using URI:', process.env.MONGO_URI);
     await mongoose.connect(process.env.MONGO_URI);
-    console.log('Connected successfully. Testing saving a new Expense...');
 
     const expense = new Expense({
       date: '2026-08-06',

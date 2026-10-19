@@ -28,7 +28,6 @@ const getRegistryConnection = async () => {
   };
 
   registryConn = await mongoose.createConnection(registryUri, options).asPromise();
-  console.log(`[Registry] Connected to: ${REGISTRY_DB_NAME} ✅`);
   return registryConn;
 };
 
@@ -69,7 +68,7 @@ const getTenantConnection = async (dbName) => {
   const parsedUri = new URL(baseUri);
   parsedUri.pathname = `/${dbName}`;
   const tenantUri = parsedUri.toString();
-  
+
   const options = {
     serverSelectionTimeoutMS: 15000,
     tls: true, // Forces TLS connection
@@ -80,7 +79,6 @@ const getTenantConnection = async (dbName) => {
   ensureTenantModels(conn);
 
   tenantConnCache[dbName] = conn;
-  console.log(`[Tenant] Connected to: ${dbName} ✅`);
   return conn;
 };
 

@@ -66,8 +66,6 @@ const mockCategories = [
 
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(async () => {
-    console.log('MongoDB connected.');
-    
     for (let category of mockCategories) {
       await BusinessCategory.findOneAndUpdate(
         { id: category.id },
@@ -75,8 +73,7 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
         { upsert: true, new: true }
       );
     }
-    
-    console.log(`Successfully added ${mockCategories.length} mock business categories!`);
+
     process.exit(0);
   })
   .catch(err => {

@@ -21,7 +21,6 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
     const chunks = [];
     for (let i = 0; i < uniqueTokens.length; i += 500) chunks.push(uniqueTokens.slice(i, i + 500));
 
-    console.log(`[FCM Multicast] Sending to ${uniqueTokens.length} token(s)...`);
 
     for (const chunk of chunks) {
       const message = {
@@ -34,7 +33,6 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
         tokens: chunk
       };
       const response = await getMessaging().sendEachForMulticast(message);
-      console.log(`[FCM Multicast] Success: ${response.successCount}, Failed: ${response.failureCount}`);
       if (response.failureCount > 0) {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {

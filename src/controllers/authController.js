@@ -61,7 +61,6 @@ const login = async (req, res) => {
         user.otp_expiry = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours valid
         user.otp_last_sent = now;
         await user.save();
-        console.log(`[AUTH] Static OTP ${staticConfig.otp} set for test number ${cleanNumber} (No SMS sent)`);
         return apiResponse(res, 200, 'OTP sent successfully', { otp: staticConfig.otp });
       }
 
@@ -123,7 +122,7 @@ const login = async (req, res) => {
     // 3. Clear token states immediately to avoid replay attacks
     user.otp = null;
     user.otp_expiry = null;
-    
+
     if (fcm_token) user.fcm_token = fcm_token;
     await user.save();
 

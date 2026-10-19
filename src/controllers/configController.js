@@ -28,10 +28,8 @@ const formatConfig = (req, config) => {
 const getConfig = async (req, res) => {
   try {
     const tenantSlug = req.headers['x-tenant-id']?.toLowerCase();
-    console.log('[getConfig] tenantSlug header:', tenantSlug, 'req.tenantConn:', !!req.tenantConn);
-    
+
     let config = await Config.findOne();
-    console.log('[getConfig] Config.findOne() result:', config);
 
     // Check if a tenant header is provided to resolve community name
     let tenantRecord = null;
@@ -47,8 +45,8 @@ const getConfig = async (req, res) => {
 
     const expectedName = tenantRecord && tenantRecord.parivar_name
       ? (tenantRecord.community_type === 'Village' || tenantRecord.parivar_name.toLowerCase().includes('parivar')
-          ? tenantRecord.parivar_name
-          : `${tenantRecord.parivar_name} Parivar`)
+        ? tenantRecord.parivar_name
+        : `${tenantRecord.parivar_name} Parivar`)
       : (tenantSlug ? `${tenantSlug.charAt(0).toUpperCase() + tenantSlug.slice(1)} Parivar` : 'Parivar');
 
     if (!config) {
@@ -63,7 +61,6 @@ const getConfig = async (req, res) => {
       }
     }
 
-    console.log('[getConfig] Final config sending:', config);
     res.status(200).json({
       message: 'Configuration retrieved successfully',
       data: formatConfig(req, config)

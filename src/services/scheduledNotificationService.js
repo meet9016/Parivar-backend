@@ -59,8 +59,6 @@ const checkAndSendScheduledNotifications = async () => {
           }).lean();
 
           for (const ev of dueEvents) {
-            console.log(`[Scheduler] ⏰ Auto-sending event reminder for "${ev.title}" in DB [${name}]`);
-
             // Mark as sent first to prevent duplicate sends across concurrent runs
             await Event.updateOne({ _id: ev._id }, { $set: { reminder_sent: true } });
 
@@ -101,8 +99,6 @@ const checkAndSendScheduledNotifications = async () => {
           }).lean();
 
           for (const nw of dueNews) {
-            console.log(`[Scheduler] 📰 Auto-sending news reminder for "${nw.title}" in DB [${name}]`);
-
             // Mark as sent first
             await News.updateOne({ _id: nw._id }, { $set: { reminder_sent: true } });
 
@@ -162,8 +158,6 @@ const checkAndSendScheduledNotifications = async () => {
 
           for (const bUser of birthdayUsers) {
             const memberName = [bUser.first_name, bUser.middle_name, bUser.last_name].filter(Boolean).join(' ') || 'Member';
-            console.log(`[Scheduler] 🎂 Auto-sending Birthday Wish specifically to "${memberName}" in DB [${name}]`);
-
             // Mark as notified for current year
             await User.updateOne({ _id: bUser._id }, { $set: { birthday_notification_year: currentYear } });
 
@@ -210,7 +204,6 @@ const checkAndSendScheduledNotifications = async () => {
 
           for (const aUser of anniversaryUsers) {
             const memberName = [aUser.first_name, aUser.middle_name, aUser.last_name].filter(Boolean).join(' ') || 'Member';
-            console.log(`[Scheduler] 💐 Auto-sending Anniversary Wish specifically to "${memberName}" in DB [${name}]`);
 
             // Mark as notified for current year
             await User.updateOne({ _id: aUser._id }, { $set: { anniversary_notification_year: currentYear } });
@@ -264,8 +257,6 @@ const startScheduler = (intervalMs = 60 * 1000) => {
   schedulerInterval = setInterval(() => {
     checkAndSendScheduledNotifications();
   }, intervalMs);
-
-  console.log(`[Scheduler] 🚀 Automated Scheduled Notification Service active (Interval: ${intervalMs / 1000}s)`);
 };
 
 const stopScheduler = () => {

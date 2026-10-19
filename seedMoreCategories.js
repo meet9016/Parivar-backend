@@ -74,26 +74,24 @@ const downloadImage = async (url, filepath) => {
 
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(async () => {
-    console.log('MongoDB connected. Preparing to download images...');
-    
+
     const uploadsDir = path.join(__dirname, 'public', 'uploads');
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });
     }
 
     await BusinessCategory.deleteMany({});
-    
+
     for (let i = 0; i < categoriesList.length; i++) {
       const cat = categoriesList[i];
       const idStr = String(i + 100).padStart(3, '0');
       const filename = `cat_${idStr}.jpg`;
       const filepath = path.join(uploadsDir, filename);
       const imageUrl = `https://loremflickr.com/600/400/${encodeURIComponent(cat.keyword)}`;
-      
-      console.log(`Downloading image for ${cat.name}...`);
+
       try {
         await downloadImage(imageUrl, filepath);
-        
+
         const categoryData = {
           id: `cat_${idStr}`,
           name: cat.name,
@@ -101,7 +99,7 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
           state_id: "active",
           business: cat.name
         };
-        
+
         await BusinessCategory.findOneAndUpdate(
           { id: categoryData.id },
           categoryData,
@@ -111,8 +109,7 @@ mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopol
         console.error(`Failed to download image for ${cat.name}:`, err.message);
       }
     }
-    
-    console.log(`Successfully completed seeding process!`);
+
     process.exit(0);
   })
   .catch(err => {

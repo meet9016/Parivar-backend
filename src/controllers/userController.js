@@ -122,7 +122,7 @@ const register = async (req, res) => {
     if (defaultRole) {
       newUser.role_id = defaultRole._id;
     }
-    
+
     await newUser.save();
     if (familyData.relation === 'Self' || newUser.familyHead) {
       newUser.family_head = {
@@ -253,7 +253,6 @@ const mongooseQueryForUser = (id) => {
 
 const getUsers = async (req, res) => {
   try {
-    console.log("getUsers Query params:", req.query);
     const birthday = 'birthday' in req.query;
     const anniversary = 'anniversary' in req.query;
 
@@ -344,7 +343,7 @@ const getUsers = async (req, res) => {
       // 2. Fetch all dependent members under these paginated heads and attach them
       const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
-      
+
       const headCriteria = {
         $or: [
           { familyHead: true },
@@ -358,7 +357,7 @@ const getUsers = async (req, res) => {
       if (req.query.search && String(req.query.search).trim()) {
         const rawSearch = String(req.query.search).trim();
         const tokens = rawSearch.split(/\s+/).filter(Boolean);
-        
+
         let searchCondition;
         if (tokens.length === 1) {
           const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
@@ -503,7 +502,7 @@ const getUsers = async (req, res) => {
           const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
           const mParentId = String(m.parent_member_id || '');
           return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
-                 (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+            (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
         });
 
         const formattedHead = formatUserObj(head);
@@ -1046,7 +1045,7 @@ const bulkImportUsers = async (req, res) => {
       // Try DD-MM-YYYY
       const ddmmyyyy = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
       if (ddmmyyyy) {
-        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
+        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`);
         return isNaN(d.getTime()) ? null : d;
       }
       const d = new Date(str);
@@ -1081,7 +1080,7 @@ const bulkImportUsers = async (req, res) => {
       }
 
       const firstName = getVal(row, 'First Name', 'first_name', 'firstname', 'name');
-      let number      = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone', 'contact');
+      let number = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone', 'contact');
       if (number.endsWith('.0')) {
         number = number.slice(0, -2);
       }
@@ -1104,27 +1103,27 @@ const bulkImportUsers = async (req, res) => {
       }
 
       const isFamilyHeadVal = getVal(row, 'Is Family Head', 'is family head', 'family head', 'familyhead').toLowerCase();
-      const relation        = getVal(row, 'Relation', 'relation') || 'Self';
-      const isFamilyHead    = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
+      const relation = getVal(row, 'Relation', 'relation') || 'Self';
+      const isFamilyHead = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
 
       try {
         const newUser = new User({
-          member_id:    String(nextMemberId),
-          first_name:   firstName,
-          middle_name:  getVal(row, 'Middle Name', 'middle_name', 'middlename'),
-          last_name:    getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
-          email:        getVal(row, 'Email', 'email').toLowerCase() || '',
-          password:     '12345',
+          member_id: String(nextMemberId),
+          first_name: firstName,
+          middle_name: getVal(row, 'Middle Name', 'middle_name', 'middlename'),
+          last_name: getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
+          email: getVal(row, 'Email', 'email').toLowerCase() || '',
+          password: '12345',
           number,
-          gender:       getVal(row, 'Gender', 'gender') || '',
-          dob:          parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
-          anniversary:  parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
-          blood_group:  getVal(row, 'Blood Group', 'blood group', 'blood_group'),
-          address:      getVal(row, 'Address', 'address'),
-          relation:     isFamilyHead ? 'Self' : (relation || 'Other'),
-          familyHead:   isFamilyHead,
-          status:       1,
-          role_id:      defaultRole ? defaultRole._id : undefined
+          gender: getVal(row, 'Gender', 'gender') || '',
+          dob: parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
+          anniversary: parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
+          blood_group: getVal(row, 'Blood Group', 'blood group', 'blood_group'),
+          address: getVal(row, 'Address', 'address'),
+          relation: isFamilyHead ? 'Self' : (relation || 'Other'),
+          familyHead: isFamilyHead,
+          status: 1,
+          role_id: defaultRole ? defaultRole._id : undefined
         });
 
         if (isFamilyHead) {
@@ -1155,7 +1154,7 @@ const bulkImportUsers = async (req, res) => {
 
     return apiResponse(res, 200, `Import complete: ${created.length} created, ${errors.length} failed`, {
       created_count: created.length,
-      failed_count:  errors.length,
+      failed_count: errors.length,
       created,
       errors
     });
@@ -1171,7 +1170,7 @@ const exportUsers = async (req, res) => {
   try {
     const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
-    
+
     const headCriteria = {
       $or: [
         { familyHead: true },
@@ -1185,7 +1184,7 @@ const exportUsers = async (req, res) => {
     if (req.query.search && String(req.query.search).trim()) {
       const rawSearch = String(req.query.search).trim();
       const tokens = rawSearch.split(/\s+/).filter(Boolean);
-      
+
       let searchCondition;
       if (tokens.length === 1) {
         const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
@@ -1282,7 +1281,7 @@ const exportUsers = async (req, res) => {
         const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
         const mParentId = String(m.parent_member_id || '');
         return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
-               (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+          (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
       });
 
       // Add Head row
