@@ -254,13 +254,20 @@ const submitVote = async (req, res) => {
       return apiResponse(res, 400, 'You have already voted in this poll');
     }
 
-    let { selected_options } = req.body;
-    if (typeof selected_options === 'string') {
+    let rawOptions = req.body.selected_options ?? req.body.option_id ?? req.body.optionId ?? req.body.options ?? req.body.option;
+    let selected_options = [];
+
+    if (typeof rawOptions === 'string') {
       try {
-        selected_options = JSON.parse(selected_options);
+        const parsed = JSON.parse(rawOptions);
+        selected_options = Array.isArray(parsed) ? parsed : [String(parsed)];
       } catch (e) {
-        selected_options = [selected_options];
+        selected_options = [rawOptions.trim()];
       }
+    } else if (Array.isArray(rawOptions)) {
+      selected_options = rawOptions.map(String);
+    } else if (rawOptions !== undefined && rawOptions !== null) {
+      selected_options = [String(rawOptions)];
     }
 
     if (!Array.isArray(selected_options) || selected_options.length === 0) {
@@ -271,11 +278,15 @@ const submitVote = async (req, res) => {
       return apiResponse(res, 400, 'Only one option can be selected for this poll');
     }
 
-    const validOptionIds = new Set(poll.options.map(o => o.id));
-    for (const optId of selected_options) {
-      if (!validOptionIds.has(optId)) {
-        return apiResponse(res, 400, `Invalid option selected: ${optId}`);
+    const resolvedOptionIds = [];
+    for (const optVal of selected_options) {
+      const match = poll.options.find(
+        (o) => o.id === optVal || String(o.text).trim().toLowerCase() === String(optVal).trim().toLowerCase()
+      );
+      if (!match) {
+        return apiResponse(res, 400, `Invalid option selected: ${optVal}`);
       }
+      resolvedOptionIds.push(match.id);
     }
 
     const memberName = req.user ? (fullName(req.user) || req.user.name || 'Member') : 'Member';
@@ -286,12 +297,12 @@ const submitVote = async (req, res) => {
       member_id: currentMemberId,
       member_name: memberName,
       member_mobile: memberMobile,
-      selected_options,
+      selected_options: resolvedOptionIds,
       voted_at: new Date()
     });
 
     // Increment option votes and total
-    for (const optId of selected_options) {
+    for (const optId of resolvedOptionIds) {
       const opt = poll.options.find(o => o.id === optId);
       if (opt) opt.votes_count += 1;
     }
