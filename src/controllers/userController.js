@@ -167,6 +167,7 @@ const register = async (req, res) => {
       family_head: familyData.family_head,
       familyHead: familyHead === true || familyHead === 'true',
       status: familyData.status,
+      amount: req.body.amount !== undefined && req.body.amount !== '' ? Number(req.body.amount) : 0,
     });
     const Role = require('../models/roleModel');
     const defaultRole = await Role.findOne({ name: 'UserRole' });
@@ -577,6 +578,7 @@ const getUsers = async (req, res) => {
         role_name: u.role_id?.name || '',
         address: u.address || '',
         status: Number(u.status ?? 1),
+        amount: Number(u.amount || 0),
         familyHead: u.familyHead || u.relation === 'Self' || false,
         image: publicUrl(req, u.image || u.profile_image || ''),
         profile_image: u.profile_image || '',
@@ -952,6 +954,7 @@ const updateUser = async (req, res) => {
     if (address !== undefined) user.address = address;
     if (designation !== undefined) user.designation = designation;
     if (status !== undefined) user.status = Number(status);
+    if (req.body.amount !== undefined) user.amount = req.body.amount !== '' ? Number(req.body.amount) : 0;
     if (familyHead !== undefined) user.familyHead = familyHead === true || familyHead === 'true';
     if (familyData.family_head !== undefined && (relation !== undefined || req.body.family_head_id !== undefined || familyHead !== undefined)) {
       user.family_head = familyData.family_head;

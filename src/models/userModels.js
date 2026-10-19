@@ -200,6 +200,10 @@ const userSchema = new mongoose.Schema({
     default: null,
     index: true
   },
+  amount: {
+    type: Number,
+    default: 0
+  },
 
   district_id: {
     type: String,

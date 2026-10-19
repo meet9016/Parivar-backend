@@ -6,6 +6,7 @@ const { apiResponse } = require('../utils/apiResponse');
 const { uploadToExternalService } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
 const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
 const { createAndBroadcast } = require('./notificationController');
 const { generatePdfFromHtml } = require('../services/pdfService');
 const { renderContributionReceiptHtml } = require('../templates/mandalContributionReceiptTemplateService');
@@ -466,7 +467,7 @@ exports.getMonthlyContributions = async (req, res) => {
 
       if (missingMemberIds.length > 0) {
         const missingUsers = await User.find({ _id: { $in: missingMemberIds } })
-          .select('first_name middle_name last_name number village image profile_image')
+          .select('first_name middle_name last_name number village image profile_image amount')
           .lean();
 
         const newRecords = missingUsers.map(user => ({
@@ -476,7 +477,7 @@ exports.getMonthlyContributions = async (req, res) => {
           member_number: user.number || '',
           month: month,
           amount: 0,
-          expected_amount: mandal.monthly_amount || 500,
+          expected_amount: (user.amount && user.amount > 0) ? user.amount : (mandal.monthly_amount || 500),
           status: 'Pending',
           payment_mode: 'Cash'
         }));
@@ -773,67 +774,172 @@ exports.exportMonthlyContributions = async (req, res) => {
       .sort({ status: 1, member_name: 1 })
       .lean();
 
-    const excelRows = contributions.map((c, idx) => {
-      const u = c.member_id || {};
-      const fullName = c.member_name || `${u.first_name || ''} ${u.middle_name || ''} ${u.last_name || ''}`.trim() || 'Unknown Member';
-      const mobile = c.member_number || u.number || '';
-      const pDate = c.payment_date ? new Date(c.payment_date).toISOString().slice(0, 10) : '';
+    // Build rich, professionally highlighted Excel workbook using ExcelJS
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Parivar App';
+    workbook.created = new Date();
 
-      return {
-        'Sr No': idx + 1,
-        'Member Name': fullName,
-        'Mobile Number': mobile,
-        'Village': u.village || '',
-        'Month': c.month || month,
-        'Expected Amount (₹)': Number(c.expected_amount || mandal.monthly_amount || 500),
-        'Paid Amount (₹)': Number(c.amount || 0),
-        'Status': c.status || 'Pending',
-        'Payment Date': pDate || '-',
-        'Payment Mode': c.status === 'Paid' ? (c.payment_mode || 'Cash') : '-',
-        'Receipt Number': c.receipt_number || '-',
-        'Transaction ID': c.transaction_id || '-',
-        'Notes': c.notes || ''
+    const sheetName = (mandal.name || 'Contributions').slice(0, 31).replace(/[:\\/?*\[\]]/g, '');
+    const worksheet = workbook.addWorksheet(sheetName || 'Contributions', {
+      views: [{ state: 'frozen', ySplit: 1 }]
+    });
+
+    worksheet.columns = [
+      { header: 'Sr No', key: 'sr_no', width: 10 },
+      { header: 'Member Name', key: 'member_name', width: 28 },
+      { header: 'Mobile Number', key: 'number', width: 18 },
+      { header: 'Village', key: 'village', width: 18 },
+      { header: 'Month', key: 'month', width: 14 },
+      { header: 'Expected Amount (₹)', key: 'expected_amount', width: 22 },
+      { header: 'Paid Amount (₹)', key: 'paid_amount', width: 20 },
+      { header: 'Status', key: 'status', width: 15 },
+      { header: 'Payment Date', key: 'payment_date', width: 16 },
+      { header: 'Payment Mode', key: 'payment_mode', width: 16 },
+      { header: 'Receipt Number', key: 'receipt_number', width: 20 },
+      { header: 'Transaction ID', key: 'transaction_id', width: 20 },
+      { header: 'Notes', key: 'notes', width: 25 }
+    ];
+
+    // Style the Header Row (Modern Royal Navy Blue with Bold White Text)
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 30;
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E3A8A' } // Deep Royal Blue
+      };
+      cell.font = {
+        name: 'Segoe UI',
+        size: 11,
+        bold: true,
+        color: { argb: 'FFFFFFFF' } // Crisp White
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FF93C5FD' } },
+        left: { style: 'thin', color: { argb: 'FF93C5FD' } },
+        bottom: { style: 'medium', color: { argb: 'FF1D4ED8' } },
+        right: { style: 'thin', color: { argb: 'FF93C5FD' } }
       };
     });
 
-    const worksheetData = excelRows.length > 0 ? excelRows : [{
-      'Sr No': '',
-      'Member Name': '',
-      'Mobile Number': '',
-      'Village': '',
-      'Month': month,
-      'Expected Amount (₹)': mandal.monthly_amount || 500,
-      'Paid Amount (₹)': 0,
-      'Status': 'No records found',
-      'Payment Date': '-',
-      'Payment Mode': '-',
-      'Receipt Number': '-',
-      'Transaction ID': '-',
-      'Notes': ''
-    }];
+    // Populate data rows with zebra striping and highlighted status/amount badges
+    contributions.forEach((c, idx) => {
+      const u = c.member_id || {};
+      const fullName = c.member_name || `${u.first_name || ''} ${u.middle_name || ''} ${u.last_name || ''}`.trim() || 'Unknown Member';
+      const mobile = c.member_number || u.number || '';
+      const pDate = c.payment_date ? new Date(c.payment_date).toISOString().slice(0, 10) : '-';
+      const isPaid = c.status === 'Paid';
+      const expAmt = Number(c.expected_amount || mandal.monthly_amount || 500);
+      const actAmt = Number(c.amount || 0);
 
-    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
-    worksheet['!cols'] = [
-      { wch: 8 },  // Sr No
-      { wch: 30 }, // Member Name
-      { wch: 18 }, // Mobile Number
-      { wch: 18 }, // Village
-      { wch: 12 }, // Month
-      { wch: 20 }, // Expected Amount
-      { wch: 18 }, // Paid Amount
-      { wch: 14 }, // Status
-      { wch: 15 }, // Payment Date
-      { wch: 16 }, // Payment Mode
-      { wch: 18 }, // Receipt Number
-      { wch: 20 }, // Transaction ID
-      { wch: 25 }  // Notes
-    ];
+      const row = worksheet.addRow({
+        sr_no: idx + 1,
+        member_name: fullName,
+        number: mobile,
+        village: u.village || '',
+        month: c.month || month,
+        expected_amount: expAmt,
+        paid_amount: actAmt,
+        status: isPaid ? 'Paid' : 'Pending',
+        payment_date: pDate,
+        payment_mode: isPaid ? (c.payment_mode || 'Cash') : '-',
+        receipt_number: c.receipt_number || '-',
+        transaction_id: c.transaction_id || '-',
+        notes: c.notes || ''
+      });
 
-    const workbook = XLSX.utils.book_new();
-    const sheetName = (mandal.name || 'Contributions').slice(0, 31).replace(/[:\\/?*\[\]]/g, '');
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName || 'Contributions');
+      row.height = 24;
 
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      const isEven = idx % 2 === 0;
+      const defaultBg = isEven ? 'FFFFFFFF' : 'FFF8FAFC'; // Soft Slate Zebra Fill
+
+      row.eachCell((cell, colNumber) => {
+        cell.font = {
+          name: 'Segoe UI',
+          size: 10,
+          color: { argb: 'FF1E293B' }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+          right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+        };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: defaultBg }
+        };
+
+        // Center specific columns: Sr No, Mobile, Month, Payment Date, Payment Mode
+        if ([1, 3, 5, 8, 9, 10, 11, 12].includes(colNumber)) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        }
+
+        // Right-align currency / amounts
+        if (colNumber === 6 || colNumber === 7) {
+          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+          cell.numFmt = '₹#,##0';
+        }
+
+        // Highlight Status Column (Col 8)
+        if (colNumber === 8) {
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          if (isPaid) {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFDCFCE7' } // Vibrant Light Green
+            };
+            cell.font = {
+              name: 'Segoe UI',
+              size: 10,
+              bold: true,
+              color: { argb: 'FF15803D' } // Deep Emerald Green
+            };
+          } else {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFEF3C7' } // Vibrant Light Amber
+            };
+            cell.font = {
+              name: 'Segoe UI',
+              size: 10,
+              bold: true,
+              color: { argb: 'FFB45309' } // Deep Amber Orange
+            };
+          }
+        }
+
+        // Highlight Paid Amount (Col 7)
+        if (colNumber === 7) {
+          cell.font = {
+            name: 'Segoe UI',
+            size: 10,
+            bold: true,
+            color: { argb: isPaid ? 'FF15803D' : 'FF64748B' }
+          };
+        }
+      });
+    });
+
+    // Auto-fit column widths gracefully with extra padding
+    worksheet.columns.forEach(column => {
+      let maxLen = 0;
+      column.eachCell({ includeEmpty: false }, (cell) => {
+        const valStr = cell.value ? String(cell.value) : '';
+        if (valStr.length > maxLen) {
+          maxLen = valStr.length;
+        }
+      });
+      column.width = Math.max(column.width || 12, maxLen + 4);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
 
     const safeMandalName = (mandal.name || 'Mandal').replace(/[^a-zA-Z0-9]/g, '_');
     const filename = `Contributions_${safeMandalName}_${month}.xlsx`;
@@ -844,7 +950,7 @@ exports.exportMonthlyContributions = async (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
 
-    return res.status(200).send(buffer);
+    return res.status(200).send(Buffer.from(buffer));
   } catch (error) {
     console.error('Error in exportMonthlyContributions:', error);
     return res.status(500).json({ status: 500, message: 'Failed to export monthly contributions', error: error.message });
