@@ -24,6 +24,9 @@ exports.getChatUsers = async (req, res) => {
 
     const regex = search ? new RegExp(search, 'i') : null;
 
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 50));
+
     // 1. Fetch Committee Members
     const cmQuery = { status: { $ne: 0 } };
     if (regex) {
@@ -49,12 +52,11 @@ exports.getChatUsers = async (req, res) => {
     }
     const users = await User.find(userQuery)
       .select('first_name middle_name last_name number image profile_image village occupation role_id status')
-      .limit(60)
       .lean();
 
     // 3. Merge & Deduplicate by phone number
     const seenNumbers = new Set();
-    const result = [];
+    const allResults = [];
 
     // Prioritize Committee Members (they have admin roles/designations)
     for (const cm of cms) {
@@ -62,7 +64,7 @@ exports.getChatUsers = async (req, res) => {
       const cleanNum = cleanPhoneNumber(cm.number);
       if (cleanNum) seenNumbers.add(cleanNum);
 
-      result.push({
+      allResults.push({
         _id: cm._id,
         first_name: cm.first_name,
         last_name: cm.last_name,
@@ -71,6 +73,7 @@ exports.getChatUsers = async (req, res) => {
         profile_image: cm.image,
         designation: cm.designation || 'Committee Member',
         is_committee: true,
+        village: '',
         type: 'committee'
       });
     }
@@ -82,7 +85,7 @@ exports.getChatUsers = async (req, res) => {
       if (cleanNum && seenNumbers.has(cleanNum)) continue;
       if (cleanNum) seenNumbers.add(cleanNum);
 
-      result.push({
+      allResults.push({
         _id: u._id,
         first_name: u.first_name,
         last_name: u.last_name,
@@ -91,12 +94,23 @@ exports.getChatUsers = async (req, res) => {
         profile_image: u.profile_image || u.image,
         designation: 'Member',
         is_committee: false,
-        village: u.village,
+        village: u.village || '',
         type: 'user'
       });
     }
 
-    return apiResponse(res, 200, 'Users fetched successfully', result);
+    // Pagination calculations
+    const total = allResults.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const startIndex = (page - 1) * limit;
+    const paginatedData = allResults.slice(startIndex, startIndex + limit);
+
+    return apiResponse(res, 200, 'Users fetched successfully', paginatedData, {
+      page,
+      limit,
+      total,
+      totalPages
+    });
   } catch (err) {
     return apiResponse(res, 500, err.message);
   }
