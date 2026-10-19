@@ -26,7 +26,6 @@ router.use('/directory', require('./directoryRoutes'));
 router.use('/gallery', require('./galleryRoutes'));
 router.use('/gallery-categories', require('./galleryCategoryRoutes'));
 router.use('/businesses', require('./businessRoutes'));
-router.use('/feedback', require('./feedbackRoutes'));
 router.use('/job-vacancy', require('./jobVacancyRoutes'));
 router.use('/committee-members', require('./committeeMemberRoutes'));
 router.use('/event-registrations', require('./eventRegistrationRoutes'));
