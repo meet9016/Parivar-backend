@@ -21,8 +21,7 @@ const PERMISSION_MODULES = [
   { key: 'masters', label: 'Masters' },
   { key: 'birthday', label: 'Birthdays' },
   { key: 'job-vacancy', label: 'Job Vacancies' },
-  { key: 'posts', label: 'Posts' },
-  { key: 'contact-inquiries', label: 'Contact Inquiries' }
+  { key: 'posts', label: 'Posts' }
 ];
 
 const PERMISSIONS = [
@@ -56,7 +55,8 @@ const LEGACY_PERMISSION_KEYS = [
   'settings.manage',
   'donations.manage',
   'expenses.manage',
-  'expense-category.manage'
+  'expense-category.manage',
+  'polls.manage'
 ];
 
 const ALL_PERMISSION_KEYS = [
