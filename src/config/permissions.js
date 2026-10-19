@@ -21,7 +21,8 @@ const PERMISSION_MODULES = [
   { key: 'masters', label: 'Masters' },
   { key: 'birthday', label: 'Birthdays' },
   { key: 'job-vacancy', label: 'Job Vacancies' },
-  { key: 'posts', label: 'Posts' }
+  { key: 'posts', label: 'Posts' },
+  { key: 'polls', label: 'Polls' }
 ];
 
 const PERMISSIONS = [
