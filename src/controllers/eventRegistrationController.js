@@ -246,7 +246,6 @@ const cancelRegistration = async (req, res) => {
   }
 };
 
-
 const downloadRegistrations = async (req, res) => {
   try {
     const { search, event_id } = req.query
@@ -291,7 +290,6 @@ const downloadRegistrations = async (req, res) => {
   }
 }
 
-
 module.exports = {
   getRegistrationsList,
   getRegistrationById,
@@ -299,5 +297,4 @@ module.exports = {
   updateRegistration,
   cancelRegistration,
   downloadRegistrations
-
 };

@@ -208,7 +208,6 @@ const getBusinesses = async (req, res) => {
   }
 };
 
-
 const getBusinessById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -439,7 +438,6 @@ const addBusinessDetails = async (req, res) => {
   }
 };
 
-
 const deleteBusiness = async (req, res) => {
   try {
     const { id } = req.params;
@@ -463,7 +461,6 @@ const deleteBusiness = async (req, res) => {
     return apiResponse(res, 500, 'Error deleting business', { error: error.message });
   }
 };
-
 
 module.exports = {
   addBusinessDetails,

@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Donation = require('../models/donationModel');
-const { apiResponse } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({
@@ -245,8 +244,6 @@ const adminSaveDonation = async (req, res) => {
       status
     } = requestData(req);
 
-
-
     // For new donation, check mandatory fields
     if (!existing && (!donator_name || !donate_amount || !donation_purpose || !date)) {
       return res.status(400).json({
@@ -356,8 +353,6 @@ const exportDonations = async (req, res) => {
   }
 }
 
-
-
 module.exports = {
   getDonations,
   addDonation,
@@ -367,5 +362,4 @@ module.exports = {
   adminSaveDonation,
   adminDeleteDonation,
   exportDonations
-
 };

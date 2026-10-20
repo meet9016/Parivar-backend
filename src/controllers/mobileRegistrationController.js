@@ -7,10 +7,8 @@ const City = require('../models/cityModel');
 const State = require('../models/stateModel');
 const Country = require('../models/countryModel');
 const { apiResponse } = require('../utils/apiResponse');
-const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
+const { getUserRoleScope } = require('../utils/roleScopeHelper');
+const mongoose = require('mongoose');
 
 // Generate next unique member_id sequence for Users
 const getNextMemberId = async () => {
@@ -35,7 +33,6 @@ const getFallbackTenantConnection = async () => {
       ? 'mongodb+srv://chovatiya:prince1353@chovatiya.afm9iqw.mongodb.net/chovatiya'
       : 'mongodb+srv://chaudhary:prince1353@chaudhary.wlpd3te.mongodb.net/chaudhary';
 
-    const mongoose = require('mongoose');
     fallbackTenantConn = await mongoose.createConnection(fallbackUri, {
       serverSelectionTimeoutMS: 20000,
       tls: true
@@ -246,11 +243,11 @@ const formatRegistrationResponse = (reg) => {
 
   // Overall status_check: TRUE if AT LEAST ONE step is true!
   const overallStatusCheck = Boolean(
-    s1Check || 
-    s2Check || 
-    s3Check || 
-    s4Check || 
-    s5Check || 
+    s1Check ||
+    s2Check ||
+    s3Check ||
+    s4Check ||
+    s5Check ||
     parseStatusCheck(r.status_check, false) ||
     parseStatusCheck(r.is_resubmitted, false) ||
     r.status === 'resubmitted' ||
@@ -307,7 +304,7 @@ const formatRegistrationResponse = (reg) => {
     status_check: s4Check
   };
   if (r.occupation || s4.occupation) step4Data.occupation = r.occupation || s4.occupation;
-  
+
   delete step4Data.occupation_type;
 
   for (const key in step4Data) {
@@ -330,10 +327,10 @@ const formatRegistrationResponse = (reg) => {
 
   const isApproved = Boolean(r.is_approved || r.status === 'approved');
   const isRejected = Boolean(r.status === 'rejected');
-  const computedStatus = isApproved 
-    ? 'approved' 
-    : (isRejected 
-      ? 'rejected' 
+  const computedStatus = isApproved
+    ? 'approved'
+    : (isRejected
+      ? 'rejected'
       : (overallStatusCheck ? 'resubmitted' : (r.status || 'pending_review')));
 
   const responsePayload = {
@@ -391,7 +388,7 @@ const formatRegistrationResponse = (reg) => {
   if (r.rejection_reason && r.rejection_reason.trim() !== '') {
     responsePayload.rejection_reason = r.rejection_reason;
   }
-  
+
   if (r.correction_remarks && r.correction_remarks.trim() !== '') {
     responsePayload.correction_remarks = r.correction_remarks;
   }
@@ -418,7 +415,7 @@ const saveStep1 = async (req, res) => {
     const cleanStep1Incoming = filterByAllowedKeys(data, STEP1_KEYS);
     const existingStep1 = filterByAllowedKeys(regRequest.step1 || {}, STEP1_KEYS);
 
-    const isStatusCheckStep1 = data.status_check !== undefined 
+    const isStatusCheckStep1 = data.status_check !== undefined
       ? (data.status_check === true || data.status_check === 'true' || data.status_check === 1 || data.status_check === '1')
       : (regRequest.status_check || false);
 
@@ -451,7 +448,7 @@ const saveStep1 = async (req, res) => {
     regRequest.marital_status = step1Payload.marital_status;
     regRequest.profile_image = step1Payload.profile_image;
     regRequest.current_step = Math.max(regRequest.current_step || 1, 1);
-    
+
     // Overall status_check: true if ANY step is true
     regRequest.status_check = checkAnyStepTrue(regRequest);
     if (regRequest.status_check) {
@@ -492,8 +489,8 @@ const saveStep2 = async (req, res) => {
     let rawMembers = data.family_members || data.members || data['family_members[]'] || data['members[]'] || [];
     rawMembers = parseJsonIfNeeded(rawMembers);
     if (typeof rawMembers === 'string') {
-      try { 
-        rawMembers = JSON.parse(rawMembers); 
+      try {
+        rawMembers = JSON.parse(rawMembers);
       } catch (e) {
         return apiResponse(res, 400, 'Invalid JSON format in family_members. Please ensure all strings are quoted (e.g. "dob": "2001-05-15")');
       }
@@ -504,8 +501,8 @@ const saveStep2 = async (req, res) => {
     for (let mem of membersList) {
       let item = parseJsonIfNeeded(mem);
       if (typeof item === 'string') {
-        try { 
-          item = JSON.parse(item); 
+        try {
+          item = JSON.parse(item);
         } catch (e) {
           return apiResponse(res, 400, 'Invalid JSON format in family member object.');
         }
@@ -515,8 +512,6 @@ const saveStep2 = async (req, res) => {
       if (!memName && !item.first_name) continue;
 
       const names = memName.split(' ');
-      const fName = item.first_name || names[0] || '';
-      const lName = item.last_name || (names.length > 1 ? names.slice(1).join(' ') : regRequest.last_name || '');
 
       let calculatedDob;
       if (item.dob) {
@@ -528,13 +523,13 @@ const saveStep2 = async (req, res) => {
       }
 
       const cleanedItem = cleanForStep(item);
-      
+
       if (calculatedDob) {
         cleanedItem.dob = calculatedDob.toISOString();
       }
       delete cleanedItem.age;
 
-      const isStatusCheckItem = item.status_check !== undefined 
+      const isStatusCheckItem = item.status_check !== undefined
         ? (item.status_check === true || item.status_check === 'true' || item.status_check === 1 || item.status_check === '1')
         : false;
 
@@ -710,7 +705,7 @@ const saveStep3 = async (req, res) => {
         State.find(idQuery).select('_id id name state').lean(),
         Country.find(idQuery).select('_id id name country').lean()
       ]);
-      
+
       const getVal = (docs, id, fallbackKey = 'name') => {
         if (!id) return '';
         const doc = docs.find(d => String(d._id) === String(id) || String(d.id) === String(id));
@@ -747,7 +742,7 @@ const saveStep3 = async (req, res) => {
         if (v) villageName = v;
       }
     }
-    
+
     // Cross-tenant fallback lookup if any master name was not resolved from primary DB
     if ((countryId && !countryName) || (stateId && !stateName) || (districtId && !districtName) || (cityId && !cityName) || (villageId && !villageName)) {
       try {
@@ -808,7 +803,7 @@ const saveStep3 = async (req, res) => {
           villageId = String(vDoc._id || vDoc.id);
           villageName = vDoc.name || villageName;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Fallback: If countryName provided without countryId, try to resolve countryId from Country
@@ -823,7 +818,7 @@ const saveStep3 = async (req, res) => {
         if (cDoc) {
           countryId = String(cDoc._id || cDoc.id);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const isStatusCheckStep3 = data.status_check !== undefined
@@ -1345,32 +1340,6 @@ const getRegistrationsList = async (req, res) => {
       ];
     }
 
-    // Village filtering: if logged-in user is a committee member (not super admin, manager, or staff), restrict to their village
-    const isSuperAdmin = Boolean(
-      req.user?.role === 'superadmin' || 
-      req.user?.is_super_admin === true || 
-      req.user?.committee_role === 'President' || 
-      req.user?.role_id?.name?.toLowerCase() === 'super admin' ||
-      req.user?.role_id?.name?.toLowerCase() === 'admin'
-    );
-
-    const roleNameLower = (req.user?.role_id?.name || req.user?.role_id?.roleName || req.user?.role || '').toLowerCase();
-    const isManagerOrStaff = Boolean(
-      roleNameLower.includes('manager') ||
-      roleNameLower.includes('staff') ||
-      roleNameLower.includes('office') ||
-      roleNameLower.includes('vice president') ||
-      roleNameLower.includes('money head') ||
-      roleNameLower.includes('prmukh')
-    );
-
-    const isCommittee = Boolean(
-      req.user?.is_committee === true || 
-      req.user?.role === 'committee' || 
-      (req.user?.committee_role && req.user?.committee_role !== 'Self')
-    );
-
-    const { getUserRoleScope } = require('../utils/roleScopeHelper');
     const userScope = await getUserRoleScope(req.user, req.tenantConn);
     const scopeClause = userScope.isRestricted ? userScope.buildQueryClause('registration') : null;
 
@@ -1382,7 +1351,7 @@ const getRegistrationsList = async (req, res) => {
           const vDoc = await Master.findById(req.user.village_id).lean();
           if (vDoc?.name) committeeVillage = vDoc.name;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (!committeeVillage && req.user?.number) {
@@ -1392,7 +1361,7 @@ const getRegistrationsList = async (req, res) => {
         if (uDoc) {
           committeeVillage = (uDoc.village || uDoc.village_name || '').trim();
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const targetVillage = (userScope.scopeType === 'village' && (userScope.villageName || committeeVillage))
@@ -1419,7 +1388,7 @@ const getRegistrationsList = async (req, res) => {
           villageIdObj = String(vDoc._id || vDoc.id);
           villageNameObj = vDoc.name;
         }
-      } catch (_) {}
+      } catch (_) { }
 
       const cleanName = villageNameObj || targetVillage;
       const vRegex = new RegExp(`^${escapeRegex(cleanName)}$`, 'i');
@@ -1812,13 +1781,13 @@ const updateRegistrationStatus = async (req, res) => {
 
     if (status === 'approved' || status === 'approval' || status === 'approve') {
       return approveRegistration(req, res);
-    } 
-    
+    }
+
     if (status === 'rejected' || status === 'reject') {
       if (!req.body.reason) req.body.reason = reason || 'Application Rejected';
       return rejectRegistration(req, res);
-    } 
-    
+    }
+
     if (status === 'needs_correction' || status === 'correction') {
       if (!req.body.remarks) req.body.remarks = reason || 'Please correct your details';
       return requestCorrectionRegistration(req, res);

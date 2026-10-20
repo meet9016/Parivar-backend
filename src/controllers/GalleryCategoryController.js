@@ -46,6 +46,7 @@ const getCategories = async (req, res) => {
     return apiResponse(res, 500, 'Error retrieving gallery categories', { error: error.message });
   }
 };
+
 const saveCategory = async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
@@ -81,6 +82,7 @@ const saveCategory = async (req, res) => {
     return apiResponse(res, 500, 'Error saving gallery category', { error: error.message });
   }
 };
+
 const deleteCategory = async (req, res) => {
   try {
     if (!isAdminUser(req.user)) {
@@ -97,6 +99,7 @@ const deleteCategory = async (req, res) => {
     return apiResponse(res, 500, 'Error deleting gallery category', { error: error.message });
   }
 };
+
 module.exports = {
   getCategories,
   saveCategory,

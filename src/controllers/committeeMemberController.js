@@ -261,8 +261,6 @@ const deletecommitteeMember = async (req, res) => {
   }
 };
 
-
-
 module.exports = {
   getcommitteeMembers,
   createcommitteeMember,

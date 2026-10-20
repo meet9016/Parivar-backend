@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Expense = require('../models/expenseModel');
-const { apiResponse } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({
@@ -106,7 +105,7 @@ const adminSaveExpense = async (req, res) => {
     if (committee_member_name !== undefined) updateFields.committee_member_name = committee_member_name;
     if (amount !== undefined) updateFields.amount = Number(amount);
     if (description !== undefined) updateFields.description = description;
-    
+
     if (image !== undefined) {
       updateFields.image = image;
     } else if (remove_image === 'true' || remove_image === true) {
@@ -121,7 +120,7 @@ const adminSaveExpense = async (req, res) => {
       if (saveError.code === 11000) {
         try {
           await Expense.collection.dropIndex('id_1');
-        } catch (dropErr) {}
+        } catch (dropErr) { }
         await expense.save();
       } else {
         throw saveError;
@@ -149,7 +148,7 @@ const adminSaveExpense = async (req, res) => {
         require('path').join(__dirname, '../../backend_error.log'),
         `Error: ${error.message}\nStack: ${error.stack}\nBody: ${JSON.stringify(req.body)}\n`
       );
-    } catch (e) {}
+    } catch (e) { }
     return res.status(500).json({
       status: 500,
       message: 'Error saving expense',
@@ -202,7 +201,7 @@ const exportExpenses = async (req, res) => {
     if (month) {
       query.date = { $regex: `^${month}` };
     }
-    
+
     const filteredExpenses = await Expense.find(query).sort({ _id: -1 }).lean();
 
     const rows = filteredExpenses.map(e => ({
@@ -212,13 +211,13 @@ const exportExpenses = async (req, res) => {
       'Description': e.description || '',
       'Amount (₹)': Number(e.amount || 0)
     }));
-    
+
     const header = Object.keys(rows[0] || { 'Date': '', 'Category': '', 'Committee Member': '', 'Description': '', 'Amount (₹)': '' });
     const csv = [
       header.join(','),
       ...rows.map(row => header.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))
     ].join('\n');
-    
+
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="expenses.csv"');
     return res.status(200).send(csv);

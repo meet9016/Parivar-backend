@@ -23,8 +23,9 @@ const signArchiveToken = (payload) => {
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 const STATIC_OTP_NUMBERS = {
   '9510582641': '123456',
-  '9876543210': '111111',
+  '9876543210': '123456',
 };
+
 const getStaticConfig = (numStr) => {
   if (!numStr) return null;
   const digits = String(numStr).replace(/\D/g, '').slice(-10);
@@ -123,7 +124,7 @@ const login = async (req, res) => {
     // 3. Clear token states immediately to avoid replay attacks
     user.otp = null;
     user.otp_expiry = null;
-    
+
     if (fcm_token) user.fcm_token = fcm_token;
     await user.save();
 

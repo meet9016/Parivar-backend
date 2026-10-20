@@ -7,8 +7,8 @@ const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const { getRolePermissions } = require('../middleware/auth');
 const queryHelper = require('../utils/queryHelper');
 const { createAndBroadcast } = require('./notificationController');
-
-const isObjectId = (id) => require('mongoose').isValidObjectId(id);
+const EventRegistration = require('../models/eventRegistration');
+const mongoose = require('mongoose');
 
 const imageFromRequest = (req, fallback = '') => {
   if (req.file) return `/uploads/${req.file.filename}`;
@@ -17,7 +17,6 @@ const imageFromRequest = (req, fallback = '') => {
 };
 
 const findEvent = (req, id) => {
-  const mongoose = require('mongoose');
   const conditions = [{ id: String(id) }];
   if (mongoose.isValidObjectId(id)) {
     conditions.push({ _id: new mongoose.Types.ObjectId(String(id)) });
@@ -44,7 +43,6 @@ const resolveLocationMaps = async (events = []) => {
     if (e.city_id) cityIds.add(String(e.city_id));
   });
 
-  const mongoose = require('mongoose');
   const toQuery = (ids) => {
     const arr = Array.from(ids);
     const objIds = arr.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
@@ -209,8 +207,6 @@ const eventPayload = (req, existing = {}) => {
   };
 };
 
-const EventRegistration = require('../models/eventRegistration');
-
 const getEventsList = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(Event, req.query, {
@@ -218,7 +214,6 @@ const getEventsList = async (req, res) => {
       filterFields: ['event_category_id', 'event_category_name', 'entry_type', 'status', 'country_id', 'state_id', 'district_id', 'city_id']
     });
 
-    const mongoose = require('mongoose');
     const eventIds = data.map(item => item._id || item.id);
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
@@ -226,11 +221,11 @@ const getEventsList = async (req, res) => {
     // Aggregate attendees count per event
     const [registrationStats, maps] = await Promise.all([
       EventRegistration.aggregate([
-        { 
-          $match: { 
+        {
+          $match: {
             event_id: { $in: [...objectIds, ...stringIds] },
             status: { $ne: 'cancelled' }
-          } 
+          }
         },
         {
           $group: {
@@ -371,7 +366,6 @@ const bulkUpdateEventStatus = async (req, res) => {
       return apiResponse(res, 400, 'eventIds not found');
     }
 
-    const mongoose = require('mongoose');
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
 
@@ -392,7 +386,6 @@ const bulkDeleteEvents = async (req, res) => {
       return apiResponse(res, 400, 'eventIds not found');
     }
 
-    const mongoose = require('mongoose');
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
 

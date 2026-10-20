@@ -170,7 +170,6 @@ const getNotifications = async (req, res) => {
   }
 };
 
-
 const markRead = async (req, res) => {
   try {
     const userId = req.user._id;

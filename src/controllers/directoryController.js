@@ -2,7 +2,7 @@ const User = require('../models/userModels');
 const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
 const City = require('../models/cityModel');
-const { apiResponse,  memberPublicId, publicUrl } = require('../utils/apiResponse');
+const { apiResponse, memberPublicId, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({
@@ -31,7 +31,6 @@ const memberRow = (req, member, maps = {}) => {
   const country = maps.countries?.get(String(member.country_id));
   const state = maps.states?.get(String(member.state_id));
   const city = maps.cities?.get(String(member.city_id));
-
   return {
     id,
     number: member.number || '',
@@ -60,7 +59,7 @@ const getMembers = async (req, res) => {
 
     const { data: members, pagination } = await queryHelper(User, req.query, {
       baseQuery: query,
-      searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email',  'address'],
+      searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'address'],
       filterFields: ['country_id', 'state_id', 'city_id', 'district_id', 'taluka_id', 'village_id'],
       select: '-password'
     });
@@ -82,7 +81,7 @@ const getFamilyMembers = async (req, res) => {
 
     const parent = await User.findOne({
       $and: [
-      
+
         { member_id: String(member_id) }
       ]
     }).select('-password').lean();
@@ -110,7 +109,6 @@ const getFamilyMembers = async (req, res) => {
     return apiResponse(res, 200, 'Family Memeber Data fetch successful', family.map((member) => {
       const merged = {
         ...member,
-  
         district_id: parent.district_id || '',
         taluka_id: parent.taluka_id || '',
         city_id: parent.city_id || '',

@@ -8,24 +8,10 @@ const mongoose = require('mongoose');
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const { getRolePermissions } = require('../middleware/auth');
 const familyUtil = require('../utils/familyHelper');
-const jwt = require('jsonwebtoken');
 const { deleteFileFromExternalService } = require('../utils/fileUpload');
 const queryHelper = require('../utils/queryHelper');
 const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
 const XLSX = require('xlsx');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
-
-const requestData = (req) => ({
-  ...req.query,
-  ...req.body
-});
-
-const imageFromRequest = (req, fallback = '') => {
-  if (req.file) return `/uploads/${req.file.filename}`;
-  return req.body.image || fallback || '';
-};
 
 const sanitizeUser = (user) => {
   if (!user) return user;
@@ -78,7 +64,6 @@ const register = async (req, res) => {
       }
     }
 
-    const owner = req.user ? req.user : {};
     const familyData = await prepareFamilyFields({
       relation,
       family_head_id: req.body.family_head_id,
@@ -105,7 +90,6 @@ const register = async (req, res) => {
       middle_name,
       last_name,
       peta_jati: (peta_jati || '').trim(),
-
       email: email ? email.toLowerCase() : '',
       password: password || '12345',
       number,
@@ -140,7 +124,7 @@ const register = async (req, res) => {
     if (defaultRole) {
       newUser.role_id = defaultRole._id;
     }
-    
+
     await newUser.save();
     if (familyData.relation === 'Self' || newUser.familyHead) {
       newUser.family_head = {
@@ -486,16 +470,16 @@ const getUsers = async (req, res) => {
     const canListCommittee = requestPermissions.includes('committee.list') || requestPermissions.includes('committee.manage');
 
     const isSuperAdmin = Boolean(
-      req.user?.role === 'superadmin' || 
-      req.user?.is_super_admin === true || 
-      req.user?.committee_role === 'President' || 
+      req.user?.role === 'superadmin' ||
+      req.user?.is_super_admin === true ||
+      req.user?.committee_role === 'President' ||
       req.user?.role_id?.name?.toLowerCase() === 'super admin' ||
       req.user?.role_id?.name?.toLowerCase() === 'admin'
     );
 
     const isCommittee = Boolean(
-      req.user?.is_committee === true || 
-      req.user?.role === 'committee' || 
+      req.user?.is_committee === true ||
+      req.user?.role === 'committee' ||
       (req.user?.committee_role && req.user?.committee_role !== 'Self')
     );
 
@@ -511,7 +495,7 @@ const getUsers = async (req, res) => {
           const vDoc = await Master.findById(req.user.village_id).lean();
           if (vDoc?.name) committeeVillage = vDoc.name;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (!committeeVillage && req.user?.number) {
@@ -521,7 +505,7 @@ const getUsers = async (req, res) => {
         if (uDoc) {
           committeeVillage = (uDoc.village || uDoc.village_name || '').trim();
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const targetVillage = (userScope.scopeType === 'village' && (userScope.villageName || committeeVillage))
@@ -610,7 +594,7 @@ const getUsers = async (req, res) => {
       // 2. Fetch all dependent members under these paginated heads and attach them
       const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'patti_para_pargana', 'family_head.name', 'address'];
-      
+
       const headCriteria = {
         $or: [
           { familyHead: true },
@@ -637,7 +621,7 @@ const getUsers = async (req, res) => {
       if (req.query.search && String(req.query.search).trim()) {
         const rawSearch = String(req.query.search).trim();
         const tokens = rawSearch.split(/\s+/).filter(Boolean);
-        
+
         // Find matching cities to include city_id in search
         let matchingCityIds = [];
         try {
@@ -840,7 +824,7 @@ const getUsers = async (req, res) => {
           const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
           const mParentId = String(m.parent_member_id || '');
           return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
-                 (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+            (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
         });
 
         const formattedHead = formatUserWithLocation(req, head, locMaps);
@@ -868,7 +852,7 @@ const getUsers = async (req, res) => {
         }
         const mCountQuery = memberCountClauses.length > 0 ? (memberCountClauses.length === 1 ? memberCountClauses[0] : { $and: memberCountClauses }) : {};
         totalIndividualMembers = await User.countDocuments(mCountQuery);
-      } catch (_) {}
+      } catch (_) { }
 
       return apiResponse(res, 200, 'Users retrieved successfully', formatted, {
         total: totalHeads,
@@ -885,12 +869,12 @@ const getUsers = async (req, res) => {
     const effectiveScopeClause = (scopeClause && Object.keys(scopeClause).length > 0)
       ? scopeClause
       : (targetVillage ? {
-          $or: [
-            { village: new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i') },
-            { village: targetVillage },
-            { village_id: targetVillage }
-          ]
-        } : null);
+        $or: [
+          { village: new RegExp(`^${escapeRegExp(targetVillage)}$`, 'i') },
+          { village: targetVillage },
+          { village_id: targetVillage }
+        ]
+      } : null);
 
     if (effectiveScopeClause) {
       if (query.$or) {
@@ -942,7 +926,7 @@ const getUsers = async (req, res) => {
       }));
       return apiResponse(res, 200, 'Users birthday list retrieved successfully', formatted, pagination);
     }
-    
+
     // Build location maps for standard query users
     const locMaps = await buildLocationMaps(users);
     const formatted = users.map(u => formatUserWithLocation(req, u, locMaps));
@@ -1393,7 +1377,7 @@ const bulkImportUsers = async (req, res) => {
       // Try DD-MM-YYYY
       const ddmmyyyy = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
       if (ddmmyyyy) {
-        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2,'0')}-${ddmmyyyy[1].padStart(2,'0')}`);
+        const d = new Date(`${ddmmyyyy[3]}-${ddmmyyyy[2].padStart(2, '0')}-${ddmmyyyy[1].padStart(2, '0')}`);
         return isNaN(d.getTime()) ? null : d;
       }
       const d = new Date(str);
@@ -1428,7 +1412,7 @@ const bulkImportUsers = async (req, res) => {
       }
 
       const firstName = getVal(row, 'First Name', 'first_name', 'firstname', 'name');
-      let number      = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone', 'contact');
+      let number = getVal(row, 'Mobile Number', 'mobile number', 'mobile', 'number', 'phone', 'contact');
       if (number.endsWith('.0')) {
         number = number.slice(0, -2);
       }
@@ -1451,34 +1435,34 @@ const bulkImportUsers = async (req, res) => {
       }
 
       const isFamilyHeadVal = getVal(row, 'Is Family Head', 'is family head', 'family head', 'familyhead').toLowerCase();
-      const relation        = getVal(row, 'Relation', 'relation') || 'Self';
-      const isFamilyHead    = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
+      const relation = getVal(row, 'Relation', 'relation') || 'Self';
+      const isFamilyHead = isFamilyHeadVal === 'yes' || isFamilyHeadVal === '1' || isFamilyHeadVal === 'true' || relation.toLowerCase() === 'self';
 
       const pattiVal = getVal(row, 'Patti / Para / Pargana', 'patti_para_pargana', 'patti', 'para', 'pargana') || (currentHead ? (currentHead.patti_para_pargana || currentHead.patti || '') : '');
       const villageVal = getVal(row, 'Village', 'village', 'village_name') || (currentHead ? (currentHead.village || '') : '');
 
       try {
         const newUser = new User({
-          member_id:    String(nextMemberId),
-          first_name:   firstName,
-          middle_name:  getVal(row, 'Middle Name', 'middle_name', 'middlename'),
-          last_name:    getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
-          peta_jati:    getVal(row, 'Peta Jati', 'peta_jati', 'petajati', 'sub_caste', 'subcaste', 'પેટા જાતિ', 'પેટાજાતિ'),
-          email:        getVal(row, 'Email', 'email').toLowerCase() || '',
-          password:     '12345',
+          member_id: String(nextMemberId),
+          first_name: firstName,
+          middle_name: getVal(row, 'Middle Name', 'middle_name', 'middlename'),
+          last_name: getVal(row, 'Last Name', 'last_name', 'lastname', 'surname'),
+          peta_jati: getVal(row, 'Peta Jati', 'peta_jati', 'petajati', 'sub_caste', 'subcaste', 'પેટા જાતિ', 'પેટાજાતિ'),
+          email: getVal(row, 'Email', 'email').toLowerCase() || '',
+          password: '12345',
           number,
-          gender:       getVal(row, 'Gender', 'gender') || '',
-          dob:          parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
-          anniversary:  parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
-          blood_group:  getVal(row, 'Blood Group', 'blood group', 'blood_group'),
-          village:      villageVal,
+          gender: getVal(row, 'Gender', 'gender') || '',
+          dob: parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
+          anniversary: parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
+          blood_group: getVal(row, 'Blood Group', 'blood group', 'blood_group'),
+          village: villageVal,
           patti_para_pargana: pattiVal,
-          patti:        pattiVal,
-          address:      getVal(row, 'Address', 'address'),
-          relation:     isFamilyHead ? 'Self' : (relation || 'Other'),
-          familyHead:   isFamilyHead,
-          status:       1,
-          role_id:      defaultRole ? defaultRole._id : undefined
+          patti: pattiVal,
+          address: getVal(row, 'Address', 'address'),
+          relation: isFamilyHead ? 'Self' : (relation || 'Other'),
+          familyHead: isFamilyHead,
+          status: 1,
+          role_id: defaultRole ? defaultRole._id : undefined
         });
 
         if (isFamilyHead) {
@@ -1509,7 +1493,7 @@ const bulkImportUsers = async (req, res) => {
 
     return apiResponse(res, 200, `Import complete: ${created.length} created, ${errors.length} failed`, {
       created_count: created.length,
-      failed_count:  errors.length,
+      failed_count: errors.length,
       created,
       errors
     });
@@ -1525,7 +1509,7 @@ const exportUsers = async (req, res) => {
   try {
     const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchFields = ['first_name', 'middle_name', 'last_name', 'peta_jati', 'number', 'email', 'village', 'family_head.name'];
-    
+
     const headCriteria = {
       $or: [
         { familyHead: true },
@@ -1539,7 +1523,7 @@ const exportUsers = async (req, res) => {
     if (req.query.search && String(req.query.search).trim()) {
       const rawSearch = String(req.query.search).trim();
       const tokens = rawSearch.split(/\s+/).filter(Boolean);
-      
+
       let searchCondition;
       if (tokens.length === 1) {
         const searchRegex = new RegExp(escapeRegExp(tokens[0]), 'i');
@@ -1653,7 +1637,7 @@ const exportUsers = async (req, res) => {
         const mHeadId = String(m.family_head?.id || m.family_head?._id || '');
         const mParentId = String(m.parent_member_id || '');
         return (mHeadId && (mHeadId === headIdStr || mHeadId === headMemberIdStr)) ||
-               (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
+          (mParentId && (mParentId === headMemberIdStr || mParentId === headIdStr));
       });
 
       // Add Head row

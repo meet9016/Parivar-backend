@@ -3,7 +3,6 @@ const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 const { createAndBroadcast } = require('./notificationController');
 
-
 const imageFromRequest = (req, fallback = '') => {
     if (req.file) return `/uploads/${req.file.filename}`;
     if (req.body.remove_image === 'true') return '';

@@ -3,7 +3,6 @@ const MandalContribution = require('../models/mandalContributionModel');
 const MandalExpense = require('../models/mandalExpenseModel');
 const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
-const { uploadToExternalService } = require('../utils/fileUpload');
 const mongoose = require('mongoose');
 
 // Helper to resolve mandal by ID or fallback to default
@@ -344,7 +343,7 @@ exports.getMonthlyContributions = async (req, res) => {
         }));
 
         if (newRecords.length > 0) {
-          await MandalContribution.insertMany(newRecords, { ordered: false }).catch(() => {});
+          await MandalContribution.insertMany(newRecords, { ordered: false }).catch(() => { });
         }
       }
     }

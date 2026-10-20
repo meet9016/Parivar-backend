@@ -1,15 +1,9 @@
 const mongoose = require('mongoose');
 const Gallery = require('../models/galleryModel');
-
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const isObjectId = (id) => mongoose.isValidObjectId(id);
-
-const nextPublicId = async (Model, prefix = '') => {
-  const count = await Model.countDocuments();
-  return `${prefix}${Date.now()}${count}`;
-};
 
 const findById = async (Model, id, extraQuery = {}) => {
   if (isObjectId(id)) {

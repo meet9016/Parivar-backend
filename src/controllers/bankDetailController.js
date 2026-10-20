@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const BankDetail = require('../models/bankDetailModel');
-const { apiResponse } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({

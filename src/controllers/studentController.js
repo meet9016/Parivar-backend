@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Student = require('../models/studentModel');
-const { apiResponse, publicUrl } = require('../utils/apiResponse');
+const { publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({
