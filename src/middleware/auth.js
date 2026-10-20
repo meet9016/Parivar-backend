@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/userModels');
 const CommitteeMember = require('../models/committeeMemberModel');
 const { ALL_PERMISSION_KEYS } = require('../config/permissions');
+const { tenantContext } = require('../utils/tenantContext');
 
 const isInvalidTokenValue = (token) => {
   if (!token) {
@@ -36,24 +37,6 @@ const getTokenFromRequest = (req) => {
   const token = (bearerMatch ? bearerMatch[1] : trimmedHeader).trim();
 
   return isInvalidTokenValue(token) ? null : token;
-};
-
-const { tenantContext } = require('../utils/tenantContext');
-
-const getActiveUserModel = (req) => {
-  const conn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
-  if (conn) {
-    return conn.models.User || conn.model('User', User.schema);
-  }
-  return User;
-};
-
-const getActiveCommitteeModel = (req) => {
-  const conn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
-  if (conn) {
-    return conn.models.CommitteeMember || conn.model('CommitteeMember', CommitteeMember.schema);
-  }
-  return CommitteeMember;
 };
 
 const findUserInConnection = async (conn, decoded) => {
@@ -100,7 +83,7 @@ const findUserInConnection = async (conn, decoded) => {
 
 const findUserFromToken = async (decoded, req) => {
   const activeConn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
-  
+
   // 1. Try in current active tenant connection
   if (activeConn) {
     const user = await findUserInConnection(activeConn, decoded);
@@ -117,7 +100,7 @@ const findUserFromToken = async (decoded, req) => {
         const user = await findUserInConnection(tokenTenantConn, decoded);
         if (user) return user;
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // 3. Fallback to Primary DB connection
@@ -128,7 +111,6 @@ const findUserFromToken = async (decoded, req) => {
 
   return null;
 };
-
 
 const protect = async (req, res, next) => {
   const token = getTokenFromRequest(req);

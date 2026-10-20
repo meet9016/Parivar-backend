@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const JobVacancy = require('../models/jobVacancy');
-const { apiResponse, fullName,publicUrl  } = require('../utils/apiResponse');
+const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const imageFromRequest = (req, fallback = '') => {
@@ -26,20 +26,6 @@ const createdBy = (req) => {
     id: validId,
     name: fullName(user) || user.name || user.username || user.email || ''
   };
-};
-
-const buildSearchQuery = ({ search, job_type }) => {
-  const query = {};
-  if (job_type) query.job_type = job_type;
-  if (search) {
-    query.$or = [
-      { title: new RegExp(search, 'i') },
-      { company_name: new RegExp(search, 'i') },
-      { location: new RegExp(search, 'i') },
-      { description: new RegExp(search, 'i') }
-    ];
-  }
-  return query;
 };
 
 const extractVacancyData = (data) => {
@@ -75,7 +61,7 @@ const getJobVacancies = async (req, res) => {
         String(user.id || ''),
         String(user.member_id || '')
       ].filter(Boolean);
-      
+
       const validObjectIds = userIds
         .filter(id => mongoose.isValidObjectId(id))
         .map(id => new mongoose.Types.ObjectId(id));
@@ -124,10 +110,10 @@ const getJobVacancyById = async (req, res) => {
     if (!jobVacancy) return apiResponse(res, 404, "Job Vacancy not found");
 
     return apiResponse(res, 200, "Job vacancy retrieved successfully", {
-  ...jobVacancy.toObject ? jobVacancy.toObject() : jobVacancy,
-  image: publicUrl(req, jobVacancy.image || ''),
-  is_own: String(req.user?._id) === String(jobVacancy.created_by?.id)
-});
+      ...jobVacancy.toObject ? jobVacancy.toObject() : jobVacancy,
+      image: publicUrl(req, jobVacancy.image || ''),
+      is_own: String(req.user?._id) === String(jobVacancy.created_by?.id)
+    });
 
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving vacancy', { error: error.message });
@@ -183,6 +169,7 @@ const postJobVacancy = async (req, res) => {
     return apiResponse(res, 500, "Failed to save job vacancy", { error: error.message });
   }
 };
+
 const deleteJobVacancy = async (req, res) => {
   try {
     const { id } = req.params;

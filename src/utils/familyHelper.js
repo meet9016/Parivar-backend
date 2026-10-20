@@ -18,19 +18,6 @@ const findUserByIdOrMemberId = async (id) => {
   return await User.findOne(query).lean();
 };
 
-const getFamilyHeadFromParent = async (parentUser) => {
-  if (!parentUser) return null;
-  if (parentUser.relation === 'Self') {
-    return parentUser;
-  }
-
-  if (parentUser.family_head?.id) {
-    return await findUserByIdOrMemberId(String(parentUser.family_head.id));
-  }
-
-  return null;
-};
-
 const resolveFamilyHead = async ({ relation, family_head_id }) => {
   if (relation === 'Self') {
     return { family_head: null, head: null };
@@ -57,11 +44,10 @@ const resolveFamilyHead = async ({ relation, family_head_id }) => {
 
 const prepareFamilyFields = async (payload = {}, existing = {}) => {
   let relation = payload.relation || existing.relation || 'Self';
-  
+
   if (Array.isArray(relation)) {
     relation = relation.find(r => typeof r === 'string' && r.trim() !== '') || relation[0] || 'Self';
   }
-
 
   const isSelf = relation === 'Self';
 
@@ -71,8 +57,8 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
     status: existing.status !== undefined ? Number(existing.status) : undefined
   };
 
-  const isHead = payload.familyHead !== undefined 
-    ? (payload.familyHead === true || payload.familyHead === 'true') 
+  const isHead = payload.familyHead !== undefined
+    ? (payload.familyHead === true || payload.familyHead === 'true')
     : (existing.familyHead === true || isSelf);
 
   if (isHead) {

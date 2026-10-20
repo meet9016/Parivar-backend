@@ -1,30 +1,26 @@
 const User = require('../models/userModels');
-const Role = require('../models/roleModel');
 const Business = require('../models/businessModel');
 const Post = require('../models/postModel');
-const Config = require('../models/configModel');
 const Student = require('../models/studentModel');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const { apiResponse, fullName, memberPublicId, publicUrl } = require('../utils/apiResponse');
+const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const familyUtil = require('../utils/familyHelper');
 const { getRolePermissions } = require('../middleware/auth');
-const queryHelper = require('../utils/queryHelper');
+const CommitteeMember = require('../models/committeeMemberModel');
+const bcrypt = require('bcryptjs');
+const Event = require('../models/eventModel');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
 
 const {
-  splitFullName,
   imageFromRequest,
   requestData,
   recoveryKeyFromRequest,
-  escapeRegExp,
   adminRecoveryQuery,
   resolveRecoveryRoleId
 } = require('../utils/adminHelpers');
 
-
-//admin resgister
 //admin resgister
 const createAdmin = async (req, res) => {
   try {
@@ -214,9 +210,6 @@ const getAdmins = async (req, res) => {
   }
 };
 
-const CommitteeMember = require('../models/committeeMemberModel');
-const bcrypt = require('bcryptjs');
-
 // Admin login (email + password, checks is_committee & CommitteeMember)
 const loginAdmin = async (req, res) => {
   try {
@@ -334,7 +327,7 @@ const loginAdmin = async (req, res) => {
       try {
         const registryConn = await getRegistryConnection();
         const Tenant = registryConn.models.Tenant || registryConn.model('Tenant', require('../models/tenantSchema'));
-        
+
         const matchedTenant = await Tenant.findOne({ 'admin.email': emailQuery, status: 1 });
         if (matchedTenant) {
           const tenantConn = await getTenantConnection(matchedTenant.db_name);
@@ -356,8 +349,6 @@ const loginAdmin = async (req, res) => {
     return apiResponse(res, 500, 'Error in login', { error: error.message });
   }
 };
-
-//tested
 
 const updateAdminRecovery = async (req, res) => {
   try {
@@ -450,7 +441,6 @@ const updateAdminRecovery = async (req, res) => {
     if (error.status) {
       return apiResponse(res, error.status, error.message);
     }
-
     return apiResponse(res, 500, 'Error updating admin recovery details', { error: error.message });
   }
 };
@@ -459,7 +449,6 @@ const updateAdminRecovery = async (req, res) => {
 const getStats = async (req, res) => {
   try {
     const { membersRange = 'last_6_months', activityRange = 'last_6_months', businessRange = 'last_6_months' } = req.query;
-    const Event = require('../models/eventModel');
 
     // ── Tenant-aware model resolution ──
     const conn = req.tenantConn || null;
@@ -611,7 +600,7 @@ const getStats = async (req, res) => {
     ]);
 
     const [
-      userCount, businessCount, postCount, eventCount, committeeCount,
+      userCount, businessCount,
       lastMonthUsers, lastMonthBusinesses, lastMonthPosts, lastMonthEvents,
       thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
       recentMembers, recentEvents, recentPosts,
@@ -696,12 +685,6 @@ const getStats = async (req, res) => {
     ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 8);
 
     return apiResponse(res, 200, 'Dashboard statistics fetched successfully', {
-      // kpis: {
-      //   users: { total: userCount, growth: usersGrowth },
-      //   businesses: { total: businessCount, growth: businessGrowth },
-      //   posts: { total: postCount, growth: postsGrowth },
-      //   events: { total: eventCount, growth: eventsGrowth }
-      // },
       charts: {
         members: membersChart,
         businessCategories: businessCategoriesChart,
@@ -753,8 +736,6 @@ const getStats = async (req, res) => {
     return apiResponse(res, 500, 'Error in getting stats', { error: error.message });
   }
 };
-
-
 
 // Change password for logged in admin
 const changePassword = async (req, res) => {

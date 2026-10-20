@@ -18,10 +18,9 @@ router.get('/members/:member_id', protect, (req, res, next) => {
   return getMembers(req, res, next);
 });
 router.post('/family_members', protect, parseForm, getFamilyMembers);
-router.get('/family_members',getFamilyMembers);
-
-router.get('/country_list',  getCountryList);
-router.get('/state_list',  getStateList);
-router.get('/city_list',  getCityList);
+router.get('/family_members', getFamilyMembers);
+router.get('/country_list', getCountryList);
+router.get('/state_list', getStateList);
+router.get('/city_list', getCityList);
 
 module.exports = router;

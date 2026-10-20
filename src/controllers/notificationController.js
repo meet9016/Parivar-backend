@@ -5,16 +5,16 @@ const { sendNotificationToAll, sendNotificationToUsers } = require('../utils/fcm
 const socketManager = require('../config/socket');
 
 // Called internally when news/event is created with send_notification=true
-const createAndBroadcast = async ({ 
-  title, 
-  body, 
-  image = '', 
-  type = 'news', 
-  ref_id = '', 
-  date = '', 
-  target_type = 'all', 
-  target_users = [], 
-  ...rest 
+const createAndBroadcast = async ({
+  title,
+  body,
+  image = '',
+  type = 'news',
+  ref_id = '',
+  date = '',
+  target_type = 'all',
+  target_users = [],
+  ...rest
 }) => {
   // Normalize target_users
   let cleanTargetUserIds = [];
@@ -169,7 +169,6 @@ const getNotifications = async (req, res) => {
     return apiResponse(res, 500, err.message);
   }
 };
-
 
 const markRead = async (req, res) => {
   try {

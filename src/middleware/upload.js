@@ -21,12 +21,12 @@ const fileFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname || '').toLowerCase();
   const allowedExtensions = /\.(jpe?g|png|webp|gif|svg|avif|heic|heif|bmp|ico|tiff?|pdf|docx?|xlsx?|pptx?|mp4|webm|mov|avi|jfif)$/i;
   const mime = (file.mimetype || '').toLowerCase();
-  const isAllowedMime = 
-    mime.startsWith('image/') || 
-    mime.startsWith('video/') || 
-    mime.includes('pdf') || 
-    mime.includes('document') || 
-    mime.includes('sheet') || 
+  const isAllowedMime =
+    mime.startsWith('image/') ||
+    mime.startsWith('video/') ||
+    mime.includes('pdf') ||
+    mime.includes('document') ||
+    mime.includes('sheet') ||
     mime === 'application/octet-stream';
 
   if (isAllowedMime || allowedExtensions.test(ext) || !ext) {
@@ -39,22 +39,12 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({
   storage: storage,
-  limits: { 
+  limits: {
     fileSize: 25 * 1024 * 1024, // 25 MB limit per file
     fieldSize: 25 * 1024 * 1024  // 25 MB limit for field values (allows base64 strings and large JSON)
   },
   fileFilter: fileFilter
 });
-
-const fileFields = [
-  { name: 'image', maxCount: 1 },
-  { name: 'images', maxCount: 20 },
-  { name: 'gallery_image_1', maxCount: 1 },
-  { name: 'gallery_image_2', maxCount: 1 },
-  { name: 'gallery_image_3', maxCount: 1 },
-  { name: 'gallery_image_4', maxCount: 1 },
-  { name: 'gallery_image_5', maxCount: 1 },
-];
 
 // Multer fields mapping for business details (Logo + up to 5 gallery images)
 const multerBusinessUpload = upload.fields([
@@ -138,15 +128,15 @@ const parseForm = (req, res, next) => {
 
     try {
       if (Array.isArray(req.files)) {
-        const uploadPromises = req.files.map(file => 
+        const uploadPromises = req.files.map(file =>
           uploadToExternalService(file, file.fieldname).then(imagePath => ({
             fieldName: file.fieldname,
             imagePath
           }))
         );
-        
+
         const uploadedFiles = await Promise.all(uploadPromises);
-        
+
         for (const { fieldName, imagePath } of uploadedFiles) {
           if (fieldName === 'images') {
             if (!Array.isArray(req.body.images)) {
@@ -174,7 +164,7 @@ const parseForm = (req, res, next) => {
         }
       } else if (req.files) {
         const uploadPromises = [];
-        
+
         for (const fieldName in req.files) {
           const filesArray = req.files[fieldName];
           for (const file of filesArray) {
@@ -186,9 +176,9 @@ const parseForm = (req, res, next) => {
             );
           }
         }
-        
+
         const uploadedFiles = await Promise.all(uploadPromises);
-        
+
         for (const { fieldName, imagePath } of uploadedFiles) {
           if (fieldName === 'images') {
             if (!Array.isArray(req.body.images)) {
@@ -234,13 +224,6 @@ const parseForm = (req, res, next) => {
       return runWithTenant(req, () => next(err));
     }
   });
-};
-
-module.exports = {
-  upload,
-  businessUpload,
-  postUpload,
-  parseForm
 };
 
 module.exports = {

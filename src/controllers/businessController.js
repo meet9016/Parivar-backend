@@ -22,7 +22,6 @@ const requestData = (req) => ({
   ...req.body
 });
 
-
 const findBusinessByRequestId = (req, id) => {
   return Business.findOne({
     $or: [
@@ -196,7 +195,6 @@ const getBusinesses = async (req, res) => {
     return apiResponse(res, 500, 'Error retrieving businesses', { error: error.message });
   }
 };
-
 
 const getBusinessById = async (req, res) => {
   try {
@@ -420,7 +418,6 @@ const addBusinessDetails = async (req, res) => {
   }
 };
 
-
 const deleteBusiness = async (req, res) => {
   try {
     const { id } = req.params;
@@ -436,7 +433,6 @@ const deleteBusiness = async (req, res) => {
     return apiResponse(res, 500, 'Error deleting business', { error: error.message });
   }
 };
-
 
 module.exports = {
   addBusinessDetails,

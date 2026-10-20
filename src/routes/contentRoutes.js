@@ -1,6 +1,5 @@
 const express = require('express');
 const adminContent = require('../controllers/adminContentController');
-const adminController = require('../controllers/adminController');
 const festivalController = require('../controllers/festivalController');
 const { protect, requirePermission } = require('../middleware/auth');
 const { parseForm } = require('../middleware/upload');
@@ -14,8 +13,6 @@ router.get('/festivals/:id', protect, requirePermission('festivals.list'), festi
 router.post('/festivals', protect, requirePermission('festivals.add'), parseForm, festivalController.saveFestival);
 router.put('/festivals/:id', protect, requirePermission('festivals.edit'), parseForm, festivalController.saveFestival);
 router.delete('/festivals/:id', protect, requirePermission('festivals.delete'), festivalController.deleteFestival);
-
-
 
 // Banner routes
 router.get('/banners', protect, requirePermission('banners.list'), adminContent.getBanners);

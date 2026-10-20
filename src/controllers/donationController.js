@@ -1,14 +1,11 @@
 const mongoose = require('mongoose');
 const Donation = require('../models/donationModel');
-const { apiResponse } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({
   ...req.query,
   ...req.body
 });
-
-// --- MEMBER / MOBILE CONTROLLER METHODS ---
 
 const getDonations = async (req, res) => {
   try {
@@ -183,8 +180,6 @@ const deleteDonation = async (req, res) => {
   }
 };
 
-// --- ADMIN / SOFTWARE CONTROLLER METHODS ---
-
 const adminGetDonations = async (req, res) => {
   try {
     const { data: donations, pagination } = await queryHelper(Donation, req.query, {
@@ -244,8 +239,6 @@ const adminSaveDonation = async (req, res) => {
       date,
       status
     } = requestData(req);
-
-
 
     // For new donation, check mandatory fields
     if (!existing && (!donator_name || !donate_amount || !donation_purpose || !date)) {
@@ -355,8 +348,6 @@ const exportDonations = async (req, res) => {
     return res.status(500).json({ status: 500, message: 'Export failed', error: error.message })
   }
 }
-
-
 
 module.exports = {
   getDonations,

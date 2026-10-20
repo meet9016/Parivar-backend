@@ -159,7 +159,6 @@ const saveGallery = async (req, res) => {
     const doc = existing || new Gallery({});
     doc.set({ ...payload });
 
-
     await doc.save();
     return apiResponse(res, existing ? 200 : 201, 'Gallery saved successfully', formatGallery(req, doc.toObject()));
   } catch (error) {

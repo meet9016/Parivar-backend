@@ -12,16 +12,6 @@ const XLSX = require('xlsx');
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
 
-const requestData = (req) => ({
-  ...req.query,
-  ...req.body
-});
-
-const imageFromRequest = (req, fallback = '') => {
-  if (req.file) return `/uploads/${req.file.filename}`;
-  return req.body.image || fallback || '';
-};
-
 const sanitizeUser = (user) => {
   if (!user) return user;
   const data = user.toObject ? user.toObject() : { ...user };
@@ -68,7 +58,6 @@ const register = async (req, res) => {
       }
     }
 
-    const owner = req.user ? req.user : {};
     const familyData = await prepareFamilyFields({
       relation,
       family_head_id: req.body.family_head_id,
@@ -94,7 +83,6 @@ const register = async (req, res) => {
       first_name,
       middle_name,
       last_name,
-
       email: email ? email.toLowerCase() : '',
       password: password || '12345',
       number,
@@ -650,7 +638,6 @@ const getFamilyMembersByNumber = async (req, res) => {
   }
 };
 
-
 // Get single user by id
 const getUserById = async (req, res) => {
   try {
@@ -698,7 +685,6 @@ const getUserById = async (req, res) => {
   }
 };
 
-
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -744,7 +730,6 @@ const updateUser = async (req, res) => {
       status,
       familyHead
     } = req.body;
-
 
     const query = mongooseQueryForUser(id);
     const user = await User.findOne(query);

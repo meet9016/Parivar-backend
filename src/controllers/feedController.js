@@ -1,17 +1,7 @@
-const Post = require('../models/postModel');
 const Event = require('../models/eventModel');
-const Festival = require('../models/festivalModel');
 const Gallery = require('../models/galleryModel');
-const User = require('../models/userModels');
-const { apiResponse, fullName, memberPublicId, publicUrl, toArchiveDate } = require('../utils/apiResponse');
+const { apiResponse, memberPublicId, publicUrl, toArchiveDate } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
-
-const requestData = (req) => ({
-  ...req.query,
-  ...req.body
-});
-
-const currentMemberId = (req) => memberPublicId(req.user || {});
 
 const getHome = async (req, res) => {
   return apiResponse(res, 200, 'Home Data fetch successful', {
@@ -84,7 +74,7 @@ const getEvents = async (req, res) => {
       event_name: event.event_name || event.title || '',
       event_location: event.event_location || event.venue || '',
       location_link: event.location_link || '',
-      timing: `${toArchiveDate(event.start_time ||  event.date)} - ${toArchiveDate(event.end_time || event.date)}`,
+      timing: `${toArchiveDate(event.start_time || event.date)} - ${toArchiveDate(event.end_time || event.date)}`,
       entry_type: event.entry_type || '',
       event_description: event.event_description || event.description || '',
       image: publicUrl(req, event.image || '')
@@ -95,10 +85,6 @@ const getEvents = async (req, res) => {
     return apiResponse(res, 500, 'Error retrieving events', { error: error.message });
   }
 };
-
-
-
-
 
 module.exports = {
   getHome,

@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Matrimony = require('../models/matrimonyModel');
-const { apiResponse, publicUrl, fullName } = require('../utils/apiResponse');
+const { apiResponse, fullName } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const createdBy = (req) => {

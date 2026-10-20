@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Student = require('../models/studentModel');
-const { apiResponse, publicUrl } = require('../utils/apiResponse');
+const { publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
 const requestData = (req) => ({
@@ -11,10 +11,10 @@ const requestData = (req) => ({
 const getStudents = async (req, res) => {
   try {
     const { data: students, pagination } = await queryHelper(Student, requestData(req), {
-      searchFields: ['surname', 'student_name', 'father_name', 'school_name', 'standard', 'mobile_number','year'],
-      filterFields: ['standard', 'student_name', 'school_name', 'status','year','user_id']
+      searchFields: ['surname', 'student_name', 'father_name', 'school_name', 'standard', 'mobile_number', 'year'],
+      filterFields: ['standard', 'student_name', 'school_name', 'status', 'year', 'user_id']
     });
-    
+
     return res.status(200).json({
       status: 200,
       message: 'Students retrieved successfully',
@@ -73,7 +73,7 @@ const addStudent = async (req, res) => {
     }
 
     const studentData = {
-      
+
       surname,
       student_name,
       father_name,
@@ -130,7 +130,7 @@ const updateStudent = async (req, res) => {
     if (mongoose.isValidObjectId(id)) {
       orConditions.push({ _id: id });
     }
-    
+
     const student = await Student.findOne({
       $or: orConditions
     });
@@ -211,7 +211,7 @@ const deleteStudent = async (req, res) => {
     if (mongoose.isValidObjectId(id)) {
       orConditions.push({ _id: id });
     }
-    
+
     const result = await Student.deleteOne({
       $or: orConditions
     });

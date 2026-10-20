@@ -238,8 +238,6 @@ const checkAndSendScheduledNotifications = async () => {
   }
 };
 
-
-
 /**
  * Starts the recurring scheduler interval (e.g. checks every 1 minute)
  */

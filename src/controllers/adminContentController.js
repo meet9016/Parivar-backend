@@ -54,20 +54,6 @@ const deleteContent = (Model, label,) => async (req, res) => {
   }
 };
 
-
-
-
-
-const galleryPayload = (req, existing = {}) => {
-  return {
-    ...req.body,
-
-    image: imageFromRequest(req, existing.image),
-    category: req.body.category || req.body.event_category || existing.category || 'General',
-    year: req.body.year || existing.year || ''
-  };
-};
-
 const bannerPayload = (req, existing = {}) => ({
   ...req.body,
   title: req.body.title || existing.title || '',
@@ -118,9 +104,6 @@ const saveContent = (Model, payloadBuilder, formatter, label, prefix) => async (
     return apiResponse(res, 500, `Error saving ${label.toLowerCase()}`, { error: error.message });
   }
 };
-
-
-
 
 const formatBanner = (req, item) => ({
   id: item.id || String(item._id),
@@ -209,7 +192,7 @@ const formatMaster = (req, type, item, config, parentMap = {}) => {
   const name = config.nameKeys?.map((key) => item[key]).find(Boolean) || item.name || '';
   const parentVal = String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '');
   const parentName = parentMap[parentVal] || (typeof parentVal === 'object' ? parentVal.name : '') || '';
-  
+
   let gujName = item.gujarati_name || '';
   let hiName = item.hindi_name || '';
   let desc = item.description || '';
@@ -311,7 +294,7 @@ const getMasters = async (req, res) => {
           { id: { $in: parentIds } }
         ]
       };
-      
+
       const [masterDocs, countryDocs, stateDocs, cityDocs] = await Promise.all([
         Master.find(queryCond).lean(),
         Country.find(queryCond).lean(),
@@ -353,7 +336,7 @@ const saveMaster = async (req, res) => {
     const config = masterConfig[type];
     const existing = req.params.id ? await findById(config.Model, req.params.id) : null;
     const name = req.body.name || req.body[type] || req.body.business || req.body.country || req.body.state || req.body.city || (existing ? (existing.name || existing.country || existing.state || existing.city || existing.category || existing.business || (config.nameKeys?.map(k => existing[k]).find(Boolean))) : '');
-    
+
     if (!existing && !name) return apiResponse(res, 400, 'Name is required');
 
     // Prevent duplicate entries with the same name (case-insensitive) for the same master type / parent
@@ -435,7 +418,6 @@ const deleteMaster = async (req, res) => {
     return apiResponse(res, 500, 'Error deleting master data', { error: error.message });
   }
 };
-
 
 module.exports = {
   getBanners: listContent(Banner, formatBanner, 'Banners'),

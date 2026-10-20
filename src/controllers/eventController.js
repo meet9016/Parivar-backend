@@ -2,8 +2,8 @@ const Event = require('../models/eventModel');
 const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 const { createAndBroadcast } = require('./notificationController');
-
-const isObjectId = (id) => require('mongoose').isValidObjectId(id);
+const EventRegistration = require('../models/eventRegistration');
+const mongoose = require('mongoose');
 
 const imageFromRequest = (req, fallback = '') => {
   if (req.file) return `/uploads/${req.file.filename}`;
@@ -12,7 +12,6 @@ const imageFromRequest = (req, fallback = '') => {
 };
 
 const findEvent = (req, id) => {
-  const mongoose = require('mongoose');
   const conditions = [{ id: String(id) }];
   if (mongoose.isValidObjectId(id)) {
     conditions.push({ _id: new mongoose.Types.ObjectId(String(id)) });
@@ -21,10 +20,19 @@ const findEvent = (req, id) => {
   return Event.findOne({ $or: conditions });
 };
 
+const findEventOr404 = async (req, res) => {
+  const event = await findEvent(req, req.params.id);
+  if (!event) {
+    apiResponse(res, 404, 'Event not found');
+    return null;
+  }
+  return event;
+};
+
 const getCreatedByPayload = (req) => ({
   id: String(req.user?.id || req.user?._id || ''),
   name: fullName(req.user) || '',
-  
+
 });
 
 const formatEvent = (req, item = {}) => {
@@ -34,12 +42,10 @@ const formatEvent = (req, item = {}) => {
     ? {
       id: '',
       name: createdBy,
-     
     }
     : {
       id: String(createdBy.id || createdBy._id || ''),
       name: createdBy.name || fullName(req.user) || '',
-     
     };
 
   return {
@@ -121,8 +127,6 @@ const eventPayload = (req, existing = {}) => {
   };
 };
 
-const EventRegistration = require('../models/eventRegistration');
-
 const getEventsList = async (req, res) => {
   try {
     const { data, pagination } = await queryHelper(Event, req.query, {
@@ -130,18 +134,17 @@ const getEventsList = async (req, res) => {
       filterFields: ['event_category_id', 'event_category_name', 'entry_type', 'status']
     });
 
-    const mongoose = require('mongoose');
     const eventIds = data.map(item => item._id || item.id);
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
 
     // Aggregate attendees count per event
     const registrationStats = await EventRegistration.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           event_id: { $in: [...objectIds, ...stringIds] },
           status: { $ne: 'cancelled' }
-        } 
+        }
       },
       {
         $group: {
@@ -214,10 +217,9 @@ const addEvent = async (req, res) => {
 
 const updateEvent = async (req, res) => {
   try {
-    const event = await findEvent(req, req.params.id);
-    if (!event) {
-      return apiResponse(res, 404, 'Event not found');
-    }
+    const event = await findEventOr404(req, res);
+    if (!event) return;
+
     event.set(eventPayload(req, event));
     await event.save();
     return apiResponse(res, 200, 'Event saved successfully', formatEvent(req, event.toObject()));
@@ -228,10 +230,9 @@ const updateEvent = async (req, res) => {
 
 const deleteEvent = async (req, res) => {
   try {
-    const event = await findEvent(req, req.params.id);
-    if (!event) {
-      return apiResponse(res, 404, 'Event not found');
-    }
+    const event = await findEventOr404(req, res);
+    if (!event) return;
+
     await event.deleteOne();
     return apiResponse(res, 200, 'Event deleted successfully');
   } catch (error) {
@@ -241,10 +242,9 @@ const deleteEvent = async (req, res) => {
 
 const getEventById = async (req, res) => {
   try {
-    const event = await findEvent(req, req.params.id);
-    if (!event) {
-      return apiResponse(res, 404, 'Event not found');
-    }
+    const event = await findEventOr404(req, res);
+    if (!event) return;
+
     return apiResponse(res, 200, 'Event retrieved successfully', formatEvent(req, event.toObject()));
   } catch (error) {
     return apiResponse(res, 500, 'Error retrieving event', { error: error.message });
@@ -258,7 +258,6 @@ const bulkUpdateEventStatus = async (req, res) => {
       return apiResponse(res, 400, 'eventIds not found');
     }
 
-    const mongoose = require('mongoose');
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
 
@@ -279,7 +278,6 @@ const bulkDeleteEvents = async (req, res) => {
       return apiResponse(res, 400, 'eventIds not found');
     }
 
-    const mongoose = require('mongoose');
     const objectIds = eventIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(String(id)));
     const stringIds = eventIds.map(id => String(id));
 
