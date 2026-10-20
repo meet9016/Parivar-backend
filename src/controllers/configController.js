@@ -20,6 +20,26 @@ const formatTimeTo12Hour = (timeStr) => {
   return `${String(hours).padStart(2, '0')}:${minutes} ${period}`;
 };
 
+const DEFAULT_PRAYER_TIMES = {
+  enabled: true,
+  showOnWebsite: true,
+  title: 'રાધનપુર મેમણ જમાત',
+  subTitle: 'રાધનપુર',
+  logo: '',
+  fajr: { name: 'ફજર', azan: '05:26', jamat: '05:45', qaza: '06:42', qazaLabel: 'સુધી' },
+  zohr: { name: 'ઝોહર', azan: '12:28', jamat: '12:45', qaza: '04:36', qazaLabel: 'સુધી' },
+  asr: { name: 'અસર', azan: '04:36', jamat: '04:50', qaza: '06:16', qazaLabel: 'સુધી' },
+  maghrib: { name: 'મગરીબ', azan: '06:16', jamat: '06:18', qaza: '07:29', qazaLabel: 'સુધી' },
+  isha: { name: 'ઈશા', azan: '07:29', jamat: '07:45', qaza: '05:25', qazaLabel: 'સુધી' },
+  tahajjudEnd: '05:25',
+  sehriEnd: '05:25',
+  sunrise: '06:42',
+  ishraq: '06:57',
+  chasht: '08:30',
+  iftar: '06:16',
+  note: ''
+};
+
 const formatConfig = (req, config) => {
   if (!config) return null;
   const obj = config.toObject ? config.toObject() : { ...config };
@@ -27,6 +47,21 @@ const formatConfig = (req, config) => {
   if (obj.appLogo) obj.appLogo = publicUrl(req, obj.appLogo);
   if (obj.webLogo) obj.webLogo = publicUrl(req, obj.webLogo);
   if (obj.favicon) obj.favicon = publicUrl(req, obj.favicon);
+
+  // Prayer Timetable formatting
+  const rawPt = obj.prayerTimes ? (obj.prayerTimes.toObject ? obj.prayerTimes.toObject() : obj.prayerTimes) : {};
+  obj.prayerTimes = {
+    ...DEFAULT_PRAYER_TIMES,
+    ...rawPt,
+    fajr: { ...DEFAULT_PRAYER_TIMES.fajr, ...(rawPt.fajr || {}) },
+    zohr: { ...DEFAULT_PRAYER_TIMES.zohr, ...(rawPt.zohr || {}) },
+    asr: { ...DEFAULT_PRAYER_TIMES.asr, ...(rawPt.asr || {}) },
+    maghrib: { ...DEFAULT_PRAYER_TIMES.maghrib, ...(rawPt.maghrib || {}) },
+    isha: { ...DEFAULT_PRAYER_TIMES.isha, ...(rawPt.isha || {}) },
+  };
+  if (obj.prayerTimes.logo) {
+    obj.prayerTimes.logo = publicUrl(req, obj.prayerTimes.logo);
+  }
 
   if (Array.isArray(obj.bannerImages)) {
     obj.bannerImages = obj.bannerImages
@@ -127,11 +162,20 @@ const getConfig = async (req, res) => {
 // Update configuration (or create new if none exists)
 const updateConfig = async (req, res) => {
   try {
+    const updateData = { ...req.body };
+    if (typeof updateData.prayerTimes === 'string') {
+      try {
+        updateData.prayerTimes = JSON.parse(updateData.prayerTimes);
+      } catch (e) {
+        delete updateData.prayerTimes;
+      }
+    }
+
     let config = await Config.findOne();
     if (!config) {
-      config = new Config({ ...req.body });
+      config = new Config(updateData);
     } else {
-      config.set({ ...req.body });
+      config.set(updateData);
     }
 
     if (req.body.android_app_link !== undefined || req.body.playstore_url !== undefined) {
@@ -177,6 +221,23 @@ const updateConfig = async (req, res) => {
     const fTime = req.body.fridayPushTime !== undefined ? req.body.fridayPushTime : req.body.friday_push_time;
     if (fTime !== undefined && fTime !== null) {
       config.fridayPushTime = formatTimeTo12Hour(fTime);
+    }
+
+    // Dynamic Prayer / Namaz Timetable handling
+    if (updateData.prayerTimes !== undefined) {
+      let pt = updateData.prayerTimes || {};
+      if (req.body.prayerLogo) {
+        pt.logo = req.body.prayerLogo;
+      }
+      config.prayerTimes = {
+        ...(config.prayerTimes || {}),
+        ...pt
+      };
+      config.markModified('prayerTimes');
+    } else if (req.body.prayerLogo) {
+      if (!config.prayerTimes) config.prayerTimes = {};
+      config.prayerTimes.logo = req.body.prayerLogo;
+      config.markModified('prayerTimes');
     }
 
     await config.save();
@@ -245,6 +306,8 @@ const testScheduledPush = async (req, res) => {
 module.exports = {
   getConfig,
   updateConfig,
-  testScheduledPush
+  testScheduledPush,
+  formatConfig,
+  DEFAULT_PRAYER_TIMES
 };
 

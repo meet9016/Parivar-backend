@@ -32,6 +32,8 @@ router.use('/event-registrations', require('./eventRegistrationRoutes'));
 router.use('/event_registrations', require('./eventRegistrationRoutes'));
 router.use('/get_app_theme', require('./configRoutes'));
 router.use('/update_app_theme', require('./configRoutes'));
+router.use('/prayer-times', require('./prayerRoutes'));
+router.use('/prayer_times', require('./prayerRoutes'));
 router.use('/stats', require('./dashboardRoutes'));
 router.use('/dashboard', require('./dashboardRoutes'));
 router.get('/permissions', protect, requirePermission('roles.list'), roleController.getPermissionOptions);

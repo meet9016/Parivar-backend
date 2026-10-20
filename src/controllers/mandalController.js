@@ -136,7 +136,7 @@ exports.createMandal = async (req, res) => {
     if (!isMandalAdminUser(req.user)) {
       return apiResponse(res, 403, 'Permission denied');
     }
-    const { name, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
+    const { name, type, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
 
     if (!name || !name.trim()) {
       return apiResponse(res, 400, 'Mandal name is required');
@@ -152,6 +152,7 @@ exports.createMandal = async (req, res) => {
 
     const newMandal = await Mandal.create({
       name: name.trim(),
+      type: (type && String(type).trim()) || 'માસિક ફાળો (Monthly Contribution)',
       monthly_amount: monthly_amount !== undefined ? Number(monthly_amount) : 500,
       due_day: due_day !== undefined ? Number(due_day) : 10,
       start_date: start_date ? new Date(start_date) : new Date(),
@@ -193,9 +194,10 @@ exports.updateMandalSetup = async (req, res) => {
     }
     const mandalId = req.query.mandal_id || req.params.id || req.body.mandal_id;
     const mandal = await resolveMandal(mandalId);
-    const { name, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
+    const { name, type, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
 
     if (name !== undefined) mandal.name = name;
+    if (type !== undefined) mandal.type = type;
     if (monthly_amount !== undefined) mandal.monthly_amount = Number(monthly_amount);
     if (due_day !== undefined) mandal.due_day = Number(due_day);
     if (start_date !== undefined) mandal.start_date = new Date(start_date);

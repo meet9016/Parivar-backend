@@ -156,6 +156,93 @@ const configSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+
+  // Dynamic Prayer / Namaz Timetable Configuration
+  prayerTimes: {
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    showOnWebsite: {
+      type: Boolean,
+      default: true,
+    },
+    title: {
+      type: String,
+      default: 'રાધનપુર મેમણ જમાત',
+    },
+    subTitle: {
+      type: String,
+      default: 'રાધનપુર',
+    },
+    logo: {
+      type: String,
+      default: '',
+    },
+    fajr: {
+      name: { type: String, default: 'ફજર' },
+      azan: { type: String, default: '05:26' },
+      jamat: { type: String, default: '05:45' },
+      qaza: { type: String, default: '06:42' },
+      qazaLabel: { type: String, default: 'સુધી' },
+    },
+    zohr: {
+      name: { type: String, default: 'ઝોહર' },
+      azan: { type: String, default: '12:28' },
+      jamat: { type: String, default: '12:45' },
+      qaza: { type: String, default: '04:36' },
+      qazaLabel: { type: String, default: 'સુધી' },
+    },
+    asr: {
+      name: { type: String, default: 'અસર' },
+      azan: { type: String, default: '04:36' },
+      jamat: { type: String, default: '04:50' },
+      qaza: { type: String, default: '06:16' },
+      qazaLabel: { type: String, default: 'સુધી' },
+    },
+    maghrib: {
+      name: { type: String, default: 'મગરીબ' },
+      azan: { type: String, default: '06:16' },
+      jamat: { type: String, default: '06:18' },
+      qaza: { type: String, default: '07:29' },
+      qazaLabel: { type: String, default: 'સુધી' },
+    },
+    isha: {
+      name: { type: String, default: 'ઈશા' },
+      azan: { type: String, default: '07:29' },
+      jamat: { type: String, default: '07:45' },
+      qaza: { type: String, default: '05:25' },
+      qazaLabel: { type: String, default: 'સુધી' },
+    },
+    tahajjudEnd: {
+      type: String,
+      default: '05:25',
+    },
+    sehriEnd: {
+      type: String,
+      default: '05:25',
+    },
+    sunrise: {
+      type: String,
+      default: '06:42',
+    },
+    ishraq: {
+      type: String,
+      default: '06:57',
+    },
+    chasht: {
+      type: String,
+      default: '08:30',
+    },
+    iftar: {
+      type: String,
+      default: '06:16',
+    },
+    note: {
+      type: String,
+      default: '',
+    },
+  },
 }, {
   timestamps: true,
   strict: false,

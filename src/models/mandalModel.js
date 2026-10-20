@@ -7,6 +7,11 @@ const mandalSchema = new mongoose.Schema({
     default: 'Mandal',
     trim: true
   },
+  type: {
+    type: String,
+    default: 'માસિક ફાળો (Monthly Contribution)',
+    trim: true
+  },
   monthly_amount: {
     type: Number,
     default: 500,

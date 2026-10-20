@@ -229,7 +229,7 @@ async function renderContributionReceiptHtml(contribution = {}, config = {}) {
   const contactPhone = cfg.phone || l.phone1 || '';
 
   // Mandal Name
-  const mandalName = c.mandal_id?.name || c.mandal_name || 'મંડળ (Mandal)';
+  const mandalName = c.mandal_id?.name || c.mandal_name || 'Type';
 
   // Member Information
   const memberName = c.member_name || (c.member_id ? `${c.member_id.first_name || ''} ${c.member_id.middle_name || ''} ${c.member_id.last_name || ''}`.replace(/\s+/g, ' ').trim() : 'સભ્યશ્રી');
@@ -316,7 +316,7 @@ async function renderContributionReceiptHtml(contribution = {}, config = {}) {
             <span style="color: #1e3a8a; font-weight: 800; font-size: 14px;">${escapeHtml(receiptNo)}</span>
           </div>
           <div>
-            <span style="color: #64748b;">Mandal: </span>
+            <span style="color: #64748b;">Type: </span>
             <span style="color: #0f172a; font-weight: 800; font-size: 13.5px;">${escapeHtml(mandalName)}</span>
           </div>
           <div>

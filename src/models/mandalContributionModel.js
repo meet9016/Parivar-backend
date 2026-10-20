@@ -29,6 +29,11 @@ const mandalContributionSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  type: {
+    type: String,
+    default: '(Monthly Contribution)',
+    trim: true
+  },
   amount: {
     type: Number,
     default: 0,
