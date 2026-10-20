@@ -8,7 +8,6 @@ const State = require('../models/stateModel');
 const Country = require('../models/countryModel');
 const { apiResponse } = require('../utils/apiResponse');
 const { getUserRoleScope } = require('../utils/roleScopeHelper');
-const mongoose = require('mongoose');
 
 // Generate next unique member_id sequence for Users
 const getNextMemberId = async () => {
