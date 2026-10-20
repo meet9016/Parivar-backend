@@ -242,6 +242,24 @@ const configSchema = new mongoose.Schema({
       type: String,
       default: '',
     },
+    azanOffsetMinutes: {
+      type: Number,
+      default: 25,
+    },
+    jamatOffsetMinutes: {
+      type: Number,
+      default: 15,
+    },
+    qazaOffsetMinutes: {
+      type: Number,
+      default: 15,
+    },
+  },
+
+  // Tracks prayer push notification keys sent per date to prevent duplicates
+  prayerAlertsSent: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   },
 }, {
   timestamps: true,

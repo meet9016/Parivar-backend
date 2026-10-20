@@ -388,6 +388,186 @@ const checkAndSendScheduledNotifications = async () => {
               });
             }
           }
+
+          // -------------------------------------------------------------
+          // 3. Daily Prayer Push Notifications (Azan -25m, Jamat -15m)
+          // -------------------------------------------------------------
+          try {
+            const pt = cfg.prayerTimes;
+            if (pt && pt.enabled !== false) {
+              const currentHour = parseInt(partMap.hour, 10);
+              const currentMinute = parseInt(partMap.minute, 10);
+              const nowMinutes = currentHour * 60 + currentMinute;
+
+              const prayers = [
+                { key: 'fajr', name: 'ફજર', defaultAzan: '05:26', defaultJamat: '05:40', defaultQaza: '06:42', period: 'AM', qazaPeriod: 'AM' },
+                { key: 'zohr', name: 'ઝોહર', defaultAzan: '12:28', defaultJamat: '12:45', defaultQaza: '04:36', period: 'PM', qazaPeriod: 'PM' },
+                { key: 'asr', name: 'અસર', defaultAzan: '04:36', defaultJamat: '04:50', defaultQaza: '06:16', period: 'PM', qazaPeriod: 'PM' },
+                { key: 'maghrib', name: 'મગરીબ', defaultAzan: '06:16', defaultJamat: '06:18', defaultQaza: '07:29', period: 'PM', qazaPeriod: 'PM' },
+                { key: 'isha', name: 'ઈશા', defaultAzan: '07:29', defaultJamat: '07:45', defaultQaza: '05:25', period: 'PM', qazaPeriod: 'AM' }
+              ];
+
+              const parsePrayerTimeToMinutes = (timeStr, defaultPeriod) => {
+                if (!timeStr) return null;
+                const trimmed = String(timeStr).trim();
+                const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+                if (!match) return null;
+                let h = parseInt(match[1], 10);
+                const m = parseInt(match[2], 10);
+                let p = match[3]?.toUpperCase();
+                if (!p) {
+                  if (h < 12) p = defaultPeriod;
+                  else p = 'PM';
+                }
+                if (p === 'PM' && h < 12) h += 12;
+                if (p === 'AM' && h === 12) h = 0;
+                return h * 60 + m;
+              };
+
+              let sentAlerts = cfg.prayerAlertsSent || {};
+              if (typeof sentAlerts !== 'object') sentAlerts = {};
+              const todaySent = { ...(sentAlerts[todayDateStr] || {}) };
+              let alertsUpdated = false;
+
+              // Dynamic offsets (minutes before prayer timing)
+              const azanOffset = Number.isInteger(parseInt(pt.azanOffsetMinutes, 10))
+                ? parseInt(pt.azanOffsetMinutes, 10)
+                : 25;
+              const jamatOffset = Number.isInteger(parseInt(pt.jamatOffsetMinutes, 10))
+                ? parseInt(pt.jamatOffsetMinutes, 10)
+                : 15;
+              const qazaOffset = Number.isInteger(parseInt(pt.qazaOffsetMinutes, 10))
+                ? parseInt(pt.qazaOffsetMinutes, 10)
+                : 15;
+
+              for (const prayer of prayers) {
+                const pData = pt[prayer.key] || {};
+                const pName = pData.name || prayer.name;
+
+                // A. Azan Alert: Trigger dynamic minutes prior to Azan time
+                const azanRaw = pData.azan || prayer.defaultAzan;
+                const azanMinutes = parsePrayerTimeToMinutes(azanRaw, prayer.period);
+                if (azanMinutes !== null) {
+                  const azanTargetMinutes = azanMinutes - azanOffset;
+                  const azanSentKey = `${prayer.key}_azan`;
+
+                  if (!todaySent[azanSentKey]) {
+                    const diff = nowMinutes - azanTargetMinutes;
+                    if (diff >= 0 && diff <= 15) {
+                      const alertKey = `${prayer.key}_azan`;
+                      console.log(`[Scheduler] 🕌 [${name}] Auto-triggering Azan notification for "${pName}" at ${currentTimeStr} (Azan: ${azanRaw}, Key: [${alertKey}], ${azanOffset}m prior)`);
+
+                      todaySent[azanSentKey] = true;
+                      alertsUpdated = true;
+
+                      await createAndBroadcast({
+                        title: `${pName} અઝાન સમય - ${azanOffset} મિનિટ બાકી`,
+                        body: `${pName} નમાઝની અઝાનનો સમય ${azanRaw} છે. (${azanOffset} મિનિટ બાકી)`,
+                        type: 'prayer_reminder',
+                        target_type: 'all',
+                        target_users: [],
+                        date: now,
+                        key: alertKey,
+                        push_key: alertKey,
+                        prayer_key: alertKey,
+                        prayer: prayer.key,
+                        prayer_name: pName,
+                        prayer_type: 'azan',
+                        prayer_time: azanRaw,
+                        lead_minutes: azanOffset
+                      });
+                    }
+                  }
+                }
+
+                // B. Jamat Alert: Trigger dynamic minutes prior to Jamat time
+                const jamatRaw = pData.jamat || prayer.defaultJamat;
+                const jamatMinutes = parsePrayerTimeToMinutes(jamatRaw, prayer.period);
+                if (jamatMinutes !== null) {
+                  const jamatTargetMinutes = jamatMinutes - jamatOffset;
+                  const jamatSentKey = `${prayer.key}_jamat`;
+
+                  if (!todaySent[jamatSentKey]) {
+                    const diff = nowMinutes - jamatTargetMinutes;
+                    if (diff >= 0 && diff <= 15) {
+                      const alertKey = `${prayer.key}_jamat`;
+                      console.log(`[Scheduler] 🕌 [${name}] Auto-triggering Jamat notification for "${pName}" at ${currentTimeStr} (Jamat: ${jamatRaw}, Key: [${alertKey}], ${jamatOffset}m prior)`);
+
+                      todaySent[jamatSentKey] = true;
+                      alertsUpdated = true;
+
+                      await createAndBroadcast({
+                        title: `${pName} જમાત સમય - ${jamatOffset} મિનિટ બાકી`,
+                        body: `${pName} નમાઝની જમાતનો સમય ${jamatRaw} છે. (${jamatOffset} મિનિટ બાકી)`,
+                        type: 'prayer_reminder',
+                        target_type: 'all',
+                        target_users: [],
+                        date: now,
+                        key: alertKey,
+                        push_key: alertKey,
+                        prayer_key: alertKey,
+                        prayer: prayer.key,
+                        prayer_name: pName,
+                        prayer_type: 'jamat',
+                        prayer_time: jamatRaw,
+                        lead_minutes: jamatOffset
+                      });
+                    }
+                  }
+                }
+
+                // C. Qaza Alert: Trigger dynamic minutes prior to Qaza time
+                const qazaRaw = pData.qaza || prayer.defaultQaza;
+                const qazaMinutes = parsePrayerTimeToMinutes(qazaRaw, prayer.qazaPeriod || prayer.period);
+                if (qazaMinutes !== null) {
+                  const qazaTargetMinutes = qazaMinutes - qazaOffset;
+                  const qazaSentKey = `${prayer.key}_qaza`;
+
+                  if (!todaySent[qazaSentKey]) {
+                    const diff = nowMinutes - qazaTargetMinutes;
+                    if (diff >= 0 && diff <= 15) {
+                      const alertKey = `${prayer.key}_qaza`;
+                      console.log(`[Scheduler] 🕌 [${name}] Auto-triggering Qaza notification for "${pName}" at ${currentTimeStr} (Qaza: ${qazaRaw}, Key: [${alertKey}], ${qazaOffset}m prior)`);
+
+                      todaySent[qazaSentKey] = true;
+                      alertsUpdated = true;
+
+                      await createAndBroadcast({
+                        title: `${pName} કઝા સમય - ${qazaOffset} મિનિટ બાકી`,
+                        body: `${pName} નમાઝ કઝા થવામાં ${qazaOffset} મિનિટ બાકી છે (કઝા સમય: ${qazaRaw}). જલદી નમાઝ અદા કરી લો.`,
+                        type: 'prayer_reminder',
+                        target_type: 'all',
+                        target_users: [],
+                        date: now,
+                        key: alertKey,
+                        push_key: alertKey,
+                        prayer_key: alertKey,
+                        prayer: prayer.key,
+                        prayer_name: pName,
+                        prayer_type: 'qaza',
+                        prayer_time: qazaRaw,
+                        lead_minutes: qazaOffset
+                      });
+                    }
+                  }
+                }
+              }
+
+              if (alertsUpdated) {
+                sentAlerts[todayDateStr] = todaySent;
+                const dates = Object.keys(sentAlerts);
+                if (dates.length > 7) {
+                  dates.slice(0, dates.length - 7).forEach(d => delete sentAlerts[d]);
+                }
+                await Config.updateOne(
+                  { _id: cfg._id },
+                  { $set: { prayerAlertsSent: sentAlerts } }
+                );
+              }
+            }
+          } catch (prayerErr) {
+            console.error(`[Scheduler Prayer Push Error in ${name}]:`, prayerErr.message);
+          }
         }
       } catch (weeklyErr) {
         console.error(`[Scheduler Weekly Push Error in ${name}]:`, weeklyErr.message);

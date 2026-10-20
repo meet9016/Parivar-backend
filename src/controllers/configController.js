@@ -26,18 +26,21 @@ const DEFAULT_PRAYER_TIMES = {
   title: 'રાધનપુર મેમણ જમાત',
   subTitle: 'રાધનપુર',
   logo: '',
-  fajr: { name: 'ફજર', azan: '05:26', jamat: '05:45', qaza: '06:42', qazaLabel: 'સુધી' },
-  zohr: { name: 'ઝોહર', azan: '12:28', jamat: '12:45', qaza: '04:36', qazaLabel: 'સુધી' },
-  asr: { name: 'અસર', azan: '04:36', jamat: '04:50', qaza: '06:16', qazaLabel: 'સુધી' },
-  maghrib: { name: 'મગરીબ', azan: '06:16', jamat: '06:18', qaza: '07:29', qazaLabel: 'સુધી' },
-  isha: { name: 'ઈશા', azan: '07:29', jamat: '07:45', qaza: '05:25', qazaLabel: 'સુધી' },
-  tahajjudEnd: '05:25',
-  sehriEnd: '05:25',
-  sunrise: '06:42',
-  ishraq: '06:57',
-  chasht: '08:30',
-  iftar: '06:16',
-  note: ''
+  fajr: { name: 'ફજર', azan: '05:26 AM', jamat: '05:40 AM', qaza: '06:42 AM', qazaLabel: 'સુધી' },
+  zohr: { name: 'ઝોહર', azan: '12:28 PM', jamat: '12:45 PM', qaza: '04:36 PM', qazaLabel: 'સુધી' },
+  asr: { name: 'અસર', azan: '04:36 PM', jamat: '04:50 PM', qaza: '06:16 PM', qazaLabel: 'સુધી' },
+  maghrib: { name: 'મગરીબ', azan: '06:16 PM', jamat: '06:18 PM', qaza: '07:29 PM', qazaLabel: 'સુધી' },
+  isha: { name: 'ઈશા', azan: '07:29 PM', jamat: '07:45 PM', qaza: '05:20 AM', qazaLabel: 'સુધી' },
+  tahajjudEnd: '05:25 AM',
+  sehriEnd: '05:25 AM',
+  sunrise: '06:42 AM',
+  ishraq: '06:57 AM',
+  chasht: '08:30 AM',
+  iftar: '06:16 PM',
+  note: '',
+  azanOffsetMinutes: 25,
+  jamatOffsetMinutes: 15,
+  qazaOffsetMinutes: 15
 };
 
 const formatConfig = (req, config) => {
@@ -251,10 +254,10 @@ const updateConfig = async (req, res) => {
   }
 };
 
-// Immediate test push notification for Monday or Friday
+// Immediate test push notification for Monday, Friday, or Prayer Alert (Azan / Jamat)
 const testScheduledPush = async (req, res) => {
   try {
-    const { day } = req.body; // 'monday' or 'friday'
+    const { day, prayer, alertType } = req.body; // 'monday', 'friday', or 'prayer'
     const config = await Config.findOne();
     const { createAndBroadcast } = require('./notificationController');
     const now = new Date();
@@ -279,6 +282,76 @@ const testScheduledPush = async (req, res) => {
         message: `Friday test push notification sent successfully (Key: ${fridayKey}, Time: ${fridayTime})`,
         fridayPushKey: fridayKey,
         fridayPushTime: fridayTime
+      });
+    } else if (day === 'prayer' || prayer) {
+      const pKey = (prayer || 'fajr').toLowerCase();
+      const aType = (alertType || 'azan').toLowerCase(); // 'azan', 'jamat', or 'qaza'
+      const prayerNames = {
+        fajr: 'ફજર',
+        zohr: 'ઝોહર',
+        asr: 'અસર',
+        maghrib: 'મગરીબ',
+        isha: 'ઈશા'
+      };
+      const pName = config?.prayerTimes?.[pKey]?.name || prayerNames[pKey] || pKey;
+      let pTime = '05:26';
+      const azanOffset = parseInt(config?.prayerTimes?.azanOffsetMinutes || 25, 10);
+      const jamatOffset = parseInt(config?.prayerTimes?.jamatOffsetMinutes || 15, 10);
+      const qazaOffset = parseInt(config?.prayerTimes?.qazaOffsetMinutes || 15, 10);
+
+      let leadMin = 25;
+      let title = '';
+      let body = '';
+
+      if (aType === 'azan') {
+        pTime = config?.prayerTimes?.[pKey]?.azan || '05:26 AM';
+        leadMin = azanOffset;
+        title = `${pName} અઝાન સમય - ${leadMin} મિનિટ બાકી`;
+        body = `${pName} નમાઝની અઝાનનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
+      } else if (aType === 'jamat') {
+        pTime = config?.prayerTimes?.[pKey]?.jamat || '05:40 AM';
+        leadMin = jamatOffset;
+        title = `${pName} જમાત સમય - ${leadMin} મિનિટ બાકી`;
+        body = `${pName} નમાઝની જમાતનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
+      } else {
+        // Qaza Alert
+        pTime = config?.prayerTimes?.[pKey]?.qaza || '06:42 AM';
+        leadMin = qazaOffset;
+        title = `${pName} કઝા સમય - ${leadMin} મિનિટ બાકી`;
+        body = `${pName} નમાઝ કઝા થવામાં ${leadMin} મિનિટ બાકી છે (કઝા સમય: ${pTime}). જલદી નમાઝ અદા કરી લો.`;
+      }
+
+      const alertKey = `${pKey}_${aType}`;
+
+      await createAndBroadcast({
+        title,
+        body,
+        type: 'prayer_reminder',
+        target_type: 'all',
+        target_users: [],
+        date: now,
+        key: alertKey,
+        push_key: alertKey,
+        prayer_key: alertKey,
+        prayer: pKey,
+        prayer_name: pName,
+        prayer_type: aType,
+        prayer_time: pTime,
+        lead_minutes: leadMin,
+        is_test: true
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `Prayer ${aType.toUpperCase()} test push notification sent successfully (Key: ${alertKey}, Time: ${pTime})`,
+        key: alertKey,
+        prayer: pKey,
+        prayerName: pName,
+        prayerType: aType,
+        prayerTime: pTime,
+        leadMinutes: leadMin,
+        title,
+        body
       });
     } else {
       // Default to Monday
