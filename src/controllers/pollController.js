@@ -7,12 +7,11 @@ const mongoose = require('mongoose');
 const findPollById = (id) => {
   if (!id) return null;
   const isObjectId = mongoose.Types.ObjectId.isValid(id) && /^[a-f\d]{24}$/i.test(id);
-  return Poll.findOne({
-    $or: [
-      { _id: isObjectId ? new mongoose.Types.ObjectId(id) : null },
-      { id: String(id) }
-    ]
-  });
+  const conditions = [{ id: String(id) }];
+  if (isObjectId) {
+    conditions.unshift({ _id: new mongoose.Types.ObjectId(id) });
+  }
+  return Poll.findOne({ $or: conditions });
 };
 
 const formatPoll = (poll, userVote = null) => {
