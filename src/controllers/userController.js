@@ -43,8 +43,7 @@ function buildDeathDownloadUrl(userId, req, format = 'png') {
   return `${baseUrl}${prefix}/users/death/${userId}/download?format=${format}${tokenQuery}`;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/authConfig');
 
 const requestData = (req) => ({
   ...req.query,

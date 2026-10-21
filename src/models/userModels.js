@@ -241,6 +241,7 @@ const userSchema = new mongoose.Schema({
   otp_count: { type: Number, default: 0 },
   otp_reset_day: { type: Date, default: null },
   fcm_token: { type: String, default: '' },
+  session_id: { type: String, default: null, index: true },
   birthday_notification_year: { type: Number, default: null, index: true },
   anniversary_notification_year: { type: Number, default: null, index: true }
 

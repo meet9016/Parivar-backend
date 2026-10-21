@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/userModels');
 const CommitteeMember = require('../models/committeeMemberModel');
 const { ALL_PERMISSION_KEYS } = require('../config/permissions');
+const { JWT_SECRET } = require('../config/authConfig');
 
 const isInvalidTokenValue = (token) => {
   if (!token) {
@@ -150,7 +151,7 @@ const protect = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretfamilykey');
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = await findUserFromToken(decoded, req);
 
     if (!req.user) {
@@ -158,6 +159,15 @@ const protect = async (req, res, next) => {
         status: 401,
         message: 'Unauthorized: Invalid or expired token',
         data: []
+      });
+    }
+
+    // Single-device login check: Invalidate token if user logged in on another device
+    if (decoded.session_id && req.user.session_id && decoded.session_id !== req.user.session_id) {
+      return res.status(401).json({
+        status: 401,
+        message: 'Your account was logged in on another device. You have been logged out.',
+        error: 'session_expired_another_device'
       });
     }
 

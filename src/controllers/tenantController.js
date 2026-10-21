@@ -331,9 +331,10 @@ const loginSuperAdmin = async (req, res) => {
 
     if (email.trim().toLowerCase() === SUPERADMIN_EMAIL.toLowerCase() && password === SUPERADMIN_PASSWORD) {
       const jwt = require('jsonwebtoken');
+      const { JWT_SECRET } = require('../config/authConfig');
       const token = jwt.sign(
         { role: 'superadmin', email: SUPERADMIN_EMAIL },
-        process.env.JWT_SECRET || 'supersecretfamilykey',
+        JWT_SECRET,
         { expiresIn: '7d' }
       );
 

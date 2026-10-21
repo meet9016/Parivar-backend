@@ -3,17 +3,19 @@ const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
 const { sendSMS } = require('../utils/smsService');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
-const MEMBER_TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/authConfig');
+const MEMBER_TOKEN_EXPIRES_IN = JWT_EXPIRES_IN;
 
 const requestData = (req) => ({ ...req.query, ...req.body });
 
-const tokenPayloadFor = (member) => ({
+const tokenPayloadFor = (member, sessionId = '', tenantCode = '') => ({
   id: member._id,
   first_name: member.first_name || '',
   middle_name: member.middle_name || '',
   last_name: member.last_name || '',
   number: member.number || '',
+  session_id: sessionId || member.session_id || '',
+  tenant_code: tenantCode || ''
 });
 
 const signArchiveToken = (payload) => {
@@ -125,10 +127,20 @@ const login = async (req, res) => {
     user.otp_expiry = null;
     
     if (fcm_token) user.fcm_token = fcm_token;
+
+    // Single-device login: Generate new unique session_id to invalidate older devices
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    user.session_id = sessionId;
     await user.save();
 
-    // 4. Issue Session Tokens
-    const payload = tokenPayloadFor(user);
+    // 4. Issue Session Tokens with 48h validity & session tracking
+    let tenantSlug = req.headers['x-tenant-id']?.toLowerCase() || '';
+    if (!tenantSlug && req.hostname && req.hostname.endsWith('.parivar.me')) {
+      const parts = req.hostname.split('.');
+      if (parts.length >= 3 && parts[0] !== 'www') tenantSlug = parts[0].toLowerCase();
+    }
+
+    const payload = tokenPayloadFor(user, sessionId, tenantSlug);
     const token = signArchiveToken(payload);
 
     return apiResponse(res, 200, 'Login successful', { token, user: payload });

@@ -394,7 +394,8 @@ const checkAndSendScheduledNotifications = async () => {
           // -------------------------------------------------------------
           try {
             const pt = cfg.prayerTimes;
-            if (pt && pt.enabled !== false) {
+            const isNotificationsOn = pt && pt.enabled !== false && pt.notificationsEnabled !== false && pt.notifications_enabled !== false;
+            if (isNotificationsOn) {
               const currentHour = parseInt(partMap.hour, 10);
               const currentMinute = parseInt(partMap.minute, 10);
               const nowMinutes = currentHour * 60 + currentMinute;

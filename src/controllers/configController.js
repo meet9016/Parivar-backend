@@ -40,7 +40,8 @@ const DEFAULT_PRAYER_TIMES = {
   note: '',
   azanOffsetMinutes: 25,
   jamatOffsetMinutes: 15,
-  qazaOffsetMinutes: 15
+  qazaOffsetMinutes: 15,
+  notificationsEnabled: true
 };
 
 const formatConfig = (req, config) => {
@@ -284,6 +285,13 @@ const testScheduledPush = async (req, res) => {
         fridayPushTime: fridayTime
       });
     } else if (day === 'prayer' || prayer) {
+      if (config?.prayerTimes?.notificationsEnabled === false || config?.prayerTimes?.notifications_enabled === false) {
+        return res.status(400).json({
+          status: 400,
+          message: 'Prayer Push Notifications are currently turned OFF. Turn ON the switch to send notifications.',
+          error: 'notifications_disabled'
+        });
+      }
       const pKey = (prayer || 'fajr').toLowerCase();
       const aType = (alertType || 'azan').toLowerCase(); // 'azan', 'jamat', or 'qaza'
       const prayerNames = {

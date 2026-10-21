@@ -11,7 +11,7 @@ const familyUtil = require('../utils/familyHelper');
 const { getRolePermissions } = require('../middleware/auth');
 const queryHelper = require('../utils/queryHelper');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/authConfig');
 
 const {
   splitFullName,
@@ -248,7 +248,7 @@ const loginAdmin = async (req, res) => {
             return { errorStatus: 403, errorMessage: 'Access denied: Your assigned role is inactive.' };
           }
           const permissions = getRolePermissions(cm);
-          const token = jwt.sign({ id: cm._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: '1d' });
+          const token = jwt.sign({ id: cm._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
           const isSuperAdmin = cm.designation === 'President' || cm.role_id?.name?.toLowerCase() === 'admin' || cm.role_id?.name?.toLowerCase() === 'super admin' || (!cm.role_id && cm.designation === 'Admin');
 
           const userData = {
@@ -284,7 +284,7 @@ const loginAdmin = async (req, res) => {
           if (!u.is_committee && u.committee_role !== 'Self' && permissions.length === 0) {
             return { errorStatus: 403, errorMessage: 'Access denied: Insufficient permissions' };
           }
-          const token = jwt.sign({ id: u._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: '1d' });
+          const token = jwt.sign({ id: u._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
           const isSuperAdmin = u.role === 'superadmin' || u.committee_role === 'President' || u.role_id?.name?.toLowerCase() === 'admin' || u.role_id?.name?.toLowerCase() === 'super admin' || (!u.role_id && (u.role === 'admin' || u.committee_role === 'Admin'));
 
           const userData = {
