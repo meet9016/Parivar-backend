@@ -63,15 +63,48 @@ const sanitizeUser = (user) => {
   return data;
 };
 
+const getNumberVariations = (numStr) => {
+  if (!numStr) return [];
+  const raw = String(numStr).trim();
+  const digits = raw.replace(/\D/g, '');
+  const variations = new Set([raw]);
+  if (digits) {
+    variations.add(digits);
+    if (digits.length === 10) {
+      variations.add(`+91${digits}`);
+      variations.add(`91${digits}`);
+      variations.add(`0${digits}`);
+      variations.add(`${digits.slice(0, 5)} ${digits.slice(5)}`);
+    } else if (digits.length === 12 && digits.startsWith('91')) {
+      const ten = digits.slice(2);
+      variations.add(ten);
+      variations.add(`+91${ten}`);
+      variations.add(`0${ten}`);
+    } else if (digits.length === 11 && digits.startsWith('0')) {
+      const ten = digits.slice(1);
+      variations.add(ten);
+      variations.add(`+91${ten}`);
+      variations.add(`91${ten}`);
+    } else if (digits.length > 10) {
+      const ten = digits.slice(-10);
+      variations.add(ten);
+      variations.add(`+91${ten}`);
+      variations.add(`91${ten}`);
+      variations.add(`0${ten}`);
+    }
+  }
+  return Array.from(variations).filter(Boolean);
+};
+
 const register = async (req, res) => {
   try {
+    const rawNumberInput = req.body.number || req.body.mobile || req.body.phone || req.body.contact_number || req.body.mobile_number || '';
     const {
       first_name,
       middle_name,
       last_name,
       email,
       password,
-      number,
       gender,
       dob,
       anniversary,
@@ -92,14 +125,101 @@ const register = async (req, res) => {
     } = req.body;
 
     const isDeceasedMember = req.body.is_deceased === true || req.body.is_deceased === 'true';
-    if (!first_name || (!number && !isDeceasedMember)) {
-      return res.status(400).json({ message: 'First name and number are required' });
+    if (!first_name || (!rawNumberInput && !isDeceasedMember)) {
+      return res.status(400).json({ status: 400, message: 'First name and number are required' });
     }
 
-    if (email) {
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        return res.status(400).json({ message: 'User already exists with this email' });
+    const trimmedNumber = rawNumberInput ? String(rawNumberInput).trim() : '';
+    const trimmedEmail = email ? String(email).trim().toLowerCase() : '';
+
+    // Check if mobile number is already registered in DB (only existing non-deleted users)
+    if (trimmedNumber) {
+      const numberVariations = getNumberVariations(trimmedNumber);
+      const existingUserByNumber = await User.findOne({
+        number: { $in: numberVariations }
+      });
+      if (existingUserByNumber) {
+        return res.status(400).json({
+          status: 400,
+          message: `Mobile number ${trimmedNumber} is already registered in the system with member "${existingUserByNumber.first_name} ${existingUserByNumber.last_name || ''}". Duplicate registration is not allowed.`,
+          error: 'Mobile number already registered'
+        });
+      }
+    }
+
+    // Check if email is already registered in DB
+    if (trimmedEmail) {
+      const existingUserByEmail = await User.findOne({ email: trimmedEmail });
+      if (existingUserByEmail) {
+        return res.status(400).json({
+          status: 400,
+          message: `Email ${trimmedEmail} is already registered with member "${existingUserByEmail.first_name} ${existingUserByEmail.last_name || ''}". Duplicate registration is not allowed.`,
+          error: 'Email already registered'
+        });
+      }
+    }
+
+    // Validate family members list for duplicate mobile numbers or emails
+    let membersList = req.body.members;
+    if (typeof membersList === 'string') {
+      try {
+        membersList = JSON.parse(membersList);
+      } catch (e) {
+        membersList = [];
+      }
+    }
+
+    if (Array.isArray(membersList) && membersList.length > 0) {
+      const seenNumbers = new Set(trimmedNumber ? getNumberVariations(trimmedNumber) : []);
+      const seenEmails = new Set(trimmedEmail ? [trimmedEmail] : []);
+
+      for (const m of membersList) {
+        if (!m.first_name || !m.first_name.trim()) continue;
+        const rawMNum = m.number || m.mobile || m.phone || '';
+        const mNumber = rawMNum ? String(rawMNum).trim() : '';
+        const mEmail = m.email ? String(m.email).trim().toLowerCase() : '';
+
+        if (mNumber) {
+          const mVariations = getNumberVariations(mNumber);
+          const hasFormDuplicate = mVariations.some(v => seenNumbers.has(v));
+          if (hasFormDuplicate) {
+            return res.status(400).json({
+              status: 400,
+              message: `Mobile number ${mNumber} for member "${m.first_name}" is duplicated in this form submission.`,
+              error: 'Duplicate mobile number in form'
+            });
+          }
+          mVariations.forEach(v => seenNumbers.add(v));
+
+          const existingMemberNumber = await User.findOne({ number: { $in: mVariations } });
+          if (existingMemberNumber) {
+            return res.status(400).json({
+              status: 400,
+              message: `Mobile number ${mNumber} for member "${m.first_name}" is already registered with member "${existingMemberNumber.first_name} ${existingMemberNumber.last_name || ''}". Duplicate registration is not allowed.`,
+              error: 'Mobile number already registered'
+            });
+          }
+        }
+
+        if (mEmail) {
+          if (seenEmails.has(mEmail)) {
+            return res.status(400).json({
+              status: 400,
+              message: `Email ${mEmail} for member "${m.first_name}" is duplicated in this form submission.`,
+              error: 'Duplicate email in form'
+            });
+          }
+          seenEmails.add(mEmail);
+
+          const existingMemberEmail = await User.findOne({ email: mEmail });
+          if (existingMemberEmail) {
+            return res.status(400).json({
+              status: 400,
+              message: `Email ${mEmail} for member "${m.first_name}" is already registered with member "${existingMemberEmail.first_name} ${existingMemberEmail.last_name || ''}". Duplicate registration is not allowed.`,
+              error: 'Email already registered'
+            });
+          }
+        }
       }
     }
 
@@ -186,7 +306,6 @@ const register = async (req, res) => {
       }
       await newUser.save();
     }
-    let membersList = req.body.members;
     if (typeof membersList === 'string') {
       try {
         membersList = JSON.parse(membersList);
@@ -207,7 +326,7 @@ const register = async (req, res) => {
           last_name: m.last_name ? m.last_name.trim() : (newUser.last_name || ''),
           email: m.email ? m.email.toLowerCase().trim() : '',
           password: m.password || '12345',
-          number: m.number ? m.number.trim() : (newUser.number || ''),
+          number: m.number ? m.number.trim() : '',
           gender: m.gender || 'Male',
           dob: m.dob || null,
           anniversary: m.anniversary || null,
@@ -936,8 +1055,38 @@ const updateUser = async (req, res) => {
     if (first_name) user.first_name = first_name;
     if (middle_name !== undefined) user.middle_name = middle_name;
     if (last_name !== undefined) user.last_name = last_name;
-    if (email !== undefined) user.email = email.toLowerCase();
-    if (number !== undefined) user.number = number;
+    if (email !== undefined) {
+      const emailLower = email ? email.toLowerCase().trim() : '';
+      if (emailLower && emailLower !== (user.email || '')) {
+        const existingEmail = await User.findOne({ email: emailLower, _id: { $ne: user._id } });
+        if (existingEmail) {
+          return res.status(400).json({
+            message: `Email ${emailLower} is already registered with member "${existingEmail.first_name} ${existingEmail.last_name || ''}".`
+          });
+        }
+      }
+      user.email = emailLower;
+    }
+    const rawNumberUpdate = number !== undefined ? number : (req.body.mobile !== undefined ? req.body.mobile : (req.body.phone !== undefined ? req.body.phone : undefined));
+    if (rawNumberUpdate !== undefined) {
+      const trimmedNumber = rawNumberUpdate ? String(rawNumberUpdate).trim() : '';
+      if (trimmedNumber) {
+        const variations = getNumberVariations(trimmedNumber);
+        const existingVariations = getNumberVariations(user.number);
+        const isSameNumber = variations.some(v => existingVariations.includes(v));
+        if (!isSameNumber) {
+          const existingNumber = await User.findOne({ number: { $in: variations }, _id: { $ne: user._id } });
+          if (existingNumber) {
+            return res.status(400).json({
+              status: 400,
+              message: `Mobile number ${trimmedNumber} is already registered with member "${existingNumber.first_name} ${existingNumber.last_name || ''}". Duplicate registration is not allowed.`,
+              error: 'Mobile number already registered'
+            });
+          }
+        }
+      }
+      user.number = trimmedNumber;
+    }
     if (gender !== undefined) user.gender = gender;
     if (dob !== undefined) user.dob = dob;
     if (anniversary !== undefined) user.anniversary = anniversary;
@@ -1052,7 +1201,7 @@ const updateUser = async (req, res) => {
                 middle_name: m.middle_name !== undefined ? m.middle_name.trim() : (user.first_name || ''),
                 last_name: m.last_name !== undefined ? m.last_name.trim() : (user.last_name || ''),
                 email: m.email ? m.email.toLowerCase().trim() : '',
-                number: m.number ? m.number.trim() : (user.number || ''),
+                number: m.number ? m.number.trim() : (m.mobile ? m.mobile.trim() : ''),
                 gender: m.gender || 'Male',
                 dob: m.dob || null,
                 anniversary: m.anniversary || null,
@@ -1083,7 +1232,7 @@ const updateUser = async (req, res) => {
             last_name: m.last_name ? m.last_name.trim() : (user.last_name || ''),
             email: m.email ? m.email.toLowerCase().trim() : '',
             password: m.password || '12345',
-            number: m.number ? m.number.trim() : (user.number || ''),
+            number: m.number ? m.number.trim() : (m.mobile ? m.mobile.trim() : ''),
             gender: m.gender || 'Male',
             dob: m.dob || null,
             anniversary: m.anniversary || null,
@@ -1891,6 +2040,42 @@ const getDeathCardLink = async (req, res) => {
   }
 };
 
+const checkNumberAvailability = async (req, res) => {
+  try {
+    const rawNumber = req.params.number || req.query.number;
+    if (!rawNumber) {
+      return res.status(400).json({ status: 400, message: 'Mobile number is required' });
+    }
+    const variations = getNumberVariations(rawNumber);
+    const existing = await User.findOne({ number: { $in: variations } }).select('first_name last_name member_id number');
+    if (existing) {
+      return res.status(200).json({
+        status: 200,
+        available: false,
+        registered: true,
+        message: `Mobile number ${rawNumber} is already registered in the system. Duplicate registration is not allowed.`,
+        data: {
+          number: rawNumber,
+          registered: true,
+          member_name: `${existing.first_name || ''} ${existing.last_name || ''}`.trim()
+        }
+      });
+    }
+    return res.status(200).json({
+      status: 200,
+      available: true,
+      registered: false,
+      message: `Mobile number ${rawNumber} is available for registration.`,
+      data: {
+        number: rawNumber,
+        registered: false
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ status: 500, message: error.message });
+  }
+};
+
 module.exports = {
   register,
   // login,
@@ -1901,6 +2086,7 @@ module.exports = {
   deleteUser,
   getFamilyMembers,
   getFamilyMembersByNumber,
+  checkNumberAvailability,
   bulkUpdateUsers,
   bulkImportUsers,
   exportUsers,

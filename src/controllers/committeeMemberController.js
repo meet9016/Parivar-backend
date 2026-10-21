@@ -64,6 +64,13 @@ const createcommitteeMember = async (req, res) => {
       status: status !== undefined ? Number(status) : 1
     };
 
+    if (memberData.number) {
+      const existingNumber = await CommitteeMember.findOne({ number: memberData.number });
+      if (existingNumber) {
+        return apiResponse(res, 400, `A committee member with mobile number ${memberData.number} already exists in this community.`);
+      }
+    }
+
     if (email && email.trim()) {
       const emailLower = email.trim().toLowerCase();
       const existingEmail = await CommitteeMember.findOne({ email: emailLower });
@@ -117,6 +124,15 @@ const updatecommitteeMember = async (req, res) => {
         return apiResponse(res, 400, 'Another committee member with this email already exists in this community.');
       }
       updateData.email = emailLower;
+    }
+
+    if (updateData.number && updateData.number.trim()) {
+      const numberTrimmed = updateData.number.trim();
+      const existingNumber = await CommitteeMember.findOne({ number: numberTrimmed, _id: { $ne: id } });
+      if (existingNumber) {
+        return apiResponse(res, 400, `Another committee member with mobile number ${numberTrimmed} already exists in this community.`);
+      }
+      updateData.number = numberTrimmed;
     }
 
     if (!updateData.role_id) {

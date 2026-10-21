@@ -59,6 +59,8 @@ router.get('/', (req, res, next) => {
 router.get('/family/:family_head_id', protect, userController.getFamilyMembers);
 
 router.get('/family-by-number/:number', protect, userController.getFamilyMembersByNumber);
+router.get('/check-number/:number', userController.checkNumberAvailability);
+router.get('/check-number', userController.checkNumberAvailability);
 
 router.put('/bulk-update', protect, (req, res, next) => {
     if (isAdminCall(req)) {
