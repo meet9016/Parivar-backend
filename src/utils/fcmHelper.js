@@ -1,4 +1,3 @@
-const admin = require('../config/firebase');
 const { getMessaging } = require('firebase-admin/messaging');
 const User = require('../models/userModels');
 

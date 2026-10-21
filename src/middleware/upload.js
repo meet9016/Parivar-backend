@@ -46,16 +46,6 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
-const fileFields = [
-  { name: 'image', maxCount: 1 },
-  { name: 'images', maxCount: 20 },
-  { name: 'gallery_image_1', maxCount: 1 },
-  { name: 'gallery_image_2', maxCount: 1 },
-  { name: 'gallery_image_3', maxCount: 1 },
-  { name: 'gallery_image_4', maxCount: 1 },
-  { name: 'gallery_image_5', maxCount: 1 },
-];
-
 // Multer fields mapping for business details (Logo + up to 5 gallery images)
 const multerBusinessUpload = upload.fields([
   { name: 'image', maxCount: 1 },
@@ -214,13 +204,6 @@ const parseForm = (req, res, next) => {
       return runWithTenant(req, () => next(err));
     }
   });
-};
-
-module.exports = {
-  upload,
-  businessUpload,
-  postUpload,
-  parseForm
 };
 
 module.exports = {

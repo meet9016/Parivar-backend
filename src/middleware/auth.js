@@ -40,22 +40,6 @@ const getTokenFromRequest = (req) => {
 
 const { tenantContext } = require('../utils/tenantContext');
 
-const getActiveUserModel = (req) => {
-  const conn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
-  if (conn) {
-    return conn.models.User || conn.model('User', User.schema);
-  }
-  return User;
-};
-
-const getActiveCommitteeModel = (req) => {
-  const conn = req?.tenantConn || (tenantContext.getStore()?.tenantConn);
-  if (conn) {
-    return conn.models.CommitteeMember || conn.model('CommitteeMember', CommitteeMember.schema);
-  }
-  return CommitteeMember;
-};
-
 const normalizeAuthUser = async (conn, rawUser, isCommittee = false) => {
   if (!rawUser) return null;
   const userObj = rawUser.toObject ? rawUser.toObject() : { ...rawUser };

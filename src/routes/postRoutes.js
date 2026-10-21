@@ -39,13 +39,8 @@ router.delete('/:id', protect, (req, res, next) => {
 
 // Member legacy routes
 router.post('/posts', protect, postUpload, savePost);
-// router.post('/add_post', protect, postUpload, savePost);
 router.put('/posts/:id', protect, postUpload, savePost);
-// router.put('/add_post/:id', protect, postUpload, savePost);
 router.get('/posts', protect, getPosts);
-// router.get('/all_post_list', protect, getPosts);
-// router.post('/all_post_list', protect, getPosts);
-// router.get('/posts/:id', protect, getPostById);
 router.delete('/posts/:id', protect, deletePost);
 
 module.exports = router;

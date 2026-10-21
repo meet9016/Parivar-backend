@@ -5,14 +5,6 @@ const { parseForm } = require('../middleware/upload');
 
 const router = express.Router();
 
-const optionalProtect = async (req, res, next) => {
-    const token = getTokenFromRequest(req);
-    if (token) {
-        return protect(req, res, next);
-    }
-    return next();
-};
-
 const isAdminCall = (req) => {
     return req.user && (req.user.is_committee || req.user.role_id || req.user.role === 'admin');
 };
