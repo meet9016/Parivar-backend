@@ -45,10 +45,14 @@ router.get('/logout', logout);
 
 router.post('/fcm-token', protect, async (req, res) => {
     try {
-        const token = req.body.fcm_token || req.query.fcm_token;
+        const rawToken = req.body.fcm_token || req.query.fcm_token;
+        const token = rawToken ? String(rawToken).trim() : '';
         if (!token) return apiResponse(res, 400, 'FCM token required');
         const UserModel = req.tenantConn?.models?.User || User;
-        await UserModel.findByIdAndUpdate(req.user._id || req.user.id, { fcm_token: token });
+        await UserModel.findByIdAndUpdate(req.user._id || req.user.id, {
+            $set: { fcm_token: token },
+            $addToSet: { fcm_tokens: token }
+        });
         return apiResponse(res, 200, 'FCM token saved');
     } catch (e) {
         return apiResponse(res, 500, 'Error saving FCM token');
@@ -57,8 +61,16 @@ router.post('/fcm-token', protect, async (req, res) => {
 
 router.delete('/fcm-token', protect, async (req, res) => {
     try {
+        const rawToken = req.body?.fcm_token || req.query?.fcm_token;
+        const token = rawToken ? String(rawToken).trim() : '';
         const UserModel = req.tenantConn?.models?.User || User;
-        await UserModel.findByIdAndUpdate(req.user._id || req.user.id, { fcm_token: '' });
+        if (token) {
+            await UserModel.findByIdAndUpdate(req.user._id || req.user.id, {
+                $pull: { fcm_tokens: token }
+            });
+        } else {
+            await UserModel.findByIdAndUpdate(req.user._id || req.user.id, { fcm_token: '', fcm_tokens: [] });
+        }
         return apiResponse(res, 200, 'FCM token removed');
     } catch (e) {
         return apiResponse(res, 500, 'Error removing FCM token');

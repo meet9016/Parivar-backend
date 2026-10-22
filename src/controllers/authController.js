@@ -126,11 +126,21 @@ const login = async (req, res) => {
     user.otp = null;
     user.otp_expiry = null;
     
-    if (fcm_token) user.fcm_token = fcm_token;
-
-    // Single-device login: Generate new unique session_id to invalidate older devices
+    // Multi-device login: Generate unique session_id for this device without logging out other devices
     const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const currentSessions = Array.isArray(user.session_ids) ? user.session_ids : (user.session_id ? [user.session_id] : []);
+    user.session_ids = [...new Set([...currentSessions, sessionId])];
     user.session_id = sessionId;
+
+    if (fcm_token && typeof fcm_token === 'string') {
+      const cleanFcm = fcm_token.trim();
+      if (cleanFcm) {
+        const currentFcmTokens = Array.isArray(user.fcm_tokens) ? user.fcm_tokens : (user.fcm_token ? [user.fcm_token] : []);
+        user.fcm_tokens = [...new Set([...currentFcmTokens, cleanFcm])];
+        user.fcm_token = cleanFcm;
+      }
+    }
+
     await user.save();
 
     // 4. Issue Session Tokens with 48h validity & session tracking
@@ -155,27 +165,56 @@ const logout = async (req, res) => {
     const { getTokenFromRequest } = require('../middleware/auth');
     const token = getTokenFromRequest(req);
     let userId = req.user?._id || req.user?.id;
+    let decodedSessionId = null;
 
-    if (!userId && token) {
+    if (token) {
       try {
         const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
-        userId = decoded.id || decoded._id || decoded.userId;
+        if (!userId) userId = decoded.id || decoded._id || decoded.userId;
+        decodedSessionId = decoded.session_id || null;
       } catch (_) {}
     }
 
-    const reqFcmToken = req.body?.fcm_token || req.query?.fcm_token;
+    const reqFcmToken = (req.body?.fcm_token || req.query?.fcm_token || '').trim();
     const UserModel = req.tenantConn?.models?.User || User;
 
     if (userId) {
-      await UserModel.findByIdAndUpdate(userId, {
-        session_id: null,
-        fcm_token: ''
-      });
+      const user = await UserModel.findById(userId);
+      if (user) {
+        // 1. Remove ONLY this device's session_id
+        if (decodedSessionId) {
+          user.session_ids = (user.session_ids || []).filter(s => s !== decodedSessionId);
+          if (user.session_id === decodedSessionId) {
+            user.session_id = user.session_ids[user.session_ids.length - 1] || null;
+          }
+        } else {
+          // If no specific session_id in token, clear all
+          user.session_ids = [];
+          user.session_id = null;
+        }
+
+        // 2. Remove ONLY this device's fcm_token
+        if (reqFcmToken) {
+          user.fcm_tokens = (user.fcm_tokens || []).filter(t => t !== reqFcmToken);
+          if (user.fcm_token === reqFcmToken) {
+            user.fcm_token = user.fcm_tokens[user.fcm_tokens.length - 1] || '';
+          }
+        }
+
+        await user.save();
+      }
     }
 
-    if (reqFcmToken && typeof reqFcmToken === 'string' && reqFcmToken.trim()) {
+    // 3. If reqFcmToken provided, also pull it from any other user documents
+    if (reqFcmToken) {
       await UserModel.updateMany(
-        { fcm_token: reqFcmToken.trim() },
+        { $or: [{ fcm_token: reqFcmToken }, { fcm_tokens: reqFcmToken }] },
+        { 
+          $pull: { fcm_tokens: reqFcmToken }
+        }
+      );
+      await UserModel.updateMany(
+        { fcm_token: reqFcmToken },
         { $set: { fcm_token: '' } }
       );
     }

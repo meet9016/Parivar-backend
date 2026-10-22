@@ -231,17 +231,15 @@ const userSchema = new mongoose.Schema({
     default: 0,
     index: true
   },
-  fcm_token: {
-    type: String,
-    default: ''
-  },
   otp: { type: String, default: null },
   otp_expiry: { type: Date, default: null },
   otp_last_sent: { type: Date, default: null },
   otp_count: { type: Number, default: 0 },
   otp_reset_day: { type: Date, default: null },
   fcm_token: { type: String, default: '' },
+  fcm_tokens: { type: [String], default: [] },
   session_id: { type: String, default: null, index: true },
+  session_ids: { type: [String], default: [], index: true },
   birthday_notification_year: { type: Number, default: null, index: true },
   anniversary_notification_year: { type: Number, default: null, index: true }
 

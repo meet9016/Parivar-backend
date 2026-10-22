@@ -162,13 +162,19 @@ const protect = async (req, res, next) => {
       });
     }
 
-    // Single-device login & logout check: Invalidate token if user logged out or logged in on another device
-    if (decoded.session_id && (!req.user.session_id || decoded.session_id !== req.user.session_id)) {
-      return res.status(401).json({
-        status: 401,
-        message: 'Your session has expired or you have been logged out. Please log in again.',
-        error: 'session_expired'
-      });
+    // Multi-device session check: Invalidate token only if this device's session was logged out
+    if (decoded.session_id) {
+      const activeSessions = Array.isArray(req.user.session_ids) && req.user.session_ids.length > 0
+        ? req.user.session_ids
+        : (req.user.session_id ? [req.user.session_id] : []);
+
+      if (!activeSessions.includes(decoded.session_id)) {
+        return res.status(401).json({
+          status: 401,
+          message: 'Your session has expired or you have been logged out on this device. Please log in again.',
+          error: 'session_expired'
+        });
+      }
     }
 
     if (req.user.role_id && req.user.role_id.status === 0) {
