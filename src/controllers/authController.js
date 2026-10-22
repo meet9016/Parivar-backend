@@ -150,8 +150,45 @@ const login = async (req, res) => {
   }
 };
 
+const logout = async (req, res) => {
+  try {
+    const { getTokenFromRequest } = require('../middleware/auth');
+    const token = getTokenFromRequest(req);
+    let userId = req.user?._id || req.user?.id;
+
+    if (!userId && token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true });
+        userId = decoded.id || decoded._id || decoded.userId;
+      } catch (_) {}
+    }
+
+    const reqFcmToken = req.body?.fcm_token || req.query?.fcm_token;
+    const UserModel = req.tenantConn?.models?.User || User;
+
+    if (userId) {
+      await UserModel.findByIdAndUpdate(userId, {
+        session_id: null,
+        fcm_token: ''
+      });
+    }
+
+    if (reqFcmToken && typeof reqFcmToken === 'string' && reqFcmToken.trim()) {
+      await UserModel.updateMany(
+        { fcm_token: reqFcmToken.trim() },
+        { $set: { fcm_token: '' } }
+      );
+    }
+
+    return apiResponse(res, 200, 'Logged out successfully');
+  } catch (error) {
+    console.error('[LOGOUT ERROR]:', error);
+    return apiResponse(res, 200, 'Logged out successfully');
+  }
+};
+
 const versionCode = async (req, res) => {
   return apiResponse(res, 200, 'Version code fetch successfully', []);
 };
 
-module.exports = { login, versionCode };
+module.exports = { login, logout, versionCode };

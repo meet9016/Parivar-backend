@@ -253,7 +253,7 @@ const register = async (req, res) => {
 
       email: email ? email.toLowerCase() : '',
       password: password || '12345',
-      number,
+      number: trimmedNumber,
       gender,
       dob,
       anniversary,

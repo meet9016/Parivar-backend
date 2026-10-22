@@ -38,14 +38,30 @@ router.post('/', parseForm, userController.register)
 // router.post('/login', parseForm, userController.login);
 router.get('/profile', protect, userController.getProfile);
 
+const { logout } = require('../controllers/authController');
+
+router.post('/logout', logout);
+router.get('/logout', logout);
+
 router.post('/fcm-token', protect, async (req, res) => {
     try {
         const token = req.body.fcm_token || req.query.fcm_token;
         if (!token) return apiResponse(res, 400, 'FCM token required');
-        await User.findByIdAndUpdate(req.user._id || req.user.id, { fcm_token: token });
+        const UserModel = req.tenantConn?.models?.User || User;
+        await UserModel.findByIdAndUpdate(req.user._id || req.user.id, { fcm_token: token });
         return apiResponse(res, 200, 'FCM token saved');
     } catch (e) {
         return apiResponse(res, 500, 'Error saving FCM token');
+    }
+});
+
+router.delete('/fcm-token', protect, async (req, res) => {
+    try {
+        const UserModel = req.tenantConn?.models?.User || User;
+        await UserModel.findByIdAndUpdate(req.user._id || req.user.id, { fcm_token: '' });
+        return apiResponse(res, 200, 'FCM token removed');
+    } catch (e) {
+        return apiResponse(res, 500, 'Error removing FCM token');
     }
 });
 

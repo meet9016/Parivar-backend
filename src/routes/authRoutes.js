@@ -1,7 +1,7 @@
 const express = require('express');
 // const { login } = require('../controllers/adminController');
 const { parseForm } = require('../middleware/upload');
-const { login } = require('../controllers/authController');
+const { login, logout } = require('../controllers/authController');
 
 const { protect, getRolePermissions } = require('../middleware/auth');
 
@@ -31,18 +31,7 @@ router.get('/me', protect, (req, res) => {
   return res.status(200).json({ status: 200, message: 'Profile fetched', data: userData });
 });
 
-router.post('/logout', protect, async (req, res) => {
-  try {
-    const User = require('../models/userModels');
-    if (req.user && (req.user._id || req.user.id)) {
-      const targetId = req.user._id || req.user.id;
-      const UserModel = req.tenantConn?.models?.User || User;
-      await UserModel.findByIdAndUpdate(targetId, { session_id: null });
-    }
-    return res.status(200).json({ status: 200, message: 'Logged out successfully' });
-  } catch (err) {
-    return res.status(200).json({ status: 200, message: 'Logged out successfully' });
-  }
-});
+router.post('/logout', logout);
+router.get('/logout', logout);
 
 module.exports = router;
