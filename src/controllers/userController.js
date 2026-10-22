@@ -129,6 +129,7 @@ const register = async (req, res) => {
     }
 
     const trimmedNumber = rawNumberInput ? String(rawNumberInput).trim() : '';
+    const number = trimmedNumber;
     const trimmedEmail = email ? String(email).trim().toLowerCase() : '';
 
     // Check if mobile number is already registered in DB (only existing non-deleted users)
@@ -288,10 +289,14 @@ const register = async (req, res) => {
       status: familyData.status,
       amount: req.body.amount !== undefined && req.body.amount !== '' ? Number(req.body.amount) : 0,
     });
-    const Role = require('../models/roleModel');
-    const defaultRole = await Role.findOne({ name: 'UserRole' });
-    if (defaultRole) {
-      newUser.role_id = defaultRole._id;
+    if (req.body.role_id && mongoose.isValidObjectId(req.body.role_id)) {
+      newUser.role_id = req.body.role_id;
+    } else {
+      const Role = require('../models/roleModel');
+      const defaultRole = await Role.findOne({ name: 'UserRole' });
+      if (defaultRole) {
+        newUser.role_id = defaultRole._id;
+      }
     }
 
     await newUser.save();
@@ -360,6 +365,7 @@ const register = async (req, res) => {
       data: registeredData
     });
   } catch (error) {
+    console.error('Error registering user:', error);
     res.status(500).json({ message: 'Error registering user', error: error.message });
   }
 };
