@@ -50,23 +50,8 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
 
 const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {}) => {
   try {
-    const users = await User.find({
-      $or: [
-        { fcm_token: { $exists: true, $ne: '' } },
-        { fcm_tokens: { $exists: true, $ne: [] } }
-      ]
-    }, 'fcm_token fcm_tokens').lean();
-
-    const allTokens = [];
-    users.forEach(u => {
-      if (Array.isArray(u.fcm_tokens) && u.fcm_tokens.length > 0) {
-        allTokens.push(...u.fcm_tokens);
-      } else if (u.fcm_token) {
-        allTokens.push(u.fcm_token);
-      }
-    });
-
-    const tokens = [...new Set(allTokens.map(t => String(t).trim()).filter(Boolean))];
+    const users = await User.find({ fcm_token: { $exists: true, $ne: '' } }, 'fcm_token').lean();
+    const tokens = [...new Set(users.map(u => u.fcm_token && String(u.fcm_token).trim()).filter(Boolean))];
     await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
   } catch (err) {
     console.error('[FCM Broadcast Error]:', err.message);
@@ -77,26 +62,10 @@ const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '',
   try {
     if (!userIds || !userIds.length) return;
     const users = await User.find(
-      {
-        _id: { $in: userIds },
-        $or: [
-          { fcm_token: { $exists: true, $ne: '' } },
-          { fcm_tokens: { $exists: true, $ne: [] } }
-        ]
-      },
-      'fcm_token fcm_tokens'
+      { _id: { $in: userIds }, fcm_token: { $exists: true, $ne: '' } },
+      'fcm_token'
     ).lean();
-
-    const allTokens = [];
-    users.forEach(u => {
-      if (Array.isArray(u.fcm_tokens) && u.fcm_tokens.length > 0) {
-        allTokens.push(...u.fcm_tokens);
-      } else if (u.fcm_token) {
-        allTokens.push(u.fcm_token);
-      }
-    });
-
-    const tokens = [...new Set(allTokens.map(t => String(t).trim()).filter(Boolean))];
+    const tokens = [...new Set(users.map(u => u.fcm_token && String(u.fcm_token).trim()).filter(Boolean))];
     await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
   } catch (err) {
     console.error('[FCM Targeted Error]:', err.message);
