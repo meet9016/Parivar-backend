@@ -3,8 +3,8 @@ const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
 const { sendSMS } = require('../utils/smsService');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
-const MEMBER_TOKEN_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1d';
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/authConfig');
+const MEMBER_TOKEN_EXPIRES_IN = JWT_EXPIRES_IN;
 
 const requestData = (req) => ({ ...req.query, ...req.body });
 

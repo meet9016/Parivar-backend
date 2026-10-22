@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const User = require('../models/userModels');
 const CommitteeMember = require('../models/committeeMemberModel');
 const { ALL_PERMISSION_KEYS } = require('../config/permissions');
+const { JWT_SECRET } = require('../config/authConfig');
 
 const isInvalidTokenValue = (token) => {
   if (!token) {
@@ -224,7 +225,7 @@ const protect = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretfamilykey');
+    const decoded = jwt.verify(token, JWT_SECRET);
     req.user = await findUserFromToken(decoded, req);
 
     if (!req.user) {
