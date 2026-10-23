@@ -49,23 +49,6 @@ const normalizeAuthUser = async (conn, rawUser, isCommittee = false) => {
 
   if (isCommittee) {
     userObj.is_committee = true;
-    if (userObj.number) {
-      try {
-        const linkedUser = await UserModel.findOne({ number: userObj.number }).lean();
-        if (linkedUser) {
-          if (!userObj.village && (linkedUser.village || linkedUser.village_name)) {
-            userObj.village = linkedUser.village || linkedUser.village_name || '';
-            userObj.village_id = linkedUser.village_id || '';
-          }
-          if (!userObj.city_id && linkedUser.city_id) userObj.city_id = linkedUser.city_id;
-          if (!userObj.city && (linkedUser.city || linkedUser.city_name)) userObj.city = linkedUser.city || linkedUser.city_name || '';
-          if (!userObj.district_id && linkedUser.district_id) userObj.district_id = linkedUser.district_id;
-          if (!userObj.district && (linkedUser.district || linkedUser.district_name)) userObj.district = linkedUser.district || linkedUser.district_name || '';
-          if (!userObj.state_id && linkedUser.state_id) userObj.state_id = linkedUser.state_id;
-          if (!userObj.state && (linkedUser.state || linkedUser.state_name)) userObj.state = linkedUser.state || linkedUser.state_name || '';
-        }
-      } catch (_) {}
-    }
   }
 
   // Resolve village if it's an ObjectId or missing name
@@ -273,7 +256,7 @@ const protect = async (req, res, next) => {
 
 const getRolePermissions = (user = {}) => {
   const roleName = user.role_id?.name?.toLowerCase() || user.role_id?.roleName?.toLowerCase() || String(user.role || '').toLowerCase();
-  if (roleName === 'admin' || roleName === 'super admin' || user.role === 'superadmin' || user.committee_role === 'President' || user.is_super_admin === true || (user.is_committee === true && (!user.role_id || user.committee_role === 'Admin'))) {
+  if (roleName === 'admin' || roleName === 'super admin' || roleName === 'main admin' || roleName.includes('admin') || user.role === 'superadmin' || user.committee_role === 'President' || user.is_super_admin === true || (user.is_committee === true && (!user.role_id || user.committee_role === 'Admin'))) {
     return ALL_PERMISSION_KEYS;
   }
 

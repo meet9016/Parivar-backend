@@ -72,14 +72,14 @@ const getcommitteeMembers = async (req, res) => {
         role_id: member.role_id?._id ? String(member.role_id._id) : (member.role_id || ''),
         role_name: member.role_id?.name || '',
         designation: member.designation || '',
-        state: member.state || linkedUser?.state || linkedUser?.state_name || '',
-        state_id: member.state_id || linkedUser?.state_id || '',
-        district: member.district || linkedUser?.district || linkedUser?.district_name || '',
-        district_id: member.district_id || linkedUser?.district_id || '',
-        city: member.city || linkedUser?.city || linkedUser?.city_name || '',
-        city_id: member.city_id || linkedUser?.city_id || '',
-        village: villageName || '',
-        village_id: villageId || '',
+        state: member.state || '',
+        state_id: member.state_id || '',
+        district: member.district || '',
+        district_id: member.district_id || '',
+        city: member.city || '',
+        city_id: member.city_id || '',
+        village: villageName || member.village || '',
+        village_id: villageId || member.village_id || '',
         status: Number(member.status ?? 1),
         image: publicUrl(req, member.signature || member.image || '')
       };
@@ -119,27 +119,6 @@ const createcommitteeMember = async (req, res) => {
       image,
       status: status !== undefined ? Number(status) : 1
     };
-
-    if (memberData.number) {
-      try {
-        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
-        const linkedUser = await UserModel.findOne({ number: memberData.number }).lean();
-        if (linkedUser) {
-          if (!memberData.village && (linkedUser.village || linkedUser.village_name)) {
-            memberData.village = linkedUser.village || linkedUser.village_name;
-            memberData.village_id = linkedUser.village_id || '';
-          }
-          if (!memberData.city_id && linkedUser.city_id) memberData.city_id = linkedUser.city_id;
-          if (!memberData.city && (linkedUser.city || linkedUser.city_name)) memberData.city = linkedUser.city || linkedUser.city_name;
-          if (!memberData.district_id && linkedUser.district_id) memberData.district_id = linkedUser.district_id;
-          if (!memberData.district && (linkedUser.district || linkedUser.district_name)) memberData.district = linkedUser.district || linkedUser.district_name;
-          if (!memberData.state_id && linkedUser.state_id) memberData.state_id = linkedUser.state_id;
-          if (!memberData.state && (linkedUser.state || linkedUser.state_name)) memberData.state = linkedUser.state || linkedUser.state_name;
-        }
-      } catch (e) {
-        console.warn('Could not auto-fetch location for committee member from User:', e.message);
-      }
-    }
 
     if (email && email.trim()) {
       const emailLower = email.trim().toLowerCase();
@@ -200,41 +179,7 @@ const updatecommitteeMember = async (req, res) => {
       delete updateData.role_id;
     }
 
-    const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
-    let memberPhone = updateData.number;
-    if (!memberPhone && id) {
-      const currentDoc = await CommitteeMember.findById(id).lean();
-      memberPhone = currentDoc?.number;
-    }
-    const cleanPh = memberPhone ? String(memberPhone).trim().replace(/\D/g, '').slice(-10) : '';
 
-    if (updateData.village !== undefined || updateData.village_id !== undefined) {
-      // If village is explicitly provided/updated, also update the linked user
-      if (cleanPh) {
-        try {
-          const userUpdate = {};
-          if (updateData.village !== undefined) userUpdate.village = updateData.village;
-          if (updateData.village_id !== undefined) userUpdate.village_id = updateData.village_id;
-          await UserModel.updateMany(
-            { number: { $regex: new RegExp(cleanPh + '$') } },
-            { $set: userUpdate }
-          );
-        } catch (e) {
-          console.warn('Could not sync committee village to User:', e.message);
-        }
-      }
-    } else if (cleanPh) {
-      // If village was not explicitly passed, sync from linked user if present
-      try {
-        const linkedUser = await UserModel.findOne({ number: { $regex: new RegExp(cleanPh + '$') } }).lean();
-        if (linkedUser && (linkedUser.village || linkedUser.village_name)) {
-          updateData.village = linkedUser.village || linkedUser.village_name;
-          if (linkedUser.village_id) updateData.village_id = linkedUser.village_id;
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
 
     const committeeMember = await CommitteeMember.findByIdAndUpdate(id, updateData, { new: true }).populate('role_id');
     if (!committeeMember) {

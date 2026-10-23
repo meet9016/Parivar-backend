@@ -498,17 +498,7 @@ const getUsers = async (req, res) => {
       } catch (_) { }
     }
 
-    if (!committeeVillage && req.user?.number) {
-      try {
-        const UserModel = req?.tenantConn ? (req.tenantConn.models.User || req.tenantConn.model('User', require('../models/userModels').schema)) : require('../models/userModels');
-        const uDoc = await UserModel.findOne({ number: req.user.number }).lean();
-        if (uDoc) {
-          committeeVillage = (uDoc.village || uDoc.village_name || '').trim();
-        }
-      } catch (_) { }
-    }
-
-    const targetVillage = (userScope.scopeType === 'village' && (userScope.villageName || committeeVillage))
+    const targetVillage = (userScope.isRestricted && userScope.scopeType === 'village')
       ? (userScope.villageName || committeeVillage)
       : (req.query.village ? String(req.query.village).trim() : '');
 

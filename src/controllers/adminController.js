@@ -245,17 +245,11 @@ const loginAdmin = async (req, res) => {
           }
           const permissions = getRolePermissions(cm);
           const token = jwt.sign({ id: cm._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-          const isSuperAdmin = cm.designation === 'President' || cm.role_id?.name?.toLowerCase() === 'admin' || cm.role_id?.name?.toLowerCase() === 'super admin' || (!cm.role_id && cm.designation === 'Admin');
+          const roleNameLower = cm.role_id?.name?.toLowerCase() || '';
+          const isSuperAdmin = cm.designation === 'President' || roleNameLower === 'admin' || roleNameLower === 'super admin' || roleNameLower === 'main admin' || roleNameLower.includes('main admin') || roleNameLower.includes('super admin') || (!cm.role_id && cm.designation === 'Admin');
 
-          let cmVillage = cm.village || '';
-          let cmVillageId = cm.village_id || '';
-          if (!cmVillage && cm.number) {
-            const linkedU = await U.findOne({ number: cm.number }).lean();
-            if (linkedU) {
-              cmVillage = linkedU.village || linkedU.village_name || '';
-              cmVillageId = linkedU.village_id || '';
-            }
-          }
+          const cmVillage = cm.village || cm.village_name || '';
+          const cmVillageId = cm.village_id || '';
 
           const userData = {
             id: String(cm._id),
@@ -267,6 +261,12 @@ const loginAdmin = async (req, res) => {
             village: cmVillage,
             village_name: cmVillage,
             village_id: cmVillageId,
+            state: cm.state || '',
+            state_id: cm.state_id || '',
+            district: cm.district || '',
+            district_id: cm.district_id || '',
+            city: cm.city || '',
+            city_id: cm.city_id || '',
             role_id: cm.role_id?._id ? String(cm.role_id._id) : (cm.role_id || ''),
             role_name: cm.role_id?.name || '',
             permissions,
@@ -294,7 +294,8 @@ const loginAdmin = async (req, res) => {
             return { errorStatus: 403, errorMessage: 'Access denied: Insufficient permissions' };
           }
           const token = jwt.sign({ id: u._id, tenant_code: tenantSlug }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-          const isSuperAdmin = u.role === 'superadmin' || u.committee_role === 'President' || u.role_id?.name?.toLowerCase() === 'admin' || u.role_id?.name?.toLowerCase() === 'super admin' || (!u.role_id && (u.role === 'admin' || u.committee_role === 'Admin'));
+          const uRoleNameLower = u.role_id?.name?.toLowerCase() || '';
+          const isSuperAdmin = u.role === 'superadmin' || u.committee_role === 'President' || uRoleNameLower === 'admin' || uRoleNameLower === 'super admin' || uRoleNameLower === 'main admin' || uRoleNameLower.includes('main admin') || uRoleNameLower.includes('super admin') || (!u.role_id && (u.role === 'admin' || u.committee_role === 'Admin'));
 
           const userData = {
             id: u.id || String(u._id),

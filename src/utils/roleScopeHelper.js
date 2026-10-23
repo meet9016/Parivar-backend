@@ -50,6 +50,9 @@ const getUserRoleScope = async (user, conn) => {
     user.committee_role === 'President' ||
     roleName === 'admin' ||
     roleName === 'super admin' ||
+    roleName === 'main admin' ||
+    roleName.includes('main admin') ||
+    roleName.includes('super admin') ||
     (!user.role_id && (user.role === 'admin' || user.committee_role === 'Admin'))
   );
 
@@ -61,52 +64,6 @@ const getUserRoleScope = async (user, conn) => {
     };
   }
 
-  // Detect Scope Type by Role Name / Committee Role / Designation
-  let scopeType = null;
-
-  if (roleName.includes('state') || roleName.includes('rajya') || roleName.includes('state pramukh')) {
-    scopeType = 'state';
-  } else if (roleName.includes('district') || roleName.includes('jilla') || roleName.includes('zilla') || roleName.includes('district pramukh')) {
-    scopeType = 'district';
-  } else if (roleName.includes('city') || roleName.includes('shahar') || roleName.includes('city pramukh')) {
-    scopeType = 'city';
-  } else if (
-    roleName.includes('village') ||
-    roleName.includes('gam') ||
-    roleName.includes('gaam') ||
-    roleName.includes('village pramukh') ||
-    roleName.includes('gam pramukh')
-  ) {
-    scopeType = 'village';
-  } else if (user.is_committee || user.role === 'committee') {
-    // Default fallback for committee:
-    // If they have village set, default to village. If they only have district, district. If state, state.
-    if (user.village || user.village_name || user.village_id) {
-      scopeType = 'village';
-    } else if (user.city || user.city_name || user.city_id) {
-      scopeType = 'city';
-    } else if (user.district || user.district_name || user.district_id) {
-      scopeType = 'district';
-    } else if (user.state || user.state_name || user.state_id) {
-      scopeType = 'state';
-    } else {
-      return {
-        isRestricted: false,
-        scopeType: 'all',
-        buildQueryClause: () => ({})
-      };
-    }
-  } else {
-    // Normal user or unrestricted role
-    return {
-      isRestricted: false,
-      scopeType: 'all',
-      buildQueryClause: () => ({})
-    };
-  }
-
-  const escapeRegExp = (s = '') => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
   // Pull assigned location data from user
   const stateId = String(user.state_id || '').trim();
   const stateName = String(user.state || user.state_name || '').trim();
@@ -116,6 +73,53 @@ const getUserRoleScope = async (user, conn) => {
   const cityName = String(user.city || user.city_name || '').trim();
   const villageId = String(user.village_id || '').trim();
   const villageName = String(user.village || user.village_name || '').trim();
+
+  const hasAssignedVillage = Boolean(villageId || villageName);
+  const hasAssignedCity = Boolean(cityId || cityName);
+  const hasAssignedDistrict = Boolean(districtId || districtName);
+  const hasAssignedState = Boolean(stateId || stateName);
+
+  // If role/user has NO assigned Village, City, District, or State, they are completely UNRESTRICTED.
+  // They see all members, all registrations, and all dashboard stats identically to Main Admin.
+  if (!hasAssignedVillage && !hasAssignedCity && !hasAssignedDistrict && !hasAssignedState) {
+    return {
+      isRestricted: false,
+      scopeType: 'all',
+      buildQueryClause: () => ({})
+    };
+  }
+
+  // Detect Scope Type by Role Name / Committee Role / Designation when jurisdiction is assigned
+  let scopeType = null;
+
+  if ((roleName.includes('village') || roleName.includes('gam') || roleName.includes('gaam')) && hasAssignedVillage) {
+    scopeType = 'village';
+  } else if ((roleName.includes('city') || roleName.includes('shahar')) && hasAssignedCity) {
+    scopeType = 'city';
+  } else if ((roleName.includes('district') || roleName.includes('jilla') || roleName.includes('zilla')) && hasAssignedDistrict) {
+    scopeType = 'district';
+  } else if ((roleName.includes('state') || roleName.includes('rajya')) && hasAssignedState) {
+    scopeType = 'state';
+  } else {
+    // Custom or general roles with assigned jurisdiction: use the finest assigned jurisdiction
+    if (hasAssignedVillage) {
+      scopeType = 'village';
+    } else if (hasAssignedCity) {
+      scopeType = 'city';
+    } else if (hasAssignedDistrict) {
+      scopeType = 'district';
+    } else if (hasAssignedState) {
+      scopeType = 'state';
+    } else {
+      return {
+        isRestricted: false,
+        scopeType: 'all',
+        buildQueryClause: () => ({})
+      };
+    }
+  }
+
+  const escapeRegExp = (s = '') => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // Helper to construct Mongoose query clause
   const buildQueryClause = (modelType = 'user') => {
