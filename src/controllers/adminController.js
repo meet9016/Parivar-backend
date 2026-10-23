@@ -600,7 +600,7 @@ const getStats = async (req, res) => {
     ]);
 
     const [
-      userCount, businessCount,
+      userCount, businessCount, postCount, eventCount, committeeCount,
       lastMonthUsers, lastMonthBusinesses, lastMonthPosts, lastMonthEvents,
       thisMonthUsers, thisMonthBusinesses, thisMonthPosts, thisMonthEvents,
       recentMembers, recentEvents, recentPosts,
@@ -660,22 +660,26 @@ const getStats = async (req, res) => {
     });
 
     // Build Recent Activity Feed (Using Recent Events instead of Recent Businesses per instruction)
+    const safeMembers = Array.isArray(recentMembers) ? recentMembers : [];
+    const safeEvents = Array.isArray(recentEvents) ? recentEvents : [];
+    const safePosts = Array.isArray(recentPosts) ? recentPosts : [];
+
     const combinedActivity = [
-      ...recentMembers.map(m => ({
+      ...safeMembers.map(m => ({
         id: m._id,
         title: `${m.first_name} ${m.last_name || ''} joined the family directory`,
         time: m.createdAt,
         type: 'member',
         icon: 'user'
       })),
-      ...recentEvents.map(e => ({
+      ...safeEvents.map(e => ({
         id: e._id,
         title: `Event "${e.title}" was created`,
         time: e.createdAt,
         type: 'business', // keeping same color style
         icon: 'calendar'
       })),
-      ...recentPosts.map(p => ({
+      ...safePosts.map(p => ({
         id: p._id,
         title: `${p.title} published on community board`,
         time: p.createdAt,
@@ -701,14 +705,14 @@ const getStats = async (req, res) => {
         donations: { total: donationCount, growth: donationsGrowth }
       },
       tables: {
-        recentMembers: recentMembers.map(m => ({
+        recentMembers: safeMembers.map(m => ({
           _id: m._id,
           name: `${m.first_name} ${m.last_name || ''}`,
           email: m.email,
           status: m.status === 1 ? 'Approved' : 'Pending',
           image: m.image
         })),
-        recentEvents: recentEvents.map(e => ({
+        recentEvents: safeEvents.map(e => ({
           _id: e._id,
           title: e.title,
           date: e.start_time,
@@ -716,7 +720,7 @@ const getStats = async (req, res) => {
           status: e.status === 1 ? 'Active' : 'Inactive',
           image: e.image
         })),
-        recentPosts: recentPosts.map(p => ({
+        recentPosts: safePosts.map(p => ({
           _id: p._id,
           title: p.title,
           date: p.createdAt,
