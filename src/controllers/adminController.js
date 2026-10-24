@@ -558,7 +558,10 @@ const getStats = async (req, res) => {
         TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
         TJobVacancy.countDocuments({ status: 1, createdAt: { $gte: startOfThisMonth } }),
         TDonation.countDocuments({ createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
-        TDonation.countDocuments({ createdAt: { $gte: startOfThisMonth } })
+        TDonation.countDocuments({ createdAt: { $gte: startOfThisMonth } }),
+        TUser.countDocuments({ $or: [{ familyHead: true }, { relation: 'Self' }] }),
+        TUser.countDocuments({ $or: [{ familyHead: true }, { relation: 'Self' }], createdAt: { $gte: startOfLastMonth, $lt: startOfThisMonth } }),
+        TUser.countDocuments({ $or: [{ familyHead: true }, { relation: 'Self' }], createdAt: { $gte: startOfThisMonth } })
       ]),
       // 2. Business Category Counts
       TBusiness.aggregate([
@@ -608,7 +611,8 @@ const getStats = async (req, res) => {
       lastMonthStudents, thisMonthStudents,
       lastMonthUpcomingEvents, thisMonthUpcomingEvents,
       lastMonthJobs, thisMonthJobs,
-      lastMonthDonations, thisMonthDonations
+      lastMonthDonations, thisMonthDonations,
+      mainHeadCount, lastMonthMainHeads, thisMonthMainHeads
     ] = initialStats;
 
     // Calculate percentage changes (This Month vs Last Month)
@@ -623,6 +627,7 @@ const getStats = async (req, res) => {
     const eventsGrowth = calcGrowth(thisMonthEvents, lastMonthEvents);
     const studentsGrowth = calcGrowth(thisMonthStudents, lastMonthStudents);
     const upcomingEventsGrowth = calcGrowth(thisMonthUpcomingEvents, lastMonthUpcomingEvents);
+    const mainHeadsGrowth = calcGrowth(thisMonthMainHeads, lastMonthMainHeads);
     const activeJobsGrowth = calcGrowth(thisMonthJobs, lastMonthJobs);
     const donationsGrowth = calcGrowth(thisMonthDonations, lastMonthDonations);
 
@@ -701,6 +706,8 @@ const getStats = async (req, res) => {
         businesses: { total: totalActivityBusinesses, growth: businessGrowth },
         students: { total: studentCount, growth: studentsGrowth },
         upcomingEvents: { total: upcomingEventCount, growth: upcomingEventsGrowth },
+        mainHeads: { total: mainHeadCount, growth: mainHeadsGrowth },
+        familyHeads: { total: mainHeadCount, growth: mainHeadsGrowth },
         activeJobs: { total: activeJobCount, growth: activeJobsGrowth },
         donations: { total: donationCount, growth: donationsGrowth }
       },
@@ -731,6 +738,7 @@ const getStats = async (req, res) => {
       recentActivity: combinedActivity,
       atAGlance: {
         activeMembers: userCount,
+        mainHeads: mainHeadCount,
         activeBusinesses: businessCount,
         postsThisMonth: thisMonthPosts,
         upcomingEvents: 0

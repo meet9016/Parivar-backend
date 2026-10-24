@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const JobVacancy = require('../models/jobVacancy');
 const { apiResponse, fullName, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const imageFromRequest = (req, fallback = '') => {
   if (req.file) return `/uploads/${req.file.filename}`;
@@ -181,4 +182,116 @@ const deleteJobVacancy = async (req, res) => {
   }
 };
 
-module.exports = { getJobVacancies, getJobVacancyById, postJobVacancy, deleteJobVacancy }
+const exportJobVacancies = async (req, res) => {
+  try {
+    let baseQuery = {};
+    const { is_own, search, status, job_type } = req.query;
+    const user = req.user;
+
+    if (user && is_own === 'true') {
+      const userIds = [
+        String(user._id || ''),
+        String(user.id || ''),
+        String(user.member_id || '')
+      ].filter(Boolean);
+
+      const validObjectIds = userIds
+        .filter(id => mongoose.isValidObjectId(id))
+        .map(id => new mongoose.Types.ObjectId(id));
+
+      baseQuery.$or = [
+        { 'created_by.id': { $in: validObjectIds } },
+        { member_id: { $in: userIds } }
+      ];
+    }
+
+    if (status !== undefined && status !== null && status !== '') {
+      baseQuery.status = Number(status);
+    }
+    if (job_type) {
+      baseQuery.job_type = String(job_type);
+    }
+
+    if (search && String(search).trim()) {
+      const searchRegex = new RegExp(String(search).trim(), 'i');
+      baseQuery.$or = [
+        { title: searchRegex },
+        { company_name: searchRegex },
+        { location: searchRegex },
+        { description: searchRegex },
+        { qualifications: searchRegex },
+        { contact_number: searchRegex },
+        { contact_email: searchRegex }
+      ];
+    }
+
+    const jobVacancies = await JobVacancy.find(baseQuery).sort({ createdAt: -1 }).lean();
+
+    const formatJobType = (type) => {
+      if (!type) return '-';
+      const map = {
+        'full-time': 'Full Time',
+        'part-time': 'Part Time',
+        'contract': 'Contract',
+        'internship': 'Internship'
+      };
+      return map[String(type).toLowerCase()] || type;
+    };
+
+    const columns = [
+      { header: 'JOB TITLE', key: 'title', width: 30, align: 'left', bold: true },
+      { header: 'COMPANY', key: 'company_name', width: 28, align: 'left' },
+      { header: 'LOCATION', key: 'location', width: 24, align: 'left' },
+      { header: 'JOB TYPE', key: 'job_type', width: 16, align: 'center' },
+      { header: 'SALARY', key: 'salary', width: 20, align: 'center' },
+      { header: 'CONTACT NUMBER', key: 'contact_number', width: 18, align: 'center' },
+      { header: 'CONTACT EMAIL', key: 'contact_email', width: 28, align: 'left' },
+      { header: 'QUALIFICATIONS', key: 'qualifications', width: 32, align: 'left' },
+      { header: 'DESCRIPTION', key: 'description', width: 40, align: 'left' },
+      { header: 'POSTED BY', key: 'posted_by', width: 24, align: 'left' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' }
+    ];
+
+    const rows = jobVacancies.map(job => ({
+      title: job.title || '-',
+      company_name: job.company_name || '-',
+      location: job.location || '-',
+      job_type: formatJobType(job.job_type),
+      salary: job.salary || '-',
+      contact_number: job.contact_number ? String(job.contact_number) : '',
+      contact_email: job.contact_email || '',
+      qualifications: job.qualifications || '-',
+      description: job.description || '-',
+      posted_by: job.created_by?.name || '-',
+      status: Number(job.status ?? 0) === 1 ? 'Active' : 'Inactive'
+    }));
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Job_Vacancies',
+      sheetName: 'Job Vacancies',
+      columns,
+      rows
+    });
+
+    return apiResponse(res, 200, 'Job vacancies exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting job vacancies', { error: error.message });
+  }
+};
+
+const downloadExportedJobVacancies = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
+
+module.exports = { 
+  getJobVacancies, 
+  getJobVacancyById, 
+  postJobVacancy, 
+  deleteJobVacancy,
+  exportJobVacancies,
+  downloadExportedJobVacancies
+};

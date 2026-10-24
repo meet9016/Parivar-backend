@@ -8,6 +8,7 @@ const { deleteFileFromExternalService } = require('../utils/fileUpload');
 const queryHelper = require('../utils/queryHelper');
 const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
 const XLSX = require('xlsx');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretfamilykey';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '365d';
@@ -1152,6 +1153,9 @@ const bulkImportUsers = async (req, res) => {
  * Respects search, gender, status, blood_group, village filters.
  */
 const exportUsers = async (req, res) => {
+  if ('birthday' in req.query) {
+    return exportBirthdays(req, res);
+  }
   try {
     const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
@@ -1257,8 +1261,19 @@ const exportUsers = async (req, res) => {
         .populate('role_id');
     }
 
-    // Prepare rows for Excel
-    const excelRows = [];
+    const columns = [
+      { header: 'Member ID', key: 'member_id', width: 14, align: 'center' },
+      { header: 'Name', key: 'name', width: 36, align: 'left' },
+      { header: 'Relation', key: 'relation', width: 24, align: 'left' },
+      { header: 'Mobile Number', key: 'number', width: 18, align: 'center' },
+      { header: 'Email', key: 'email', width: 30, align: 'left' },
+      { header: 'Gender', key: 'gender', width: 12, align: 'center' },
+      { header: 'Blood Group', key: 'blood_group', width: 14, align: 'center' },
+      { header: 'Village', key: 'village', width: 26, align: 'left' },
+      { header: 'Status', key: 'status', width: 14, align: 'center' }
+    ];
+
+    const rows = [];
     for (const head of heads) {
       const headIdStr = String(head._id);
       const headMemberIdStr = String(head.member_id || '');
@@ -1270,62 +1285,292 @@ const exportUsers = async (req, res) => {
       });
 
       // Add Head row
-      excelRows.push({
-        'Member ID': head.member_id || '',
-        'Name': fullName(head),
-        'Relation': 'Family Head (મુખ્ય)',
-        'Mobile Number': head.number || '',
-        'Email': head.email || 'No Email',
-        'Gender': head.gender || '',
-        'Blood Group': head.blood_group || '',
-        'Village': head.village || '',
-        'Status': Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive'
+      rows.push({
+        _isHead: true,
+        member_id: head.member_id || '',
+        name: fullName(head),
+        relation: 'Family Head (મુખ્ય)',
+        number: head.number ? String(head.number) : '',
+        email: head.email || '',
+        gender: head.gender || '',
+        blood_group: head.blood_group || '',
+        village: head.village || '',
+        status: Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive'
       });
 
       // Add Child members under head
       for (const child of matchingChildren) {
-        excelRows.push({
-          'Member ID': child.member_id || '',
-          'Name': `  ↳ ${fullName(child)}`,
-          'Relation': child.relation || 'Member',
-          'Mobile Number': child.number || '',
-          'Email': child.email || 'No Email',
-          'Gender': child.gender || '',
-          'Blood Group': child.blood_group || '',
-          'Village': child.village || head.village || '',
-          'Status': Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive'
+        rows.push({
+          _isChild: true,
+          _height: 20,
+          member_id: child.member_id || '',
+          name: `  • ${fullName(child)}`,
+          relation: child.relation || 'Member',
+          number: child.number ? String(child.number) : '',
+          email: child.email || '',
+          gender: child.gender || '',
+          blood_group: child.blood_group || '',
+          village: child.village || head.village || '',
+          status: Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive'
         });
       }
     }
 
-    // Build worksheet and workbook
-    const worksheet = XLSX.utils.json_to_sheet(excelRows);
-    worksheet['!cols'] = [
-      { wch: 15 }, // Member ID
-      { wch: 35 }, // Name
-      { wch: 25 }, // Relation
-      { wch: 20 }, // Mobile Number
-      { wch: 30 }, // Email
-      { wch: 15 }, // Gender
-      { wch: 15 }, // Blood Group
-      { wch: 20 }, // Village
-      { wch: 15 }  // Status
-    ];
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Family_Registry',
+      sheetName: 'Family Registry',
+      columns,
+      rows,
+      rowFormatter: (row, item) => {
+        if (item._isHead) {
+          row.height = 22;
+          const nameCell = row.getCell('name');
+          nameCell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FF000000' } };
+          const relCell = row.getCell('relation');
+          relCell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FF1B365D' } };
+        } else if (item._isChild) {
+          row.height = 20;
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            if (cell.font) cell.font.size = 10;
+          });
+          const nameCell = row.getCell('name');
+          nameCell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1F2937' } };
+          const relCell = row.getCell('relation');
+          relCell.font = { name: 'Calibri', size: 10, color: { argb: 'FF4B5563' } };
+        }
+      }
+    });
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Family Registry');
-
-    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="Family_Registry_${new Date().toISOString().slice(0, 10)}.xlsx"`);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    return res.status(200).send(buffer);
+    return apiResponse(res, 200, 'Family registry exported successfully', {
+      download_url,
+      filename,
+    });
   } catch (error) {
     return apiResponse(res, 500, 'Error exporting users', { error: error.message });
   }
+};
+
+/**
+ * Export Birthdays and Anniversaries as an Excel sheet from backend.
+ * Respects search, status, dob_month, dob_year, dob_start, dob_end filters.
+ */
+const exportBirthdays = async (req, res) => {
+  try {
+    const query = {
+      dob: { $exists: true, $ne: null }
+    };
+
+    const conditions = [];
+    if (req.query.dob_month) {
+      conditions.push({
+        $and: [
+          { $eq: [{ $type: "$dob" }, "date"] },
+          { $eq: [{ $month: "$dob" }, Number(req.query.dob_month)] }
+        ]
+      });
+    }
+    if (req.query.dob_year) {
+      conditions.push({
+        $and: [
+          { $eq: [{ $type: "$dob" }, "date"] },
+          { $eq: [{ $year: "$dob" }, Number(req.query.dob_year)] }
+        ]
+      });
+    }
+    if (conditions.length > 0) {
+      query.$expr = conditions.length === 1 ? conditions[0] : { $and: conditions };
+    }
+    if (req.query.dob_start || req.query.dob_end) {
+      const range = {};
+      if (req.query.dob_start) range.$gte = new Date(req.query.dob_start);
+      if (req.query.dob_end) range.$lte = new Date(req.query.dob_end);
+      query.dob = { ...query.dob, ...range };
+    }
+
+    if (req.query.status !== undefined && req.query.status !== null && req.query.status !== '') {
+      const sVal = Number(req.query.status);
+      if (!isNaN(sVal)) {
+        if (sVal === 1) {
+          query.$or = [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }];
+        } else {
+          query.$or = [{ status: 0 }, { status: '0' }];
+        }
+      }
+    }
+
+    if (req.query.search && String(req.query.search).trim()) {
+      const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapeRegExp(String(req.query.search).trim()), 'i');
+      const searchFields = ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'];
+      const searchOr = searchFields.map(field => ({ [field]: searchRegex }));
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: searchOr }];
+        delete query.$or;
+      } else {
+        query.$or = searchOr;
+      }
+    }
+
+    const users = await User.find(query).sort({ dob: 1 }).lean();
+
+    const formatBirthdate = (dateVal) => {
+      if (!dateVal) return '-';
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${day}/${month}/${d.getFullYear()}`;
+    };
+
+    const calculateAge = (dateVal) => {
+      if (!dateVal) return '-';
+      const birth = new Date(dateVal);
+      if (isNaN(birth.getTime())) return '-';
+      const today = new Date();
+      let years = today.getFullYear() - birth.getFullYear();
+      let months = today.getMonth() - birth.getMonth();
+      let days = today.getDate() - birth.getDate();
+      if (days < 0) {
+        months--;
+        days += new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+      }
+      if (months < 0) {
+        years--;
+        months += 12;
+      }
+      const parts = [];
+      if (years > 0) parts.push(`${years} ${years === 1 ? 'Year' : 'Years'}`);
+      if (months > 0) parts.push(`${months} ${months === 1 ? 'Month' : 'Months'}`);
+      if (days > 0) parts.push(`${days} ${days === 1 ? 'Day' : 'Days'}`);
+      return parts.length > 0 ? parts.join(', ') : '0 Days';
+    };
+
+    const calculateTimeMarried = (dateVal) => {
+      if (!dateVal) return '-';
+      const ann = new Date(dateVal);
+      if (isNaN(ann.getTime())) return '-';
+      const today = new Date();
+      let years = today.getFullYear() - ann.getFullYear();
+      let months = today.getMonth() - ann.getMonth();
+      let days = today.getDate() - ann.getDate();
+      if (days < 0) {
+        months--;
+        days += new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+      }
+      if (months < 0) {
+        years--;
+        months += 12;
+      }
+      if (years < 0) return '-';
+      const parts = [];
+      if (years > 0) parts.push(`${years} ${years === 1 ? 'Year' : 'Years'}`);
+      if (months > 0) parts.push(`${months} ${months === 1 ? 'Month' : 'Months'}`);
+      if (days > 0) parts.push(`${days} ${days === 1 ? 'Day' : 'Days'}`);
+      return parts.length > 0 ? parts.join(', ') : '0 Days';
+    };
+
+    const isSameDayAndMonth = (dateVal) => {
+      if (!dateVal) return false;
+      const today = new Date();
+      const todayDay = today.getDate();
+      const todayMonth = today.getMonth() + 1;
+
+      if (typeof dateVal === 'string' && dateVal.includes('/')) {
+        const parts = dateVal.split('/');
+        if (parts.length >= 2) {
+          const d = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          return d === todayDay && m === todayMonth;
+        }
+      }
+
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return false;
+
+      return (
+        (d.getUTCDate() === todayDay && (d.getUTCMonth() + 1) === todayMonth) ||
+        (d.getDate() === todayDay && (d.getMonth() + 1) === todayMonth)
+      );
+    };
+
+    // Sort items: today's birthdays or anniversaries first, matching UI behaviour
+    const sortedUsers = [...users].sort((a, b) => {
+      const aToday = isSameDayAndMonth(a.dob) || isSameDayAndMonth(a.anniversary);
+      const bToday = isSameDayAndMonth(b.dob) || isSameDayAndMonth(b.anniversary);
+      if (aToday && !bToday) return -1;
+      if (!aToday && bToday) return 1;
+      return 0;
+    });
+
+    const columns = [
+      { header: 'MEMBER ID', key: 'member_id', width: 14, align: 'center' },
+      { header: 'NAME', key: 'name', width: 32, align: 'left', bold: true },
+      { header: 'MOBILE NUMBER', key: 'number', width: 18, align: 'center' },
+      { header: 'DATE OF BIRTH', key: 'dob', width: 16, align: 'center' },
+      { header: 'AGE', key: 'age', width: 22, align: 'center' },
+      { header: 'ANNIVERSARY DATE', key: 'anniversary', width: 18, align: 'center' },
+      { header: 'TIME MARRIED', key: 'married_for', width: 22, align: 'center' },
+      { header: 'RELATION', key: 'relation', width: 16, align: 'left' },
+      { header: 'VILLAGE', key: 'village', width: 20, align: 'left' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' }
+    ];
+
+    const rows = sortedUsers.map(user => {
+      const isBday = isSameDayAndMonth(user.dob);
+      const isAnniv = isSameDayAndMonth(user.anniversary);
+      let celebrationTag = '';
+      if (isBday && isAnniv) celebrationTag = ' (Today: Birthday & Anniversary! 🎉)';
+      else if (isBday) celebrationTag = ' (Today: Birthday! 🎂)';
+      else if (isAnniv) celebrationTag = ' (Today: Anniversary! 💖)';
+
+      return {
+        _isCelebrantToday: isBday || isAnniv,
+        member_id: user.member_id || '-',
+        name: `${fullName(user)}${celebrationTag}`.trim() || '-',
+        number: user.number ? String(user.number) : '-',
+        dob: formatBirthdate(user.dob),
+        age: calculateAge(user.dob),
+        anniversary: formatBirthdate(user.anniversary),
+        married_for: calculateTimeMarried(user.anniversary),
+        relation: user.relation || '-',
+        village: user.village || '-',
+        status: Number(user.status ?? 1) === 1 ? 'Active' : 'Inactive'
+      };
+    });
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Birthdays_and_Anniversaries',
+      sheetName: 'Birthdays',
+      columns,
+      rows,
+      rowFormatter: (row, item) => {
+        if (item._isCelebrantToday) {
+          row.eachCell({ includeEmpty: true }, (cell) => {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFF3CD' }
+            };
+          });
+          const nameCell = row.getCell('name');
+          nameCell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FF856404' } };
+        }
+      }
+    });
+
+    return apiResponse(res, 200, 'Birthdays exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting birthdays', { error: error.message });
+  }
+};
+
+const downloadExportedUsers = (req, res) => {
+  return sendExportedExcelFile(req, res);
 };
 
 module.exports = {
@@ -1340,5 +1585,7 @@ module.exports = {
   getFamilyMembersByNumber,
   bulkUpdateUsers,
   bulkImportUsers,
-  exportUsers
+  exportUsers,
+  exportBirthdays,
+  downloadExportedUsers
 };

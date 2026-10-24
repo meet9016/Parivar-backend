@@ -3,6 +3,7 @@ const { apiResponse, publicUrl } = require("../utils/apiResponse");
 const CommitteeMember = require('../models/committeeMemberModel');
 const queryHelper = require("../utils/queryHelper");
 const bcrypt = require('bcryptjs');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const getcommitteeMembers = async (req, res) => {
   try {
@@ -148,10 +149,86 @@ const deletecommitteeMember = async (req, res) => {
   }
 };
 
+const exportCommitteeMembers = async (req, res) => {
+  try {
+    let baseQuery = {};
+    if (req.query.role) {
+      const Role = require('../models/roleModel');
+      const roleDoc = await Role.findOne({ name: req.query.role }).lean();
+      if (roleDoc) {
+        baseQuery.role_id = roleDoc._id;
+      }
+    }
+    if (req.query.status !== undefined && req.query.status !== '') {
+      baseQuery.status = Number(req.query.status);
+    }
+    if (req.query.search && String(req.query.search).trim()) {
+      const searchRegex = new RegExp(String(req.query.search).trim(), 'i');
+      baseQuery.$or = [
+        { first_name: searchRegex },
+        { middle_name: searchRegex },
+        { last_name: searchRegex },
+        { number: searchRegex },
+        { email: searchRegex },
+        { designation: searchRegex }
+      ];
+    }
+
+    const members = await CommitteeMember.find(baseQuery)
+      .sort({ createdAt: -1 })
+      .populate('role_id')
+      .lean();
+
+    const columns = [
+      { header: 'NAME', key: 'name', width: 36, align: 'left', bold: true },
+      { header: 'MOBILE NUMBER', key: 'number', width: 20, align: 'center' },
+      { header: 'EMAIL', key: 'email', width: 30, align: 'left' },
+      { header: 'DESIGNATION', key: 'designation', width: 25, align: 'left', bold: true, color: 'FF1B365D' },
+      { header: 'ASSIGNED ROLE', key: 'role', width: 25, align: 'center' },
+      { header: 'STATUS', key: 'status', width: 15, align: 'center' }
+    ];
+
+    const rows = members.map((member) => {
+      const fullName = [member.first_name, member.middle_name, member.last_name].filter(Boolean).join(' ').trim();
+      const roleName = member.role_id?.name || member.role_name || '-';
+      const statusText = Number(member.status ?? 1) === 1 ? 'Active' : 'Inactive';
+
+      return {
+        name: fullName || '-',
+        number: member.number ? String(member.number) : '',
+        email: member.email || '',
+        designation: member.designation || '-',
+        role: roleName,
+        status: statusText
+      };
+    });
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Committee_Members',
+      sheetName: 'Committee Members',
+      columns,
+      rows
+    });
+
+    return apiResponse(res, 200, 'Committee members exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting committee members', { error: error.message });
+  }
+};
+
+const downloadExportedCommitteeMembers = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
+
 module.exports = {
   getcommitteeMembers,
   createcommitteeMember,
   updatecommitteeMember,
-  deletecommitteeMember
-
-};
+  deletecommitteeMember,
+  exportCommitteeMembers,
+  downloadExportedCommitteeMembers
+};

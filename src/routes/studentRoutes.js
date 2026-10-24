@@ -1,7 +1,14 @@
 const express = require('express');
 const { protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
 const { parseForm } = require('../middleware/upload');
-const { getStudents, addStudent, updateStudent, deleteStudent } = require('../controllers/studentController');
+const { 
+  getStudents, 
+  addStudent, 
+  updateStudent, 
+  deleteStudent,
+  exportStudents,
+  downloadExportedStudents
+} = require('../controllers/studentController');
 
 const router = express.Router();
 
@@ -18,6 +25,8 @@ const isAdminCall = (req) => {
 };
 
 router.get('/', optionalProtect, getStudents);
+router.get('/export', protect, exportStudents);
+router.get('/export/download/:filename', downloadExportedStudents);
 
 router.post('/', protect, parseForm, (req, res, next) => {
     if (isAdminCall(req)) {

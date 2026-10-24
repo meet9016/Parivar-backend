@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Donation = require('../models/donationModel');
 const queryHelper = require('../utils/queryHelper');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const requestData = (req) => ({
   ...req.query,
@@ -322,32 +323,84 @@ const adminDeleteDonation = async (req, res) => {
 
 const exportDonations = async (req, res) => {
   try {
-    const { search } = req.query
-    const query = {}
-    if (search) {
-      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
-      query.$or = [{ donator_name: regex }, { donation_purpose: regex }]
+    const { search } = req.query;
+    const query = {};
+
+    if (search && String(search).trim()) {
+      const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapeRegExp(String(search).trim()), 'i');
+      query.$or = [{ donator_name: regex }, { donation_purpose: regex }];
     }
-    const donations = await Donation.find(query).sort({ _id: -1 }).lean()
+
+    const donations = await Donation.find(query).sort({ date: -1, createdAt: -1 }).lean();
+
+    const formatDate = (val) => {
+      if (!val) return '-';
+      try {
+        const str = String(val).trim();
+        if (!str) return '-';
+        if (str.includes('/')) {
+          const parts = str.split('/');
+          if (parts.length === 3) {
+            const d = parts[0].padStart(2, '0');
+            const m = parts[1].padStart(2, '0');
+            const y = parts[2];
+            return `${d}/${m}/${y}`;
+          }
+        }
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return String(val);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      } catch {
+        return String(val || '-');
+      }
+    };
+
+    const columns = [
+      { header: 'DONATOR NAME', key: 'donator_name', width: 28, align: 'left', bold: true },
+      { header: 'AMOUNT (₹)', key: 'donate_amount', width: 18, align: 'right' },
+      { header: 'PURPOSE', key: 'donation_purpose', width: 32, align: 'left' },
+      { header: 'DATE', key: 'date', width: 16, align: 'center' },
+      { header: 'PAYMENT MODE', key: 'payment_mode', width: 18, align: 'center' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' }
+    ];
+
     const rows = donations.map(d => ({
-      'Donator Name': d.donator_name || '',
-      'Amount (₹)': Number(d.donate_amount || 0),
-      'Purpose': d.donation_purpose || '',
-      'Date': d.date || '',
-      'Status': Number(d.status ?? 1) === 1 ? 'Active' : 'Inactive'
-    }))
-    const header = Object.keys(rows[0] || { 'Donator Name': '', 'Amount (₹)': '', 'Purpose': '', 'Date': '', 'Status': '' })
-    const csv = [
-      header.join(','),
-      ...rows.map(row => header.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))
-    ].join('\n')
-    res.setHeader('Content-Type', 'text/csv')
-    res.setHeader('Content-Disposition', 'attachment; filename="donations.csv"')
-    return res.status(200).send(csv)
+      donator_name: d.donator_name || '-',
+      donate_amount: Number(d.donate_amount || 0),
+      donation_purpose: d.donation_purpose || '-',
+      date: formatDate(d.date),
+      payment_mode: d.payment_mode || 'Cash',
+      status: Number(d.status ?? 1) === 1 ? 'Active' : 'Inactive'
+    }));
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Donations',
+      sheetName: 'Donations',
+      columns,
+      rows
+    });
+
+    return res.status(200).json({
+      status: 200,
+      message: 'Donations exported successfully',
+      data: {
+        download_url,
+        filename
+      }
+    });
   } catch (error) {
-    return res.status(500).json({ status: 500, message: 'Export failed', error: error.message })
+    return res.status(500).json({ status: 500, message: 'Export failed', error: error.message });
   }
-}
+};
+
+const downloadExportedDonations = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
 
 module.exports = {
   getDonations,
@@ -357,6 +410,6 @@ module.exports = {
   adminGetDonations,
   adminSaveDonation,
   adminDeleteDonation,
-  exportDonations
-
+  exportDonations,
+  downloadExportedDonations
 };

@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Matrimony = require('../models/matrimonyModel');
 const { apiResponse, fullName } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const createdBy = (req) => {
   const user = req.user || {};
@@ -347,10 +348,127 @@ const deleteMatrimony = async (req, res) => {
   }
 };
 
+const exportMatrimonies = async (req, res) => {
+  try {
+    let baseQuery = {};
+    const { is_own, search, status, gender, marital_status, city } = req.query;
+    const user = req.user;
+
+    if (user && is_own === 'true') {
+      const userIds = [
+        String(user._id || ''),
+        String(user.id || ''),
+        String(user.member_id || '')
+      ].filter(Boolean);
+      const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+      baseQuery.$or = [{ member_id: { $in: userIds } }];
+      if (objectIds.length > 0) {
+        baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
+      }
+    }
+
+    if (status !== undefined && status !== null && status !== '') {
+      baseQuery.status = Number(status);
+    }
+    if (gender) {
+      baseQuery.gender = String(gender);
+    }
+    if (marital_status) {
+      baseQuery.marital_status = String(marital_status);
+    }
+    if (city) {
+      baseQuery.city = String(city);
+    }
+
+    if (search && String(search).trim()) {
+      const searchRegex = new RegExp(String(search).trim(), 'i');
+      baseQuery.$or = [
+        { full_name: searchRegex },
+        { middle_name: searchRegex },
+        { city: searchRegex },
+        { education: searchRegex },
+        { occupation: searchRegex },
+        { father_name: searchRegex },
+        { mother_name: searchRegex },
+        { gotra: searchRegex },
+        { mobile_number: searchRegex }
+      ];
+    }
+
+    const matrimonies = await Matrimony.find(baseQuery).sort({ createdAt: -1 }).lean();
+
+    const formatBirthdate = (dateVal) => {
+      if (!dateVal) return '-';
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${day}/${month}/${d.getFullYear()}`;
+    };
+
+    const columns = [
+      { header: 'NAME', key: 'full_name', width: 28, align: 'left', bold: true },
+      { header: 'GENDER', key: 'gender', width: 12, align: 'center' },
+      { header: 'BIRTH DATE', key: 'birthdate', width: 16, align: 'center' },
+      { header: 'MARITAL STATUS', key: 'marital_status', width: 18, align: 'center' },
+      { header: 'MOBILE NUMBER', key: 'mobile_number', width: 18, align: 'center' },
+      { header: 'CITY', key: 'city', width: 20, align: 'left' },
+      { header: 'EDUCATION', key: 'education', width: 24, align: 'left' },
+      { header: 'OCCUPATION', key: 'occupation', width: 24, align: 'left' },
+      { header: 'HEIGHT', key: 'height', width: 12, align: 'center' },
+      { header: 'WEIGHT', key: 'weight', width: 12, align: 'center' },
+      { header: 'FATHER NAME', key: 'father_name', width: 24, align: 'left' },
+      { header: 'MOTHER NAME', key: 'mother_name', width: 24, align: 'left' },
+      { header: 'GOTRA', key: 'gotra', width: 16, align: 'left' },
+      { header: 'FAMILY TYPE', key: 'family_type', width: 16, align: 'left' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' }
+    ];
+
+    const rows = matrimonies.map(item => ({
+      full_name: [item.full_name, item.middle_name].filter(Boolean).join(' ').trim() || '-',
+      gender: item.gender || '-',
+      birthdate: formatBirthdate(item.birthdate),
+      marital_status: item.marital_status || '-',
+      mobile_number: item.mobile_number ? String(item.mobile_number) : '',
+      city: item.city || '-',
+      education: item.education || '-',
+      occupation: item.occupation || '-',
+      height: item.height || '-',
+      weight: item.weight || '-',
+      father_name: item.father_name || '-',
+      mother_name: item.mother_name || '-',
+      gotra: item.gotra || '-',
+      family_type: item.family_type || '-',
+      status: Number(item.status ?? 0) === 1 ? 'Active' : 'Inactive'
+    }));
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Matrimony_Profiles',
+      sheetName: 'Matrimonies',
+      columns,
+      rows
+    });
+
+    return apiResponse(res, 200, 'Matrimony records exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting matrimonies', { error: error.message });
+  }
+};
+
+const downloadExportedMatrimonies = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
+
 module.exports = {
   getMatrimonies,
   getMatrimonyById,
   addMatrimony,
   updateMatrimony,
-  deleteMatrimony
+  deleteMatrimony,
+  exportMatrimonies,
+  downloadExportedMatrimonies
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const {
-    adminSaveDonation, adminDeleteDonation, exportDonations,
+    adminSaveDonation, adminDeleteDonation, exportDonations, downloadExportedDonations,
     getDonations, addDonation, updateDonation, deleteDonation
 } = require('../controllers/donationController');
 const { protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
@@ -15,6 +15,7 @@ const isAdminCall = (req) => {
 router.get('/', getDonations);
 
 router.get('/export', protect, requirePermission('donations.list'), exportDonations);
+router.get('/export/download/:filename', downloadExportedDonations);
 
 router.post('/', protect, parseForm, (req, res, next) => {
     if (isAdminCall(req)) {

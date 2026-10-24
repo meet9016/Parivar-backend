@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const Student = require('../models/studentModel');
-const { publicUrl } = require('../utils/apiResponse');
+const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const requestData = (req) => ({
   ...req.query,
@@ -239,9 +240,90 @@ const deleteStudent = async (req, res) => {
   }
 };
 
+const exportStudents = async (req, res) => {
+  try {
+    let baseQuery = {};
+    const { search, status, year, standard } = req.query;
+
+    if (status !== undefined && status !== null && status !== '') {
+      baseQuery.status = Number(status);
+    }
+    if (year) {
+      baseQuery.year = String(year);
+    }
+    if (standard) {
+      baseQuery.standard = String(standard);
+    }
+
+    if (search && String(search).trim()) {
+      const searchRegex = new RegExp(String(search).trim(), 'i');
+      baseQuery.$or = [
+        { surname: searchRegex },
+        { student_name: searchRegex },
+        { father_name: searchRegex },
+        { school_name: searchRegex },
+        { standard: searchRegex },
+        { mobile_number: searchRegex },
+        { year: searchRegex }
+      ];
+    }
+
+    const students = await Student.find(baseQuery).sort({ createdAt: -1 }).lean();
+
+    const columns = [
+      { header: 'STUDENT NAME', key: 'name', width: 30, align: 'left', bold: true },
+      { header: 'FATHER NAME', key: 'father_name', width: 26, align: 'left' },
+      { header: 'STANDARD / CLASS', key: 'standard', width: 24, align: 'center' },
+      { header: 'PERCENTAGE', key: 'percentage', width: 16, align: 'center' },
+      { header: 'SCHOOL / COLLEGE', key: 'school_name', width: 34, align: 'left' },
+      { header: 'MOBILE NUMBER', key: 'mobile_number', width: 18, align: 'center' },
+      { header: 'ACADEMIC YEAR', key: 'year', width: 18, align: 'center' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' }
+    ];
+
+    const rows = students.map(s => {
+      const fullName = [s.surname, s.student_name].filter(Boolean).join(' ').trim();
+      const statusText = Number(s.status ?? 0) === 1 ? 'Active' : 'Inactive';
+      const pct = s.percentage ? (String(s.percentage).includes('%') ? String(s.percentage) : `${s.percentage}%`) : '-';
+
+      return {
+        name: fullName || '-',
+        father_name: s.father_name || '-',
+        standard: s.standard || '-',
+        percentage: pct,
+        school_name: s.school_name || '-',
+        mobile_number: s.mobile_number ? String(s.mobile_number) : '',
+        year: s.year || '-',
+        status: statusText
+      };
+    });
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Students_Directory',
+      sheetName: 'Students',
+      columns,
+      rows
+    });
+
+    return apiResponse(res, 200, 'Students exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting students', { error: error.message });
+  }
+};
+
+const downloadExportedStudents = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
+
 module.exports = {
   getStudents,
   addStudent,
   updateStudent,
-  deleteStudent
+  deleteStudent,
+  exportStudents,
+  downloadExportedStudents
 };

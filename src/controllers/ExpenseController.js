@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Expense = require('../models/expenseModel');
 const queryHelper = require('../utils/queryHelper');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const requestData = (req) => ({
   ...req.query,
@@ -192,43 +193,105 @@ const adminDeleteExpense = async (req, res) => {
 
 const exportExpenses = async (req, res) => {
   try {
-    const { search, month } = req.query;
+    const { search, month, category, expense_category_id } = req.query;
     const query = {};
-    if (search) {
-      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      query.$or = [{ description: regex }, { expense_category_name: regex }, { committee_member_name: regex }];
+
+    if (search && String(search).trim()) {
+      const escapeRegExp = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(escapeRegExp(String(search).trim()), 'i');
+      query.$or = [
+        { description: regex },
+        { expense_category_name: regex },
+        { committee_member_name: regex }
+      ];
     }
+
+    const catId = category || expense_category_id;
+    if (catId) {
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { expense_category_id: String(catId) }];
+        delete query.$or;
+      } else {
+        query.expense_category_id = String(catId);
+      }
+    }
+
     if (month) {
       query.date = { $regex: `^${month}` };
     }
 
-    const filteredExpenses = await Expense.find(query).sort({ _id: -1 }).lean();
+    const filteredExpenses = await Expense.find(query).sort({ date: -1, createdAt: -1 }).lean();
+
+    const formatDate = (val) => {
+      if (!val) return '-';
+      try {
+        const str = String(val).trim();
+        if (!str) return '-';
+        if (str.includes('/')) {
+          const parts = str.split('/');
+          if (parts.length === 3) {
+            const d = parts[0].padStart(2, '0');
+            const m = parts[1].padStart(2, '0');
+            const y = parts[2];
+            return `${d}/${m}/${y}`;
+          }
+        }
+        const d = new Date(val);
+        if (isNaN(d.getTime())) return String(val);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      } catch {
+        return String(val || '-');
+      }
+    };
+
+    const columns = [
+      { header: 'DATE', key: 'date', width: 16, align: 'center' },
+      { header: 'CATEGORY', key: 'expense_category_name', width: 26, align: 'left', bold: true },
+      { header: 'COMMITTEE MEMBER', key: 'committee_member_name', width: 30, align: 'left' },
+      { header: 'AMOUNT (₹)', key: 'amount', width: 18, align: 'right' },
+      { header: 'DESCRIPTION', key: 'description', width: 42, align: 'left' }
+    ];
 
     const rows = filteredExpenses.map(e => ({
-      'Date': e.date || '',
-      'Category': e.expense_category_name || '',
-      'Committee Member': e.committee_member_name || '',
-      'Description': e.description || '',
-      'Amount (₹)': Number(e.amount || 0)
+      date: formatDate(e.date),
+      expense_category_name: e.expense_category_name || '-',
+      committee_member_name: e.committee_member_name || '-',
+      amount: Number(e.amount || 0),
+      description: e.description || '-'
     }));
 
-    const header = Object.keys(rows[0] || { 'Date': '', 'Category': '', 'Committee Member': '', 'Description': '', 'Amount (₹)': '' });
-    const csv = [
-      header.join(','),
-      ...rows.map(row => header.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Expenses',
+      sheetName: 'Expenses',
+      columns,
+      rows
+    });
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="expenses.csv"');
-    return res.status(200).send(csv);
+    return res.status(200).json({
+      status: 200,
+      message: 'Expenses exported successfully',
+      data: {
+        download_url,
+        filename
+      }
+    });
   } catch (error) {
     return res.status(500).json({ status: 500, message: 'Export failed', error: error.message });
   }
+};
+
+const downloadExportedExpenses = (req, res) => {
+  return sendExportedExcelFile(req, res);
 };
 
 module.exports = {
   getExpenses,
   adminSaveExpense,
   adminDeleteExpense,
-  exportExpenses
+  exportExpenses,
+  downloadExportedExpenses
 };
