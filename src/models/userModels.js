@@ -72,6 +72,12 @@ const userSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  dinitalim_id: {
+    type: String,
+    default: '',
+    trim: true,
+    index: true
+  },
   marital_status: {
     type: String,
     default: '',

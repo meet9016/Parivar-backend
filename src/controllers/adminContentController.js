@@ -7,6 +7,7 @@ const State = require('../models/stateModel');
 const City = require('../models/cityModel');
 const Master = require('../models/masterModel');
 const StandardLevel = require('../models/standardLevelModel');
+const DiniTalim = require('../models/diniTalimModel');
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
@@ -146,8 +147,11 @@ const masterConfig = {
   'expense-category': { Model: Master, type: 'expense-category' },
   'relationship': { Model: Master, type: 'relationship' },
   'standard-level': { Model: StandardLevel, nameKeys: ['name'] },
-  'standard': { Model: StandardLevel, nameKeys: ['name'] }
+  'standard': { Model: StandardLevel, nameKeys: ['name'] },
+  'dini-talim': { Model: DiniTalim, nameKeys: ['name'] },
+  'dinitalim': { Model: DiniTalim, nameKeys: ['name'] }
 };
+
 
 const DEFAULT_RELATIONSHIPS = [
   { name: 'Wife', gujarati_name: 'પત્ની', hindi_name: 'पत्नी', description: 'પરિવારના વડાની ધર્મપત્ની' },
@@ -261,6 +265,7 @@ const getMasters = async (req, res) => {
       }
     }
 
+
     const query = { ...(config.type ? { type: config.type } : {}) };
     if (req.query.parent_id && config.parentKey) query[config.parentKey] = String(req.query.parent_id);
     if (req.query.parent_id && config.type) query.parent_id = String(req.query.parent_id);
@@ -272,7 +277,7 @@ const getMasters = async (req, res) => {
 
     const { data, pagination } = await queryHelper(config.Model, req.query, {
       baseQuery: query,
-      searchFields: [...(config.nameKeys || ['name']), 'name', 'level']
+      searchFields: [...(config.nameKeys || ['name']), 'name', 'level', 'gujarati_name', 'description']
     });
 
     const rawParentIds = data.map((item) => String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '')).filter(Boolean);
@@ -403,6 +408,8 @@ const saveMaster = async (req, res) => {
       doc[primaryNameKey] = name;
       doc.name = name;
       if (req.body.level !== undefined) doc.set('level', req.body.level);
+      if (req.body.gujarati_name !== undefined) doc.set('gujarati_name', req.body.gujarati_name);
+      if (req.body.description !== undefined) doc.set('description', req.body.description);
       if (config.parentKey) doc[config.parentKey] = req.body.parent_id || req.body[config.parentKey] || doc[config.parentKey] || '';
     }
     const image = imageFromRequest(req, existing?.image);

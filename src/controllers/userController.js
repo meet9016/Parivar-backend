@@ -13,6 +13,8 @@ const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 const { renderVafatCardHtml } = require('../templates/vafatCardTemplateService');
 const { generatePdfFromHtml, generateImageFromHtml, synchronizedGeneratePdf } = require('../services/pdfService');
+const DiniTalim = require('../models/diniTalimModel');
+const Master = require('../models/masterModel');
 
 function resolveBaseUrl(req) {
   let base = '';
@@ -117,6 +119,43 @@ const resolveEducation = async (rawVal) => {
   return {
     education_id: str,
     education: str
+  };
+};
+
+const resolveDiniTalim = async (rawVal) => {
+  if (!rawVal) return { dinitalim_id: '', dinitalim: '' };
+  const str = String(rawVal).trim();
+  if (!str) return { dinitalim_id: '', dinitalim: '' };
+  let doc = null;
+  if (mongoose.isValidObjectId(str)) {
+    doc = await DiniTalim.findById(str).lean().catch(() => null);
+    if (!doc) {
+      doc = await Master.findOne({ _id: str, type: 'dini-talim' }).lean().catch(() => null);
+    }
+  }
+  if (!doc) {
+    doc = await DiniTalim.findOne({
+      $or: [
+        { id: str },
+        { name: new RegExp(`^${str}$`, 'i') }
+      ]
+    }).lean().catch(() => null);
+  }
+  if (!doc) {
+    doc = await Master.findOne({
+      type: 'dini-talim',
+      $or: [{ id: str }, { name: new RegExp(`^${str}$`, 'i') }]
+    }).lean().catch(() => null);
+  }
+  if (doc) {
+    return {
+      dinitalim_id: String(doc._id || doc.id),
+      dinitalim: doc.name
+    };
+  }
+  return {
+    dinitalim_id: str,
+    dinitalim: str
   };
 };
 
@@ -279,6 +318,9 @@ const register = async (req, res) => {
     const rawHeadEdu = req.body.education_id || education || '';
     const resolvedHeadEdu = await resolveEducation(rawHeadEdu);
 
+    const rawHeadDini = req.body.dinitalim_id || dinitalim || '';
+    const resolvedHeadDini = await resolveDiniTalim(rawHeadDini);
+
     const newUser = new User({
       member_id: nextMemberId,
       first_name,
@@ -294,7 +336,8 @@ const register = async (req, res) => {
       blood_group,
       education: resolvedHeadEdu.education,
       education_id: resolvedHeadEdu.education_id,
-      dinitalim: dinitalim ? String(dinitalim).trim() : '',
+      dinitalim: resolvedHeadDini.dinitalim,
+      dinitalim_id: resolvedHeadDini.dinitalim_id,
       marital_status: marital_status ? String(marital_status).trim() : '',
       relation: familyData.relation,
       is_committee,
@@ -370,6 +413,8 @@ const register = async (req, res) => {
         currentMemberId += 1;
         const rawChildEdu = m.education_id || m.education || '';
         const resolvedChildEdu = await resolveEducation(rawChildEdu);
+        const rawChildDini = m.dinitalim_id || m.dinitalim || '';
+        const resolvedChildDini = await resolveDiniTalim(rawChildDini);
         const childUser = new User({
           member_id: String(currentMemberId),
           first_name: m.first_name.trim(),
@@ -384,7 +429,8 @@ const register = async (req, res) => {
           blood_group: m.blood_group || '',
           education: resolvedChildEdu.education,
           education_id: resolvedChildEdu.education_id,
-          dinitalim: m.dinitalim ? String(m.dinitalim).trim() : '',
+          dinitalim: resolvedChildDini.dinitalim,
+          dinitalim_id: resolvedChildDini.dinitalim_id,
           marital_status: m.marital_status ? String(m.marital_status).trim() : '',
           relation: m.relation || 'Other',
           country_id: newUser.country_id,
@@ -739,6 +785,7 @@ const getUsers = async (req, res) => {
         education: u.education || '',
         education_id: u.education_id || '',
         dinitalim: u.dinitalim || '',
+        dinitalim_id: u.dinitalim_id || '',
         marital_status: u.marital_status || '',
         relation: u.relation || 'Self',
         is_committee: u.is_committee || false,
@@ -917,6 +964,7 @@ const getUsers = async (req, res) => {
       education: u.education || '',
       education_id: u.education_id || '',
       dinitalim: u.dinitalim || '',
+      dinitalim_id: u.dinitalim_id || '',
       marital_status: u.marital_status || '',
       relation: u.relation || 'Self',
       is_committee: u.is_committee || false,
@@ -986,6 +1034,7 @@ const getFamilyMembersByNumber = async (req, res) => {
       education: u.education || '',
       education_id: u.education_id || '',
       dinitalim: u.dinitalim || '',
+      dinitalim_id: u.dinitalim_id || '',
       marital_status: u.marital_status || '',
       relation: u.relation || 'Self',
       is_committee: u.is_committee || false,
@@ -1028,6 +1077,7 @@ const getUserById = async (req, res) => {
       education: user.education || '',
       education_id: user.education_id || '',
       dinitalim: user.dinitalim || '',
+      dinitalim_id: user.dinitalim_id || '',
       marital_status: user.marital_status || '',
       relation: user.relation || 'Self',
       is_committee: user.is_committee || false,
@@ -1173,7 +1223,11 @@ const updateUser = async (req, res) => {
       user.education = resolvedEdu.education;
       user.education_id = resolvedEdu.education_id;
     }
-    if (dinitalim !== undefined) user.dinitalim = String(dinitalim).trim();
+    if (dinitalim !== undefined || req.body.dinitalim_id !== undefined) {
+      const resolvedDini = await resolveDiniTalim(req.body.dinitalim_id !== undefined ? req.body.dinitalim_id : dinitalim);
+      user.dinitalim = resolvedDini.dinitalim;
+      user.dinitalim_id = resolvedDini.dinitalim_id;
+    }
     if (marital_status !== undefined) user.marital_status = String(marital_status).trim();
     if (relation !== undefined) user.relation = familyData.relation;
     if (is_committee !== undefined) user.is_committee = is_committee === true || is_committee === 'true';
@@ -1288,6 +1342,14 @@ const updateUser = async (req, res) => {
               education_id: resEdu.education_id
             };
           }
+          let childDiniObj = {};
+          if (m.dinitalim !== undefined || m.dinitalim_id !== undefined) {
+            const resDini = await resolveDiniTalim(m.dinitalim_id !== undefined ? m.dinitalim_id : m.dinitalim);
+            childDiniObj = {
+              dinitalim: resDini.dinitalim,
+              dinitalim_id: resDini.dinitalim_id
+            };
+          }
 
           await User.findOneAndUpdate(
             { _id: memberId },
@@ -1303,7 +1365,7 @@ const updateUser = async (req, res) => {
                 anniversary: m.anniversary || null,
                 blood_group: m.blood_group || '',
                 ...childEduObj,
-                ...(m.dinitalim !== undefined ? { dinitalim: String(m.dinitalim).trim() } : {}),
+                ...childDiniObj,
                 ...(m.marital_status !== undefined ? { marital_status: String(m.marital_status).trim() } : {}),
                 relation: m.relation || 'Other',
                 status: m.status !== undefined ? Number(m.status) : 1,
@@ -1326,6 +1388,8 @@ const updateUser = async (req, res) => {
           currentMaxId += 1;
           const rawChildEdu = m.education_id || m.education || '';
           const resChildEdu = await resolveEducation(rawChildEdu);
+          const rawChildDini = m.dinitalim_id || m.dinitalim || '';
+          const resChildDini = await resolveDiniTalim(rawChildDini);
           const childUser = new User({
             member_id: String(currentMaxId),
             first_name: m.first_name.trim(),
@@ -1340,7 +1404,8 @@ const updateUser = async (req, res) => {
             blood_group: m.blood_group || '',
             education: resChildEdu.education,
             education_id: resChildEdu.education_id,
-            dinitalim: m.dinitalim ? String(m.dinitalim).trim() : '',
+            dinitalim: resChildDini.dinitalim,
+            dinitalim_id: resChildDini.dinitalim_id,
             marital_status: m.marital_status ? String(m.marital_status).trim() : '',
             relation: m.relation || 'Other',
             country_id: user.country_id,
@@ -1376,6 +1441,7 @@ const updateUser = async (req, res) => {
       education: user.education || '',
       education_id: user.education_id || '',
       dinitalim: user.dinitalim || '',
+      dinitalim_id: user.dinitalim_id || '',
       marital_status: user.marital_status || '',
       relation: user.relation || 'Self',
       is_committee: user.is_committee || false,
