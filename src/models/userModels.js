@@ -56,6 +56,17 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  education: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  marital_status: {
+    type: String,
+    enum: ['Married', 'Unmarried', 'Divorce', 'Divorced', 'Widowed', ''],
+    default: '',
+    trim: true
+  },
 
   is_committee: {
     type: Boolean,

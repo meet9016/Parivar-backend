@@ -288,6 +288,7 @@ const legacyPermissionFor = (permission) => {
     'birthday.': 'users.manage',
     'job-vacancy.': 'job-vacancy.manage',
     'bank-details.': 'masters.manage',
+    'education.': 'masters.manage',
     'expenses.': 'expenses.manage',
     'expense-category.': 'expense-category.manage',
     'polls.': 'polls.manage'

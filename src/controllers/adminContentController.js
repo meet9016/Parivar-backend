@@ -7,6 +7,8 @@ const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
 const City = require('../models/cityModel');
 const Master = require('../models/masterModel');
+const Education = require('../models/educationModel');
+const { DEFAULT_EDUCATIONS } = require('./educationController');
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
@@ -156,7 +158,8 @@ const masterConfig = {
   'event-category': { Model: Master, type: 'event-category' },
   'gallery-category': { Model: GalleryCategory, nameKeys: ['category'], skipCustomId: true },
   'expense-category': { Model: Master, type: 'expense-category' },
-  'relationship': { Model: Master, type: 'relationship' }
+  'relationship': { Model: Master, type: 'relationship' },
+  'education': { Model: Education, nameKeys: ['standard', 'name'] }
 };
 
 const DEFAULT_RELATIONSHIPS = [
@@ -209,8 +212,11 @@ const formatMaster = (req, type, item, config, parentMap = {}) => {
 
   return {
     id: String(item._id),
+    custom_id: item.id || '',
     type,
     name,
+    level: item.level || 'School',
+    standard: item.standard || name || '',
     gujarati_name: gujName,
     hindi_name: hiName,
     description: desc,
@@ -218,7 +224,9 @@ const formatMaster = (req, type, item, config, parentMap = {}) => {
     parent_name: parentName,
     status: Number(item.status ?? 1),
     image: publicUrl(req, item.image || ''),
-    is_default: isDefault
+    is_default: isDefault,
+    createdAt: item.createdAt || '',
+    updatedAt: item.updatedAt || ''
   };
 };
 
@@ -270,9 +278,25 @@ const getMasters = async (req, res) => {
       }
     }
 
+    // Auto seed default education records
+    if (type === 'education') {
+      const count = await config.Model.countDocuments();
+      if (count === 0 && Array.isArray(DEFAULT_EDUCATIONS)) {
+        await config.Model.insertMany(DEFAULT_EDUCATIONS.map((ed, idx) => ({
+          id: `EDU_${Date.now()}_${idx}`,
+          level: ed.level,
+          standard: ed.standard,
+          name: ed.standard,
+          description: ed.description,
+          status: 1
+        })));
+      }
+    }
+
     const query = { ...(config.type ? { type: config.type } : {}) };
     if (req.query.parent_id && config.parentKey) query[config.parentKey] = String(req.query.parent_id);
     if (req.query.parent_id && config.type) query.parent_id = String(req.query.parent_id);
+    if (req.query.level && type === 'education') query.level = String(req.query.level).trim();
     if (req.query.status !== undefined && req.query.status !== null && req.query.status !== '') {
       const statusNum = Number(req.query.status);
       query.$or = [{ status: statusNum }, { status: String(statusNum) }];
@@ -280,7 +304,7 @@ const getMasters = async (req, res) => {
 
     const { data, pagination } = await queryHelper(config.Model, req.query, {
       baseQuery: query,
-      searchFields: [...(config.nameKeys || ['name']), 'name']
+      searchFields: [...(config.nameKeys || ['name']), 'name', ...(type === 'education' ? ['level', 'standard', 'description'] : [])]
     });
 
     const rawParentIds = data.map((item) => String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '')).filter(Boolean);
@@ -335,9 +359,9 @@ const saveMaster = async (req, res) => {
     const type = req.params.type;
     const config = masterConfig[type];
     const existing = req.params.id ? await findById(config.Model, req.params.id) : null;
-    const name = req.body.name || req.body[type] || req.body.business || req.body.country || req.body.state || req.body.city || (existing ? (existing.name || existing.country || existing.state || existing.city || existing.category || existing.business || (config.nameKeys?.map(k => existing[k]).find(Boolean))) : '');
+    const name = req.body.standard || req.body.name || req.body[type] || req.body.business || req.body.country || req.body.state || req.body.city || (existing ? (existing.standard || existing.name || existing.country || existing.state || existing.city || existing.category || existing.business || (config.nameKeys?.map(k => existing[k]).find(Boolean))) : '');
 
-    if (!existing && !name) return apiResponse(res, 400, 'Name is required');
+    if (!existing && !name) return apiResponse(res, 400, type === 'education' ? 'Standard / Degree is required' : 'Name is required');
 
     // Prevent duplicate entries with the same name (case-insensitive) for the same master type / parent
     const trimmedName = String(name).trim();
@@ -347,7 +371,14 @@ const saveMaster = async (req, res) => {
         _id: { $ne: existing ? existing._id : null }
       };
 
-      if (config.type) {
+      if (type === 'education') {
+        const targetLevel = req.body.level || existing?.level || 'School';
+        duplicateQuery.level = targetLevel;
+        duplicateQuery.$or = [
+          { standard: nameRegex },
+          { name: nameRegex }
+        ];
+      } else if (config.type) {
         duplicateQuery.type = config.type;
         duplicateQuery.name = nameRegex;
         if (req.body.parent_id) {
@@ -371,13 +402,21 @@ const saveMaster = async (req, res) => {
 
       const duplicateDoc = await config.Model.findOne(duplicateQuery);
       if (duplicateDoc) {
-        return apiResponse(res, 400, `"${trimmedName}" already exists. Duplicate entries are not allowed.`);
+        const msg = type === 'education'
+          ? `"${trimmedName}" already exists for ${req.body.level || existing?.level || 'School'}. Duplicate entries are not allowed.`
+          : `"${trimmedName}" already exists. Duplicate entries are not allowed.`;
+        return apiResponse(res, 400, msg);
       }
     }
 
     const doc = existing || new config.Model();
     if (!existing && !config.skipCustomId) doc.id = await nextPublicId(config.Model, `${type.toUpperCase()}_`);
-    if (config.type) {
+    if (type === 'education') {
+      doc.level = req.body.level || existing?.level || 'School';
+      doc.standard = name;
+      doc.name = name;
+      if (req.body.description !== undefined) doc.description = String(req.body.description).trim();
+    } else if (config.type) {
       doc.type = config.type;
       doc.name = name;
       doc.parent_id = req.body.parent_id || '';

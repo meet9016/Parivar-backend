@@ -33,6 +33,8 @@ const register = async (req, res) => {
       dob,
       anniversary,
       blood_group,
+      education,
+      marital_status,
       relation,
       is_committee,
       committee_role,
@@ -91,6 +93,8 @@ const register = async (req, res) => {
       dob,
       anniversary,
       blood_group,
+      education: education || '',
+      marital_status: marital_status || '',
       relation: familyData.relation,
       is_committee,
       committee_role,
@@ -149,6 +153,8 @@ const register = async (req, res) => {
           dob: m.dob || null,
           anniversary: m.anniversary || null,
           blood_group: m.blood_group || '',
+          education: m.education || '',
+          marital_status: m.marital_status || '',
           relation: m.relation || 'Other',
           country_id: newUser.country_id,
           state_id: newUser.state_id,
@@ -461,6 +467,8 @@ const getUsers = async (req, res) => {
         dob: u.dob || null,
         anniversary: u.anniversary || null,
         blood_group: u.blood_group || '',
+        education: u.education || '',
+        marital_status: u.marital_status || '',
         relation: u.relation || 'Self',
         is_committee: u.is_committee || false,
         committee_role: u.committee_role || '',
@@ -662,6 +670,8 @@ const getUserById = async (req, res) => {
       dob: user.dob || null,
       anniversary: user.anniversary || null,
       blood_group: user.blood_group || '',
+      education: user.education || '',
+      marital_status: user.marital_status || '',
       relation: user.relation || 'Self',
       is_committee: user.is_committee || false,
       committee_role: user.committee_role || '',
@@ -715,6 +725,8 @@ const updateUser = async (req, res) => {
       dob,
       anniversary,
       blood_group,
+      education,
+      marital_status,
       relation,
       is_committee,
       committee_role,
@@ -758,6 +770,8 @@ const updateUser = async (req, res) => {
     if (dob !== undefined) user.dob = dob;
     if (anniversary !== undefined) user.anniversary = anniversary;
     if (blood_group !== undefined) user.blood_group = blood_group;
+    if (education !== undefined) user.education = education;
+    if (marital_status !== undefined) user.marital_status = marital_status;
     if (relation !== undefined) user.relation = familyData.relation;
     if (is_committee !== undefined) user.is_committee = is_committee === true || is_committee === 'true';
     if (committee_role !== undefined) user.committee_role = committee_role;
@@ -837,6 +851,8 @@ const updateUser = async (req, res) => {
                 dob: m.dob || null,
                 anniversary: m.anniversary || null,
                 blood_group: m.blood_group || '',
+                education: m.education !== undefined ? m.education : '',
+                marital_status: m.marital_status !== undefined ? m.marital_status : '',
                 relation: m.relation || 'Other',
                 status: m.status !== undefined ? Number(m.status) : 1,
                 country_id: user.country_id,
@@ -868,6 +884,8 @@ const updateUser = async (req, res) => {
             dob: m.dob || null,
             anniversary: m.anniversary || null,
             blood_group: m.blood_group || '',
+            education: m.education || '',
+            marital_status: m.marital_status || '',
             relation: m.relation || 'Other',
             country_id: user.country_id,
             state_id: user.state_id,
@@ -899,6 +917,8 @@ const updateUser = async (req, res) => {
       dob: user.dob || null,
       anniversary: user.anniversary || null,
       blood_group: user.blood_group || '',
+      education: user.education || '',
+      marital_status: user.marital_status || '',
       relation: user.relation || 'Self',
       is_committee: user.is_committee || false,
       committee_role: user.committee_role || '',
