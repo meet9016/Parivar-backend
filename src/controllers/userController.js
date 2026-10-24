@@ -95,6 +95,31 @@ const getNumberVariations = (numStr) => {
   return Array.from(variations).filter(Boolean);
 };
 
+const StandardLevel = require('../models/standardLevelModel');
+
+const resolveEducation = async (rawVal) => {
+  if (!rawVal) return { education_id: '', education: '' };
+  const str = String(rawVal).trim();
+  if (!str) return { education_id: '', education: '' };
+  let std = null;
+  if (mongoose.isValidObjectId(str)) {
+    std = await StandardLevel.findById(str).lean().catch(() => null);
+  }
+  if (!std) {
+    std = await StandardLevel.findOne({ $or: [{ id: str }, { name: str }] }).lean().catch(() => null);
+  }
+  if (std) {
+    return {
+      education_id: String(std._id || std.id),
+      education: std.name
+    };
+  }
+  return {
+    education_id: str,
+    education: str
+  };
+};
+
 const register = async (req, res) => {
   try {
     const rawNumberInput = req.body.number || req.body.mobile || req.body.phone || req.body.contact_number || req.body.mobile_number || '';
@@ -120,7 +145,10 @@ const register = async (req, res) => {
       address,
       image,
       family_head_id,
-      familyHead
+      familyHead,
+      education,
+      dinitalim,
+      marital_status
     } = req.body;
 
     const isDeceasedMember = req.body.is_deceased === true || req.body.is_deceased === 'true';
@@ -167,6 +195,9 @@ const register = async (req, res) => {
       } catch (e) {
         membersList = [];
       }
+    }
+    if (membersList && typeof membersList === 'object' && !Array.isArray(membersList)) {
+      membersList = Object.values(membersList);
     }
 
     if (Array.isArray(membersList) && membersList.length > 0) {
@@ -245,6 +276,9 @@ const register = async (req, res) => {
       nextMemberId = String(count + 1);
     }
 
+    const rawHeadEdu = req.body.education_id || education || '';
+    const resolvedHeadEdu = await resolveEducation(rawHeadEdu);
+
     const newUser = new User({
       member_id: nextMemberId,
       first_name,
@@ -258,6 +292,10 @@ const register = async (req, res) => {
       dob,
       anniversary,
       blood_group,
+      education: resolvedHeadEdu.education,
+      education_id: resolvedHeadEdu.education_id,
+      dinitalim: dinitalim ? String(dinitalim).trim() : '',
+      marital_status: marital_status ? String(marital_status).trim() : '',
       relation: familyData.relation,
       is_committee,
       committee_role,
@@ -321,12 +359,17 @@ const register = async (req, res) => {
         membersList = [];
       }
     }
+    if (membersList && typeof membersList === 'object' && !Array.isArray(membersList)) {
+      membersList = Object.values(membersList);
+    }
     const createdMembers = [];
     if (Array.isArray(membersList) && membersList.length > 0) {
       let currentMemberId = Number(newUser.member_id || nextMemberId || 0);
       for (const m of membersList) {
         if (!m.first_name || !m.first_name.trim()) continue;
         currentMemberId += 1;
+        const rawChildEdu = m.education_id || m.education || '';
+        const resolvedChildEdu = await resolveEducation(rawChildEdu);
         const childUser = new User({
           member_id: String(currentMemberId),
           first_name: m.first_name.trim(),
@@ -339,6 +382,10 @@ const register = async (req, res) => {
           dob: m.dob || null,
           anniversary: m.anniversary || null,
           blood_group: m.blood_group || '',
+          education: resolvedChildEdu.education,
+          education_id: resolvedChildEdu.education_id,
+          dinitalim: m.dinitalim ? String(m.dinitalim).trim() : '',
+          marital_status: m.marital_status ? String(m.marital_status).trim() : '',
           relation: m.relation || 'Other',
           country_id: newUser.country_id,
           state_id: newUser.state_id,
@@ -689,6 +736,10 @@ const getUsers = async (req, res) => {
         dob: u.dob || null,
         anniversary: u.anniversary || null,
         blood_group: u.blood_group || '',
+        education: u.education || '',
+        education_id: u.education_id || '',
+        dinitalim: u.dinitalim || '',
+        marital_status: u.marital_status || '',
         relation: u.relation || 'Self',
         is_committee: u.is_committee || false,
         committee_role: u.committee_role || '',
@@ -863,6 +914,10 @@ const getUsers = async (req, res) => {
       dob: u.dob || null,
       anniversary: u.anniversary || null,
       blood_group: u.blood_group || '',
+      education: u.education || '',
+      education_id: u.education_id || '',
+      dinitalim: u.dinitalim || '',
+      marital_status: u.marital_status || '',
       relation: u.relation || 'Self',
       is_committee: u.is_committee || false,
       committee_role: u.committee_role || '',
@@ -926,6 +981,12 @@ const getFamilyMembersByNumber = async (req, res) => {
       number: u.number,
       gender: u.gender || '',
       dob: u.dob || null,
+      anniversary: u.anniversary || null,
+      blood_group: u.blood_group || '',
+      education: u.education || '',
+      education_id: u.education_id || '',
+      dinitalim: u.dinitalim || '',
+      marital_status: u.marital_status || '',
       relation: u.relation || 'Self',
       is_committee: u.is_committee || false,
       role_name: u.role_id?.name || '',
@@ -964,6 +1025,10 @@ const getUserById = async (req, res) => {
       dob: user.dob || null,
       anniversary: user.anniversary || null,
       blood_group: user.blood_group || '',
+      education: user.education || '',
+      education_id: user.education_id || '',
+      dinitalim: user.dinitalim || '',
+      marital_status: user.marital_status || '',
       relation: user.relation || 'Self',
       is_committee: user.is_committee || false,
       committee_role: user.committee_role || '',
@@ -1032,7 +1097,10 @@ const updateUser = async (req, res) => {
       image,
       password,
       status,
-      familyHead
+      familyHead,
+      education,
+      dinitalim,
+      marital_status
     } = req.body;
 
 
@@ -1100,6 +1168,13 @@ const updateUser = async (req, res) => {
     if (dob !== undefined) user.dob = dob;
     if (anniversary !== undefined) user.anniversary = anniversary;
     if (blood_group !== undefined) user.blood_group = blood_group;
+    if (education !== undefined || req.body.education_id !== undefined) {
+      const resolvedEdu = await resolveEducation(req.body.education_id !== undefined ? req.body.education_id : education);
+      user.education = resolvedEdu.education;
+      user.education_id = resolvedEdu.education_id;
+    }
+    if (dinitalim !== undefined) user.dinitalim = String(dinitalim).trim();
+    if (marital_status !== undefined) user.marital_status = String(marital_status).trim();
     if (relation !== undefined) user.relation = familyData.relation;
     if (is_committee !== undefined) user.is_committee = is_committee === true || is_committee === 'true';
     if (committee_role !== undefined) user.committee_role = committee_role;
@@ -1168,6 +1243,9 @@ const updateUser = async (req, res) => {
         membersList = [];
       }
     }
+    if (membersList && typeof membersList === 'object' && !Array.isArray(membersList)) {
+      membersList = Object.values(membersList);
+    }
 
     let deletedMemberIds = req.body.deletedMemberIds;
     if (typeof deletedMemberIds === 'string') {
@@ -1202,6 +1280,15 @@ const updateUser = async (req, res) => {
         const memberId = m._id || m.id;
         if (memberId && mongoose.isValidObjectId(memberId)) {
           // Update existing child member
+          let childEduObj = {};
+          if (m.education !== undefined || m.education_id !== undefined) {
+            const resEdu = await resolveEducation(m.education_id !== undefined ? m.education_id : m.education);
+            childEduObj = {
+              education: resEdu.education,
+              education_id: resEdu.education_id
+            };
+          }
+
           await User.findOneAndUpdate(
             { _id: memberId },
             {
@@ -1215,6 +1302,9 @@ const updateUser = async (req, res) => {
                 dob: m.dob || null,
                 anniversary: m.anniversary || null,
                 blood_group: m.blood_group || '',
+                ...childEduObj,
+                ...(m.dinitalim !== undefined ? { dinitalim: String(m.dinitalim).trim() } : {}),
+                ...(m.marital_status !== undefined ? { marital_status: String(m.marital_status).trim() } : {}),
                 relation: m.relation || 'Other',
                 status: m.status !== undefined ? Number(m.status) : 1,
                 country_id: user.country_id,
@@ -1234,6 +1324,8 @@ const updateUser = async (req, res) => {
         } else {
           // Create new child member
           currentMaxId += 1;
+          const rawChildEdu = m.education_id || m.education || '';
+          const resChildEdu = await resolveEducation(rawChildEdu);
           const childUser = new User({
             member_id: String(currentMaxId),
             first_name: m.first_name.trim(),
@@ -1246,6 +1338,10 @@ const updateUser = async (req, res) => {
             dob: m.dob || null,
             anniversary: m.anniversary || null,
             blood_group: m.blood_group || '',
+            education: resChildEdu.education,
+            education_id: resChildEdu.education_id,
+            dinitalim: m.dinitalim ? String(m.dinitalim).trim() : '',
+            marital_status: m.marital_status ? String(m.marital_status).trim() : '',
             relation: m.relation || 'Other',
             country_id: user.country_id,
             state_id: user.state_id,
@@ -1277,6 +1373,10 @@ const updateUser = async (req, res) => {
       dob: user.dob || null,
       anniversary: user.anniversary || null,
       blood_group: user.blood_group || '',
+      education: user.education || '',
+      education_id: user.education_id || '',
+      dinitalim: user.dinitalim || '',
+      marital_status: user.marital_status || '',
       relation: user.relation || 'Self',
       is_committee: user.is_committee || false,
       committee_role: user.committee_role || '',
@@ -1479,6 +1579,9 @@ const bulkImportUsers = async (req, res) => {
           dob: parseDate(getVal(row, 'Date of Birth', 'dob', 'birth date', 'birthdate')),
           anniversary: parseDate(getVal(row, 'Anniversary', 'anniversary', 'wedding date')),
           blood_group: getVal(row, 'Blood Group', 'blood group', 'blood_group'),
+          education: getVal(row, 'Education', 'education'),
+          dinitalim: getVal(row, 'Dini Talim', 'dinitalim'),
+          marital_status: getVal(row, 'Marriage Status', 'marital_status'),
           address: getVal(row, 'Address', 'address'),
           relation: isFamilyHead ? 'Self' : (relation || 'Other'),
           familyHead: isFamilyHead,
@@ -1652,6 +1755,9 @@ const exportUsers = async (req, res) => {
         number: head.number || '',
         email: head.email || 'No Email',
         gender: head.gender || '',
+        marital_status: head.marital_status || '',
+        education: head.education || '',
+        dinitalim: head.dinitalim || '',
         blood_group: head.blood_group || '',
         village: head.village || '',
         status: Number(head.status ?? 1) === 1 ? 'Active' : 'Inactive',
@@ -1667,6 +1773,9 @@ const exportUsers = async (req, res) => {
           number: child.number || '',
           email: child.email || 'No Email',
           gender: child.gender || '',
+          marital_status: child.marital_status || '',
+          education: child.education || '',
+          dinitalim: child.dinitalim || '',
           blood_group: child.blood_group || '',
           village: child.village || head.village || '',
           status: Number(child.status ?? 1) === 1 ? 'Active' : 'Inactive',
@@ -1691,6 +1800,9 @@ const exportUsers = async (req, res) => {
       { header: 'Mobile Number', key: 'number', width: 22 },
       { header: 'Email', key: 'email', width: 32 },
       { header: 'Gender', key: 'gender', width: 14 },
+      { header: 'Marriage Status', key: 'marital_status', width: 18 },
+      { header: 'Education', key: 'education', width: 22 },
+      { header: 'Dini Talim', key: 'dinitalim', width: 20 },
       { header: 'Blood Group', key: 'blood_group', width: 14 },
       { header: 'Village', key: 'village', width: 22 },
       { header: 'Status', key: 'status', width: 18 }
@@ -1729,6 +1841,9 @@ const exportUsers = async (req, res) => {
         number: item.number,
         email: item.email,
         gender: item.gender,
+        marital_status: item.marital_status,
+        education: item.education,
+        dinitalim: item.dinitalim,
         blood_group: item.blood_group,
         village: item.village,
         status: item.status

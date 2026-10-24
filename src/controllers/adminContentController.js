@@ -6,6 +6,7 @@ const Country = require('../models/countryModel');
 const State = require('../models/stateModel');
 const City = require('../models/cityModel');
 const Master = require('../models/masterModel');
+const StandardLevel = require('../models/standardLevelModel');
 const { apiResponse, publicUrl } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 
@@ -143,7 +144,9 @@ const masterConfig = {
   'event-category': { Model: Master, type: 'event-category' },
   'gallery-category': { Model: GalleryCategory, nameKeys: ['category'], skipCustomId: true },
   'expense-category': { Model: Master, type: 'expense-category' },
-  'relationship': { Model: Master, type: 'relationship' }
+  'relationship': { Model: Master, type: 'relationship' },
+  'standard-level': { Model: StandardLevel, nameKeys: ['name'] },
+  'standard': { Model: StandardLevel, nameKeys: ['name'] }
 };
 
 const DEFAULT_RELATIONSHIPS = [
@@ -198,6 +201,7 @@ const formatMaster = (req, type, item, config, parentMap = {}) => {
     id: String(item._id),
     type,
     name,
+    level: item.level || '',
     gujarati_name: gujName,
     hindi_name: hiName,
     description: desc,
@@ -260,6 +264,7 @@ const getMasters = async (req, res) => {
     const query = { ...(config.type ? { type: config.type } : {}) };
     if (req.query.parent_id && config.parentKey) query[config.parentKey] = String(req.query.parent_id);
     if (req.query.parent_id && config.type) query.parent_id = String(req.query.parent_id);
+    if (req.query.level) query.level = req.query.level;
     if (req.query.status !== undefined && req.query.status !== null && req.query.status !== '') {
       const statusNum = Number(req.query.status);
       query.$or = [{ status: statusNum }, { status: String(statusNum) }];
@@ -267,7 +272,7 @@ const getMasters = async (req, res) => {
 
     const { data, pagination } = await queryHelper(config.Model, req.query, {
       baseQuery: query,
-      searchFields: [...(config.nameKeys || ['name']), 'name']
+      searchFields: [...(config.nameKeys || ['name']), 'name', 'level']
     });
 
     const rawParentIds = data.map((item) => String(config.parentKey ? item[config.parentKey] || '' : item.parent_id || '')).filter(Boolean);
@@ -326,6 +331,22 @@ const saveMaster = async (req, res) => {
     
     if (!existing && !name) return apiResponse(res, 400, 'Name is required');
 
+    // Validation for standard-level
+    if (type === 'standard-level' || type === 'standard') {
+      const allowedLevels = [
+        'Standard / School Level',
+        'Graduation (Bachelor Degree)',
+        'Post Graduation (Master Degree)'
+      ];
+      const level = req.body.level || (existing ? existing.level : '');
+      if (!level) {
+        return apiResponse(res, 400, 'Standard / Level is required');
+      }
+      if (!allowedLevels.includes(level)) {
+        return apiResponse(res, 400, `Invalid Standard / Level. Must be one of: ${allowedLevels.join(', ')}`);
+      }
+    }
+
     // Prevent duplicate entries with the same name (case-insensitive) for the same master type / parent
     const trimmedName = String(name).trim();
     if (trimmedName) {
@@ -340,6 +361,9 @@ const saveMaster = async (req, res) => {
         if (req.body.parent_id) {
           duplicateQuery.parent_id = req.body.parent_id;
         }
+        if (req.body.level || existing?.level) {
+          duplicateQuery.level = req.body.level || existing?.level;
+        }
       } else {
         const primaryNameKey = config.nameKeys?.[0] || 'name';
         duplicateQuery.$or = [
@@ -348,6 +372,9 @@ const saveMaster = async (req, res) => {
         ];
         if (config.parentKey && (req.body.parent_id || req.body[config.parentKey])) {
           duplicateQuery[config.parentKey] = req.body.parent_id || req.body[config.parentKey];
+        }
+        if (type === 'standard-level' || type === 'standard') {
+          duplicateQuery.level = req.body.level || existing?.level;
         }
       }
 
@@ -363,17 +390,19 @@ const saveMaster = async (req, res) => {
     }
 
     const doc = existing || new config.Model();
-    if (!existing && !config.skipCustomId) doc.id = await nextPublicId(config.Model, `${type.toUpperCase()}_`);
+    if (!existing && !config.skipCustomId) doc.id = await nextPublicId(config.Model, `${type.toUpperCase().replace(/-/g, '_')}_`);
     if (config.type) {
       doc.type = config.type;
       doc.name = name;
       doc.parent_id = req.body.parent_id || '';
+      if (req.body.level !== undefined) doc.set('level', req.body.level);
       if (req.body.gujarati_name !== undefined) doc.set('gujarati_name', req.body.gujarati_name);
       if (req.body.description !== undefined) doc.set('description', req.body.description);
     } else {
       const primaryNameKey = config.nameKeys[0];
       doc[primaryNameKey] = name;
       doc.name = name;
+      if (req.body.level !== undefined) doc.set('level', req.body.level);
       if (config.parentKey) doc[config.parentKey] = req.body.parent_id || req.body[config.parentKey] || doc[config.parentKey] || '';
     }
     const image = imageFromRequest(req, existing?.image);

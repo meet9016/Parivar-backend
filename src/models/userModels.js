@@ -56,6 +56,27 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  education: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  education_id: {
+    type: String,
+    default: '',
+    trim: true,
+    index: true
+  },
+  dinitalim: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  marital_status: {
+    type: String,
+    default: '',
+    trim: true
+  },
   is_deceased: {
     type: Boolean,
     default: false,
