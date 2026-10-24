@@ -741,6 +741,59 @@ const getUsers = async (req, res) => {
       const totalPages = Math.max(Math.ceil(totalHeads / limit), 1);
       const page = Math.min(requestedPage, totalPages);
 
+      let totalMembers = 0;
+      const hasSearchOrFilters = Boolean(
+        (req.query.search && String(req.query.search).trim()) ||
+        req.query.gender ||
+        req.query.blood_group ||
+        req.query.village
+      );
+
+      if (!hasSearchOrFilters) {
+        const memberStatusQuery = {};
+        if (req.query.status !== undefined && req.query.status !== '') {
+          const sVal = Number(req.query.status);
+          if (!isNaN(sVal)) {
+            if (sVal === 1) {
+              memberStatusQuery.$or = [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }];
+            } else {
+              memberStatusQuery.$or = [{ status: 0 }, { status: '0' }];
+            }
+          }
+        }
+        totalMembers = await User.countDocuments(memberStatusQuery);
+      } else {
+        const matchedHeads = await User.find(finalHeadQuery).select('_id member_id');
+        const matchedHeadIds = matchedHeads.map(h => h._id);
+        const matchedHeadMemberIds = matchedHeads.map(h => String(h.member_id)).filter(Boolean);
+
+        let childCount = 0;
+        if (matchedHeadIds.length > 0) {
+          const childClauses = [
+            { _id: { $nin: matchedHeadIds } },
+            {
+              $or: [
+                { 'family_head.id': { $in: matchedHeadIds } },
+                { 'family_head.id': { $in: matchedHeadIds.map(String) } },
+                { parent_member_id: { $in: matchedHeadMemberIds } }
+              ]
+            }
+          ];
+          if (req.query.status !== undefined && req.query.status !== '') {
+            const sVal = Number(req.query.status);
+            if (!isNaN(sVal)) {
+              if (sVal === 1) {
+                childClauses.push({ $or: [{ status: 1 }, { status: '1' }, { status: { $exists: false } }, { status: null }] });
+              } else {
+                childClauses.push({ $or: [{ status: 0 }, { status: '0' }] });
+              }
+            }
+          }
+          childCount = await User.countDocuments({ $and: childClauses });
+        }
+        totalMembers = matchedHeads.length + childCount;
+      }
+
       const paginatedHeads = await User.find(finalHeadQuery)
         .sort({ createdAt: -1, _id: -1 })
         .skip((page - 1) * limit)
@@ -829,6 +882,8 @@ const getUsers = async (req, res) => {
 
       return apiResponse(res, 200, 'Users retrieved successfully', formatted, {
         total: totalHeads,
+        total_heads: totalHeads,
+        total_members: totalMembers,
         page,
         limit,
         totalPages,
