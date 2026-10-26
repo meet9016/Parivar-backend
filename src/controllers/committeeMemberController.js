@@ -4,6 +4,8 @@ const CommitteeMember = require('../models/committeeMemberModel');
 const queryHelper = require("../utils/queryHelper");
 const bcrypt = require('bcryptjs');
 const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
+const { generatePdfExport, sendExportedPdfFile } = require('../utils/pdfHelper');
+const Config = require('../models/configModel');
 
 const getcommitteeMembers = async (req, res) => {
   try {
@@ -224,11 +226,113 @@ const downloadExportedCommitteeMembers = (req, res) => {
   return sendExportedExcelFile(req, res);
 };
 
+const exportCommitteeMembersPdf = async (req, res) => {
+  try {
+    let baseQuery = {};
+    if (req.query.role) {
+      const Role = require('../models/roleModel');
+      const roleDoc = await Role.findOne({ name: req.query.role }).lean();
+      if (roleDoc) {
+        baseQuery.role_id = roleDoc._id;
+      }
+    }
+    if (req.query.status !== undefined && req.query.status !== '') {
+      baseQuery.status = Number(req.query.status);
+    }
+    if (req.query.search && String(req.query.search).trim()) {
+      const searchRegex = new RegExp(String(req.query.search).trim(), 'i');
+      baseQuery.$or = [
+        { first_name: searchRegex },
+        { middle_name: searchRegex },
+        { last_name: searchRegex },
+        { number: searchRegex },
+        { email: searchRegex },
+        { designation: searchRegex }
+      ];
+    }
+
+    const members = await CommitteeMember.find(baseQuery)
+      .sort({ createdAt: -1 })
+      .populate('role_id')
+      .lean();
+
+    // Fetch site/community branding config (logo, phone, email, name, colors)
+    let config = null;
+    try {
+      config = await Config.findOne().lean();
+    } catch (_) {}
+
+    let logoUrl = req.query.logo || config?.webLogo || config?.appLogo || '';
+    if (logoUrl && !logoUrl.startsWith('http://') && !logoUrl.startsWith('https://')) {
+      logoUrl = publicUrl(req, logoUrl);
+    }
+
+    const branding = {
+      name: config?.name || req.query.name || 'Parivar',
+      logo: logoUrl,
+      phone: req.query.phone || config?.phone || '',
+      email: req.query.email || config?.email || '',
+      primaryColor: '#1B365D',
+      secondaryColor: '#42A5F5'
+    };
+
+    const columns = [
+      { header: '#', key: 'sr', width: 35, align: 'center' },
+      { header: 'MEMBER NAME', key: 'name', width: 175, align: 'left', bold: true },
+      { header: 'MOBILE NUMBER', key: 'number', width: 105, align: 'center' },
+      { header: 'EMAIL ADDRESS', key: 'email', width: 180, align: 'left' },
+      { header: 'DESIGNATION', key: 'designation', width: 115, align: 'left', bold: true },
+      { header: 'ASSIGNED ROLE', key: 'role', width: 95, align: 'center' },
+      { header: 'STATUS', key: 'status', width: 65, align: 'center' }
+    ];
+
+    const rows = members.map((member, idx) => {
+      const fullName = [member.first_name, member.middle_name, member.last_name].filter(Boolean).join(' ').trim();
+      const roleName = member.role_id?.name || member.role_name || '-';
+      const statusText = Number(member.status ?? 1) === 1 ? 'Active' : 'Inactive';
+
+      return {
+        sr: idx + 1,
+        name: fullName || '-',
+        number: member.number ? String(member.number) : '-',
+        email: member.email || '-',
+        designation: member.designation || '-',
+        role: roleName,
+        status: statusText
+      };
+    });
+
+    const { download_url, filename } = await generatePdfExport({
+      req,
+      filePrefix: 'Committee_Members',
+      title: 'Committee Members Directory',
+      columns,
+      rows,
+      branding,
+      orientation: 'landscape'
+    });
+
+    return apiResponse(res, 200, 'Committee members PDF exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    console.error('Error exporting committee members PDF:', error);
+    return apiResponse(res, 500, 'Error exporting committee members PDF', { error: error.message });
+  }
+};
+
+const downloadExportedCommitteeMembersPdf = (req, res) => {
+  return sendExportedPdfFile(req, res);
+};
+
 module.exports = {
   getcommitteeMembers,
   createcommitteeMember,
   updatecommitteeMember,
   deletecommitteeMember,
   exportCommitteeMembers,
-  downloadExportedCommitteeMembers
+  downloadExportedCommitteeMembers,
+  exportCommitteeMembersPdf,
+  downloadExportedCommitteeMembersPdf
 };
