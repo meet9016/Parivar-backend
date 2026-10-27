@@ -38,7 +38,7 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
       if (response.failureCount > 0) {
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.warn(`[FCM Error Token #${idx}]:`, resp.error?.message);
+            console.warn(`[FCM Error Token #${idx}]: [${resp.error?.code}] ${resp.error?.message}`);
           }
         });
       }

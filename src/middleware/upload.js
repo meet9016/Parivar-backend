@@ -129,6 +129,10 @@ const parseForm = (req, res, next) => {
     { name: 'student_image', maxCount: 1 },
 
     { name: 'bannerImages', maxCount: 20 },
+    { name: 'appeal_images', maxCount: 20 },
+    { name: 'documents', maxCount: 20 },
+    { name: 'document', maxCount: 1 },
+    { name: 'qr_code_image', maxCount: 1 },
     { name: 'appLogo', maxCount: 1 },
     { name: 'webLogo', maxCount: 1 },
     { name: 'favicon', maxCount: 1 },
@@ -148,11 +152,19 @@ const parseForm = (req, res, next) => {
         const uploadedFiles = await Promise.all(uploadPromises);
         
         for (const { fieldName, imagePath } of uploadedFiles) {
-          if (fieldName === 'images') {
+          if (fieldName === 'images' || fieldName === 'appeal_images') {
             if (!Array.isArray(req.body.images)) {
               req.body.images = [];
             }
             req.body.images.push(imagePath);
+            continue;
+          }
+
+          if (fieldName === 'documents') {
+            if (!Array.isArray(req.body.documents)) {
+              req.body.documents = [];
+            }
+            req.body.documents.push(imagePath);
             continue;
           }
 
@@ -190,11 +202,19 @@ const parseForm = (req, res, next) => {
         const uploadedFiles = await Promise.all(uploadPromises);
         
         for (const { fieldName, imagePath } of uploadedFiles) {
-          if (fieldName === 'images') {
+          if (fieldName === 'images' || fieldName === 'appeal_images') {
             if (!Array.isArray(req.body.images)) {
               req.body.images = [];
             }
             req.body.images.push(imagePath);
+            continue;
+          }
+
+          if (fieldName === 'documents') {
+            if (!Array.isArray(req.body.documents)) {
+              req.body.documents = [];
+            }
+            req.body.documents.push(imagePath);
             continue;
           }
 
