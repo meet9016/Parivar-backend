@@ -154,6 +154,32 @@ const appealSchema = new mongoose.Schema({
     type: String,
     index: true
   },
+  // Admin Assignment (e.g. assigning appeal verification/handling to a committee member)
+  assigned_to: {
+    id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
+    },
+    name: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    member_id: { type: String, default: '' },
+    assigned_at: { type: Date, default: null },
+    assigned_by: {
+      id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      name: { type: String, default: '' }
+    },
+    notes: { type: String, default: '' }
+  },
+  assigned_members: [
+    {
+      id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+      name: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      member_id: { type: String, default: '' },
+      assigned_at: { type: Date, default: Date.now }
+    }
+  ],
   // History of notifications broadcasted for this appeal
   notifications_sent: [
     {

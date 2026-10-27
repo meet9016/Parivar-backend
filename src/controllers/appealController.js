@@ -53,6 +53,23 @@ const checkIsOwn = (appeal, user) => {
   return appealIds.some(id => userIds.has(id));
 };
 
+const checkIsAssigned = (appeal, user) => {
+  if (!user || !appeal) return false;
+  const userIds = new Set([
+    String(user._id || ''),
+    String(user.id || ''),
+    String(user.member_id || '')
+  ].filter(Boolean));
+
+  if (appeal.assigned_to?.id && userIds.has(String(appeal.assigned_to.id))) {
+    return true;
+  }
+  if (Array.isArray(appeal.assigned_members)) {
+    return appeal.assigned_members.some(m => userIds.has(String(m.id || m._id || '')));
+  }
+  return false;
+};
+
 const formatAppeal = (req, item = {}) => {
   const rawImages = Array.isArray(item.images) ? item.images : (item.images ? [item.images] : []);
   const images = rawImages.map(img => publicUrl(req, img)).filter(Boolean);
@@ -101,6 +118,13 @@ const formatAppeal = (req, item = {}) => {
     completed_at: item.completed_at || null,
     created_by: item.created_by || null,
     member_id: item.member_id || '',
+    assigned_to: (item.assigned_to && (item.assigned_to.id || item.assigned_to.name)) ? item.assigned_to : null,
+    assigned_members: Array.isArray(item.assigned_members) ? item.assigned_members : [],
+    admin: (item.approved_by && item.approved_by.name)
+      ? item.approved_by
+      : (item.assigned_to?.assigned_by && item.assigned_to.assigned_by.name)
+        ? item.assigned_to.assigned_by
+        : null,
     notifications_sent: Array.isArray(item.notifications_sent) ? item.notifications_sent : [],
     notification_count: Array.isArray(item.notifications_sent) ? item.notifications_sent.length : 0,
     createdAt: item.createdAt,
@@ -174,7 +198,8 @@ const getAppeals = async (req, res) => {
 
 /**
  * GET /api/appeals/my
- * Convenience endpoint for logged-in user to see all their submitted help requests
+ * Convenience endpoint for logged-in user to see all their submitted help requests ("mene jo appeals kiya")
+ * If ?type=assigned or ?tab=assigned is passed, delegates to getAssignedAppeals
  */
 const getMyAppeals = async (req, res) => {
   try {
@@ -188,18 +213,40 @@ const getMyAppeals = async (req, res) => {
     ].filter(Boolean);
     const objectIds = userIds.filter(id => isObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
 
-    const query = {
+    const baseQuery = {
       $or: [
         { member_id: { $in: userIds } },
         { contact_phone: String(user.number || '') }
       ]
     };
     if (objectIds.length > 0) {
-      query.$or.push({ 'created_by.id': { $in: objectIds } });
+      baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
     }
 
-    const appeals = await Appeal.find(query).sort({ createdAt: -1 }).lean();
-    return apiResponse(res, 200, 'My appeals retrieved successfully', appeals.map(a => formatAppeal(req, a)));
+    if (req.query.page || req.query.limit || req.query.search || req.query.status || req.query.help_type) {
+      const { data, pagination } = await queryHelper(Appeal, req.query, {
+        baseQuery,
+        searchFields: [
+          'title',
+          'description',
+          'required_help',
+          'contact_name',
+          'patient_name',
+          'hospital_name'
+        ],
+        filterFields: ['status', 'help_type']
+      });
+      return apiResponse(
+        res,
+        200,
+        'My submitted appeals retrieved successfully',
+        data.map(item => formatAppeal(req, item)),
+        pagination
+      );
+    }
+
+    const appeals = await Appeal.find(baseQuery).sort({ createdAt: -1 }).lean();
+    return apiResponse(res, 200, 'My submitted appeals retrieved successfully', appeals.map(a => formatAppeal(req, a)));
   } catch (error) {
     return apiResponse(res, 500, error.message || 'Error retrieving my appeals');
   }
@@ -244,9 +291,10 @@ const getAppealById = async (req, res) => {
 
     const isAdmin = checkIsAdmin(req);
     const isOwner = checkIsOwn(appeal, req.user);
+    const isAssigned = checkIsAssigned(appeal, req.user);
 
-    // If appeal is Pending or Rejected, only Admin or the Submitter can view full details
-    if (!isAdmin && !isOwner && !['Approved', 'Completed'].includes(appeal.status)) {
+    // If appeal is Pending or Rejected, only Admin, Submitter, or Assigned Member can view full details
+    if (!isAdmin && !isOwner && !isAssigned && !['Approved', 'Completed'].includes(appeal.status)) {
       return apiResponse(res, 403, 'This help request is awaiting admin review and is not publicly visible.');
     }
 
@@ -382,7 +430,7 @@ const updateAppeal = async (req, res) => {
     ];
 
     if (isAdmin) {
-      allowedFields.push('collected_amount', 'admin_notes', 'rejection_reason');
+      allowedFields.push('collected_amount', 'admin_notes', 'rejection_reason', 'assigned_to', 'assigned_members');
     }
 
     allowedFields.forEach(field => {
@@ -577,6 +625,5 @@ module.exports = {
   updateAppeal,
   updateStatus,
   sendNotification,
-  getNotificationHistory,
   deleteAppeal
 };
