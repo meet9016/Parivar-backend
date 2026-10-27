@@ -12,7 +12,7 @@ const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 const { renderVafatCardHtml } = require('../templates/vafatCardTemplateService');
-const { generatePdfFromHtml, generateImageFromHtml, synchronizedGeneratePdf } = require('../services/pdfService');
+const { generatePdfFromHtml, generateImageFromHtml, generateVafatCardPdf, synchronizedGeneratePdf } = require('../services/pdfService');
 const DiniTalim = require('../models/diniTalimModel');
 const Master = require('../models/masterModel');
 
@@ -30,19 +30,31 @@ function resolveBaseUrl(req) {
   return base.replace(/\/api\/?$/, '').replace(/\/$/, '');
 }
 
-function buildDeathDownloadUrl(userId, req, format = 'png') {
+function buildDeathDownloadUrl(userId, req, format = 'png', extraParams = {}) {
   const baseUrl = resolveBaseUrl(req);
   const token = req?.query?.token || '';
-  const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
 
-  const host = req?.headers?.['x-forwarded-host'] || req?.get?.('host') || '';
+  const host = req?.headers?.['x-forwarded-host'] || (typeof req?.get === 'function' ? req.get('host') : '') || '';
   const referer = req?.headers?.['referer'] || '';
   const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
                     host.includes('parivar.me') ||
                     referer.includes('parivar.me');
 
   const prefix = isApiApi ? '/api/api' : '/api';
-  return `${baseUrl}${prefix}/users/death/${userId}/download?format=${format}${tokenQuery}`;
+
+  const queryParams = new URLSearchParams();
+  queryParams.set('format', format);
+  if (token) queryParams.set('token', token);
+
+  const keys = ['name', 'date', 'formattedDate', 'vaar', 'address', 'village', 'janaza_time', 'janaza_place', 'kabrastan', 'number', 'mobile', 'community_name', 'inline'];
+  for (const k of keys) {
+    const val = extraParams[k] !== undefined ? extraParams[k] : req?.query?.[k];
+    if (val !== undefined && val !== null && val !== '') {
+      queryParams.set(k, String(val));
+    }
+  }
+
+  return `${baseUrl}${prefix}/users/death/${userId}/download?${queryParams.toString()}`;
 }
 
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/authConfig');
@@ -2159,15 +2171,15 @@ const downloadDeathCard = async (req, res) => {
       });
     }
 
-    // Resolve community name from query or config
+    // Resolve community name from query or default to Gujarati Jamat title
     let communityName = req.query.community_name || req.query.communityName || '';
     if (!communityName) {
       try {
         const Config = require('../models/configModel');
         const config = await Config.findOne().lean();
-        communityName = config?.name || config?.web_name || 'Shree Halai Memon Jamat';
+        communityName = config?.communityName || config?.name_gu || 'રાધનપુર મેમણ જમાત';
       } catch (_) {
-        communityName = 'Shree Halai Memon Jamat';
+        communityName = 'રાધનપુર મેમણ જમાત';
       }
     }
 
@@ -2177,22 +2189,27 @@ const downloadDeathCard = async (req, res) => {
     const safeName = memberName.replace(/[^a-zA-Z0-9_\-]/g, '_');
     const filename = `vafat_${titlePrefix}_${safeName}`;
 
-    // Render HTML string
+    // Render HTML string with exact overrides
     const htmlContent = await renderVafatCardHtml(user, {
       communityName,
       format,
-      isPdf: format === 'pdf'
+      isPdf: format === 'pdf',
+      name: req.query.name !== undefined ? req.query.name : (req.body?.name || undefined),
+      formattedDate: req.query.date !== undefined ? req.query.date : (req.query.formattedDate || req.body?.date || undefined),
+      vaar: req.query.vaar !== undefined ? req.query.vaar : (req.body?.vaar || undefined),
+      address: req.query.address !== undefined ? req.query.address : (req.body?.address || undefined),
+      village: req.query.village !== undefined ? req.query.village : (req.body?.village || undefined),
+      janaza_time: req.query.janaza_time !== undefined ? req.query.janaza_time : (req.query.janazaTime || req.body?.janaza_time || undefined),
+      janaza_place: req.query.janaza_place !== undefined ? req.query.janaza_place : (req.query.janazaPlace || req.body?.janaza_place || undefined),
+      kabrastan: req.query.kabrastan !== undefined ? req.query.kabrastan : (req.body?.kabrastan || undefined),
+      number: req.query.number !== undefined ? req.query.number : (req.query.mobile || req.body?.number || undefined)
     });
 
     const lockKey = `vafat_card_${id}_${format}`;
 
     if (format === 'pdf') {
       const pdfBuffer = await synchronizedGeneratePdf(lockKey, async () => {
-        return generatePdfFromHtml(htmlContent, {
-          filename,
-          format: 'A4',
-          orientation: 'portrait'
-        });
+        return generateVafatCardPdf(htmlContent, { filename });
       });
 
       res.setHeader('Content-Type', 'application/pdf');
@@ -2206,7 +2223,8 @@ const downloadDeathCard = async (req, res) => {
       const imageBuffer = await synchronizedGeneratePdf(lockKey, async () => {
         return generateImageFromHtml(htmlContent, {
           filename,
-          width: 560,
+          width: 720,
+          selector: '.card-frame',
           deviceScaleFactor: 2.5
         });
       });
@@ -2251,8 +2269,10 @@ const getDeathCardLink = async (req, res) => {
     const isFemale = String(user.gender || '').toLowerCase() === 'female';
     const titlePrefix = isFemale ? 'Marhuma' : 'Marhum';
 
+    const reqFormat = String(req.query.format || req.query.type || 'png').toLowerCase();
     const pngUrl = buildDeathDownloadUrl(memberId, req, 'png');
     const pdfUrl = buildDeathDownloadUrl(memberId, req, 'pdf');
+    const downloadUrl = reqFormat === 'pdf' ? pdfUrl : pngUrl;
 
     return res.status(200).json({
       status: 200,
@@ -2262,7 +2282,8 @@ const getDeathCardLink = async (req, res) => {
         member_id: user.member_id || '',
         name: memberName,
         title_prefix: titlePrefix,
-        download_url: pngUrl,
+        download_url: downloadUrl,
+        url: downloadUrl,
         png_url: pngUrl,
         pdf_url: pdfUrl,
         death_date: user.death_date || null,
@@ -2273,7 +2294,8 @@ const getDeathCardLink = async (req, res) => {
         islamic_date: user.islamic_date || '',
         vaar: user.vaar || '',
         address: user.address || '',
-        village: user.village || ''
+        village: user.village || '',
+        number: user.number || user.phone || user.mobile || ''
       }
     });
   } catch (error) {
