@@ -16,16 +16,32 @@ const { generatePdfFromHtml, synchronizedGeneratePdf } = require('../services/pd
 const { renderCertificateHtml } = require('../templates/certificateTemplateService');
 
 /**
+ * Helper to determine API route prefix (/api/api on production nginx proxy, /api locally)
+ */
+function getApiPrefix(req) {
+  const host = req?.headers?.['x-forwarded-host'] || (typeof req?.get === 'function' ? req.get('host') : req?.headers?.host) || '';
+  const referer = req?.headers?.['referer'] || '';
+  const origin = req?.headers?.['origin'] || '';
+  const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
+                    host.includes('parivar.me') ||
+                    referer.includes('parivar.me') ||
+                    origin.includes('parivar.me');
+
+  return isApiApi ? '/api/api' : '/api';
+}
+
+/**
  * Helper to construct canonical download and view URLs for a certificate record
  */
 function attachCertificateUrls(record, req) {
   if (!record) return record;
   const baseUrl = resolveBaseUrl(req);
+  const prefix = getApiPrefix(req);
   const recObj = record.toObject ? record.toObject() : { ...record };
   const recId = String(recObj._id || recObj.id);
 
-  recObj.downloadUrl = `${baseUrl}/api/certificates/download/${recId}`;
-  recObj.viewUrl = `${baseUrl}/api/certificates/view/${recId}`;
+  recObj.downloadUrl = `${baseUrl}${prefix}/certificates/download/${recId}`;
+  recObj.viewUrl = `${baseUrl}${prefix}/certificates/view/${recId}`;
 
   if (recObj.pdfPath && !recObj.pdfUrl) {
     recObj.pdfUrl = `${baseUrl}${recObj.pdfPath.startsWith('/') ? recObj.pdfPath : `/${recObj.pdfPath}`}`;
@@ -450,10 +466,11 @@ exports.getCertificateDownloadLink = async (req, res) => {
     }
 
     const baseUrl = resolveBaseUrl(req);
+    const prefix = getApiPrefix(req);
     const recId = String(record._id || record.id);
     const token = req.query.token || req.headers.authorization?.replace(/^Bearer\s+/i, '') || '';
     const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-    const downloadUrl = `${baseUrl}/api/certificates/download/${recId}${tokenQuery}`;
+    const downloadUrl = `${baseUrl}${prefix}/certificates/download/${recId}${tokenQuery}`;
     const filename = (record.fileName || `${record.type}-certificate.pdf`).replace(/\.pdf$/i, '');
 
     return apiResponse(res, 200, 'Certificate download link generated successfully', {
