@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+    <defs>
+      <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fff0c4"/>
+        <stop offset="25%" stop-color="#e5c068"/>
+        <stop offset="50%" stop-color="#c9982a"/>
+        <stop offset="75%" stop-color="#dfb958"/>
+        <stop offset="100%" stop-color="#a47714"/>
+      </linearGradient>
+      <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#dfb958"/>
+        <stop offset="50%" stop-color="#fff0c4"/>
+        <stop offset="100%" stop-color="#c9982a"/>
+      </linearGradient>
+    </defs>
+    <g fill="url(#goldGrad)" stroke="#835c05" stroke-width="0.75" stroke-linejoin="round">
+      <!-- Outer corner framing lines -->
+      <path d="M 12,12 L 310,12 L 310,18 L 18,18 L 18,310 L 12,310 Z" fill="url(#lineGrad)"/>
+      <path d="M 24,24 L 250,24 L 250,27 L 27,27 L 27,250 L 24,250 Z" fill="url(#lineGrad)" opacity="0.85"/>
+      <circle cx="15" cy="15" r="3.5" fill="#fff0c4"/>
+      <circle cx="25" cy="25" r="2.5" fill="#fff0c4"/>
+
+      <!-- Corner Fleur-de-lis / Islamic Crest -->
+      <path d="M 32,32 C 48,15 78,22 96,42 C 82,48 70,44 58,54 C 48,64 52,76 44,90 C 28,72 24,50 32,32 Z"/>
+      <circle cx="36" cy="36" r="4.5" fill="#fff0c4"/>
+      <circle cx="50" cy="30" r="3"/>
+      <circle cx="30" cy="50" r="3"/>
+
+      <!-- Horizontal Arabesque Branch -->
+      <path d="M 96,42 C 120,24 150,28 175,44 C 158,48 145,42 132,52 C 120,62 125,78 112,84 C 105,72 102,58 96,42 Z"/>
+      <circle cx="177" cy="46" r="3.5"/>
+      <path d="M 175,44 C 198,34 225,36 245,50 C 228,54 216,50 204,60 C 218,66 230,64 240,76 C 218,78 200,66 182,60 Z"/>
+      <circle cx="247" cy="52" r="3"/>
+      <path d="M 245,50 C 265,40 288,44 305,56 C 288,60 278,56 268,66 C 260,76 264,88 255,98 C 242,82 240,65 245,50 Z"/>
+      <circle cx="307" cy="58" r="3"/>
+
+      <!-- Vertical Arabesque Branch -->
+      <path d="M 42,96 C 24,120 28,150 44,175 C 48,158 42,145 52,132 C 62,120 78,125 84,112 C 72,105 58,102 42,96 Z"/>
+      <circle cx="46" cy="177" r="3.5"/>
+      <path d="M 44,175 C 34,198 36,225 50,245 C 54,228 50,216 60,204 C 66,218 64,230 76,240 C 78,218 66,200 60,182 Z"/>
+      <circle cx="52" cy="247" r="3"/>
+      <path d="M 50,245 C 40,265 44,288 56,305 C 60,288 56,278 66,268 C 76,260 88,264 98,255 C 82,242 65,240 50,245 Z"/>
+      <circle cx="58" cy="307" r="3"/>
+
+      <!-- Diagonal Heart & Palmette Flow -->
+      <path d="M 68,68 C 88,52 118,62 132,82 C 114,86 102,78 90,92 C 82,104 88,118 78,132 C 64,114 60,88 68,68 Z"/>
+      <circle cx="106" cy="106" r="5" fill="#fff0c4"/>
+      <path d="M 106,106 C 130,122 144,152 158,176 C 142,166 132,152 120,148 C 110,158 106,172 96,180 C 100,156 104,132 106,106 Z"/>
+      <circle cx="160" cy="178" r="3.5"/>
+
+      <!-- Inner accent vines -->
+      <path d="M 132,82 C 150,96 164,88 180,102 C 166,110 152,104 142,118 C 134,106 130,94 132,82 Z"/>
+      <circle cx="182" cy="104" r="3"/>
+      <path d="M 82,132 C 96,150 88,164 102,180 C 110,166 104,152 118,142 C 106,134 94,130 82,132 Z"/>
+      <circle cx="104" cy="182" r="3"/>
+    </g>
+  </svg>
