@@ -30,31 +30,19 @@ function resolveBaseUrl(req) {
   return base.replace(/\/api\/?$/, '').replace(/\/$/, '');
 }
 
-function buildDeathDownloadUrl(userId, req, format = 'png', extraParams = {}) {
+function buildDeathDownloadUrl(userId, req, format = 'png') {
   const baseUrl = resolveBaseUrl(req);
   const token = req?.query?.token || '';
+  const tokenQuery = token ? `&token=${encodeURIComponent(token)}` : '';
 
   const host = req?.headers?.['x-forwarded-host'] || (typeof req?.get === 'function' ? req.get('host') : '') || '';
   const referer = req?.headers?.['referer'] || '';
   const isApiApi = (req?.originalUrl && req.originalUrl.includes('/api/api')) ||
-                    host.includes('parivar.me') ||
-                    referer.includes('parivar.me');
+    host.includes('parivar.me') ||
+    referer.includes('parivar.me');
 
   const prefix = isApiApi ? '/api/api' : '/api';
-
-  const queryParams = new URLSearchParams();
-  queryParams.set('format', format);
-  if (token) queryParams.set('token', token);
-
-  const keys = ['name', 'date', 'formattedDate', 'vaar', 'address', 'village', 'janaza_time', 'janaza_place', 'kabrastan', 'number', 'mobile', 'community_name', 'inline'];
-  for (const k of keys) {
-    const val = extraParams[k] !== undefined ? extraParams[k] : req?.query?.[k];
-    if (val !== undefined && val !== null && val !== '') {
-      queryParams.set(k, String(val));
-    }
-  }
-
-  return `${baseUrl}${prefix}/users/death/${userId}/download?${queryParams.toString()}`;
+  return `${baseUrl}${prefix}/users/death/${userId}/download?format=${format}${tokenQuery}`;
 }
 
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/authConfig');
@@ -386,14 +374,14 @@ const register = async (req, res) => {
     const defaultRole = await Role.findOne({ name: 'UserRole' });
     if (defaultRole) {
       newUser.role_id = defaultRole._id;
-    // if (req.body.role_id && mongoose.isValidObjectId(req.body.role_id)) {
-    //   newUser.role_id = req.body.role_id;
-    // } else {
-    //   const Role = require('../models/roleModel');
-    //   const defaultRole = await Role.findOne({ name: 'UserRole' });
-    //   if (defaultRole) {
-    //     newUser.role_id = defaultRole._id;
-    //   }
+      // if (req.body.role_id && mongoose.isValidObjectId(req.body.role_id)) {
+      //   newUser.role_id = req.body.role_id;
+      // } else {
+      //   const Role = require('../models/roleModel');
+      //   const defaultRole = await Role.findOne({ name: 'UserRole' });
+      //   if (defaultRole) {
+      //     newUser.role_id = defaultRole._id;
+      //   }
     }
 
     await newUser.save();
@@ -2151,8 +2139,24 @@ const downloadExportFile = async (req, res) => {
 const downloadDeathCard = async (req, res) => {
   try {
     const { id } = req.params;
-    const format = String(req.query.format || req.query.type || 'png').toLowerCase();
-    const isInline = String(req.query.inline || req.query.preview || 'false').toLowerCase() === 'true';
+    const getOverride = (field, aliases = []) => {
+      if (req.body) {
+        if (req.body[field] !== undefined && req.body[field] !== '') return req.body[field];
+        for (const a of aliases) {
+          if (req.body[a] !== undefined && req.body[a] !== '') return req.body[a];
+        }
+      }
+      if (req.query) {
+        if (req.query[field] !== undefined && req.query[field] !== '') return req.query[field];
+        for (const a of aliases) {
+          if (req.query[a] !== undefined && req.query[a] !== '') return req.query[a];
+        }
+      }
+      return undefined;
+    };
+
+    const format = String(getOverride('format', ['type']) || 'png').toLowerCase();
+    const isInline = String(getOverride('inline', ['preview']) || 'false').toLowerCase() === 'true';
 
     const orConditions = [{ member_id: id }];
     if (mongoose.isValidObjectId(id)) {
@@ -2171,8 +2175,8 @@ const downloadDeathCard = async (req, res) => {
       });
     }
 
-    // Resolve community name from query or default to Gujarati Jamat title
-    let communityName = req.query.community_name || req.query.communityName || '';
+    // Resolve community name from query/body or default to Gujarati Jamat title
+    let communityName = getOverride('community_name', ['communityName']) || '';
     if (!communityName) {
       try {
         const Config = require('../models/configModel');
@@ -2186,7 +2190,19 @@ const downloadDeathCard = async (req, res) => {
     const memberName = fullName(user) || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Member';
     const isFemale = String(user.gender || '').toLowerCase() === 'female';
     const titlePrefix = isFemale ? 'Marhuma' : 'Marhum';
-    const safeName = memberName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+
+    const overrideName = getOverride('name', ['memberName']);
+    const overrideDate = getOverride('date', ['formattedDate', 'death_date']);
+    const overrideVaar = getOverride('vaar');
+    const overrideAddress = getOverride('address');
+    const overrideVillage = getOverride('village');
+    const overrideJanazaTime = getOverride('janaza_time', ['janazaTime']);
+    const overrideJanazaPlace = getOverride('janaza_place', ['janazaPlace']);
+    const overrideKabrastan = getOverride('kabrastan');
+    const overrideNumber = getOverride('number', ['mobile', 'phone']);
+
+    const displayName = overrideName || memberName;
+    const safeName = displayName.replace(/[^a-zA-Z0-9_\-\u0A80-\u0AFF]/g, '_');
     const filename = `vafat_${titlePrefix}_${safeName}`;
 
     // Render HTML string with exact overrides
@@ -2194,15 +2210,16 @@ const downloadDeathCard = async (req, res) => {
       communityName,
       format,
       isPdf: format === 'pdf',
-      name: req.query.name !== undefined ? req.query.name : (req.body?.name || undefined),
-      formattedDate: req.query.date !== undefined ? req.query.date : (req.query.formattedDate || req.body?.date || undefined),
-      vaar: req.query.vaar !== undefined ? req.query.vaar : (req.body?.vaar || undefined),
-      address: req.query.address !== undefined ? req.query.address : (req.body?.address || undefined),
-      village: req.query.village !== undefined ? req.query.village : (req.body?.village || undefined),
-      janaza_time: req.query.janaza_time !== undefined ? req.query.janaza_time : (req.query.janazaTime || req.body?.janaza_time || undefined),
-      janaza_place: req.query.janaza_place !== undefined ? req.query.janaza_place : (req.query.janazaPlace || req.body?.janaza_place || undefined),
-      kabrastan: req.query.kabrastan !== undefined ? req.query.kabrastan : (req.body?.kabrastan || undefined),
-      number: req.query.number !== undefined ? req.query.number : (req.query.mobile || req.body?.number || undefined)
+      name: overrideName,
+      formattedDate: overrideDate,
+      date: overrideDate,
+      vaar: overrideVaar,
+      address: overrideAddress,
+      village: overrideVillage,
+      janaza_time: overrideJanazaTime,
+      janaza_place: overrideJanazaPlace,
+      kabrastan: overrideKabrastan,
+      number: overrideNumber
     });
 
     const lockKey = `vafat_card_${id}_${format}`;
@@ -2246,6 +2263,74 @@ const downloadDeathCard = async (req, res) => {
   }
 };
 
+// Render HTML string directly for browser preview & web/mobile clients
+const getDeathCardHtml = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ member_id: id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.unshift({ _id: id });
+    }
+
+    const user = await User.findOne({ $or: orConditions })
+      .populate('family_head', 'first_name middle_name last_name name')
+      .lean();
+
+    if (!user) {
+      return res.status(404).send('<h3 style="font-family:sans-serif;text-align:center;margin-top:40px;">Deceased member record not found</h3>');
+    }
+
+    const getOverride = (field, aliases = []) => {
+      if (req.body) {
+        if (req.body[field] !== undefined && req.body[field] !== '') return req.body[field];
+        for (const a of aliases) {
+          if (req.body[a] !== undefined && req.body[a] !== '') return req.body[a];
+        }
+      }
+      if (req.query) {
+        if (req.query[field] !== undefined && req.query[field] !== '') return req.query[field];
+        for (const a of aliases) {
+          if (req.query[a] !== undefined && req.query[a] !== '') return req.query[a];
+        }
+      }
+      return undefined;
+    };
+
+    let communityName = getOverride('community_name', ['communityName']) || '';
+    if (!communityName) {
+      try {
+        const Config = require('../models/configModel');
+        const config = await Config.findOne().lean();
+        communityName = config?.communityName || config?.name_gu || 'રાધનપુર મેમણ જમાત';
+      } catch (_) {
+        communityName = 'રાધનપુર મેમણ જમાત';
+      }
+    }
+
+    const htmlContent = await renderVafatCardHtml(user, {
+      communityName,
+      name: getOverride('name', ['memberName']),
+      formattedDate: getOverride('date', ['formattedDate', 'death_date']),
+      date: getOverride('date', ['formattedDate', 'death_date']),
+      vaar: getOverride('vaar'),
+      address: getOverride('address'),
+      village: getOverride('village'),
+      janaza_time: getOverride('janaza_time', ['janazaTime']),
+      janaza_place: getOverride('janaza_place', ['janazaPlace']),
+      kabrastan: getOverride('kabrastan'),
+      number: getOverride('number', ['mobile', 'phone'])
+    });
+
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.status(200).send(htmlContent);
+  } catch (error) {
+    console.error('Error generating vafat card HTML:', error);
+    return res.status(500).send(`<h3 style="font-family:sans-serif;color:red;text-align:center;">Failed to render card: ${error.message}</h3>`);
+  }
+};
+
 // Get Direct Download Links & Metadata for Death Card (for Mobile Apps)
 const getDeathCardLink = async (req, res) => {
   try {
@@ -2283,7 +2368,6 @@ const getDeathCardLink = async (req, res) => {
         name: memberName,
         title_prefix: titlePrefix,
         download_url: downloadUrl,
-        url: downloadUrl,
         png_url: pngUrl,
         pdf_url: pdfUrl,
         death_date: user.death_date || null,
@@ -2294,8 +2378,7 @@ const getDeathCardLink = async (req, res) => {
         islamic_date: user.islamic_date || '',
         vaar: user.vaar || '',
         address: user.address || '',
-        village: user.village || '',
-        number: user.number || user.phone || user.mobile || ''
+        village: user.village || ''
       }
     });
   } catch (error) {
@@ -2359,6 +2442,7 @@ module.exports = {
   exportUsers,
   downloadExportFile,
   downloadDeathCard,
-  getDeathCardLink
+  getDeathCardLink,
+  getDeathCardHtml
 };
 
