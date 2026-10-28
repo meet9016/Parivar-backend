@@ -187,6 +187,9 @@ const addEvent = async (req, res) => {
 
     // Send push notification if requested
     if (req.body.send_notification !== 'false' && req.body.send_notification !== false) {
+      event.reminder_sent = true;
+      await event.save();
+
       const imageUrl = event.image ? publicUrl(req, event.image) : '';
       const eventDate = event.start_time || event.event_date || event.createdAt || '';
       const target_type = req.body.target_type || req.body.target_audience || 'all';

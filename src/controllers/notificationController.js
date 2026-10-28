@@ -59,7 +59,15 @@ const createAndBroadcast = async ({
     target_type: ['all', 'committee', 'specific'].includes(target_type) ? target_type : 'all',
     target_users: target_type === 'specific' ? cleanTargetUserIds : [],
     date: date ? new Date(date) : new Date(),
-    expires_at: rest.expires_at ? new Date(rest.expires_at) : null
+    expires_at: rest.expires_at ? new Date(rest.expires_at) : null,
+    key: rest.key || rest.push_key || '',
+    push_key: rest.push_key || rest.key || '',
+    prayer: rest.prayer || '',
+    prayer_name: rest.prayer_name || '',
+    prayer_type: rest.prayer_type || '',
+    prayer_time: rest.prayer_time || '',
+    lead_minutes: rest.lead_minutes !== undefined ? rest.lead_minutes : null,
+    ...rest
   };
 
   // Save notification record quickly
@@ -88,32 +96,40 @@ const createAndBroadcast = async ({
 
   // Dispatch Socket.IO and FCM asynchronously in background (Non-blocking for fast API response)
   setImmediate(async () => {
+    // 1. Socket.IO Broadcast (isolated)
     try {
       const io = socketManager.getIO();
-
-      if (notif.target_type === 'committee') {
-        const committeeMembers = await User.find({ is_committee: true }, '_id fcm_token').lean();
-        const userIds = committeeMembers.map(m => m._id);
-
-        userIds.forEach(uid => {
-          io.to(`user_${uid}`).emit('new_notification', payload);
-        });
-
-        sendNotificationToUsers(userIds, title, body, image, fcmExtra);
-
-      } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
-        cleanTargetUserIds.forEach(uid => {
-          io.to(`user_${uid}`).emit('new_notification', payload);
-        });
-
-        sendNotificationToUsers(cleanTargetUserIds, title, body, image, fcmExtra);
-
-      } else {
-        io.to('broadcast').emit('new_notification', payload);
-        sendNotificationToAll(title, body, image, fcmExtra);
+      if (io) {
+        if (notif.target_type === 'committee') {
+          const committeeMembers = await User.find({ is_committee: true }, '_id').lean();
+          committeeMembers.forEach(m => {
+            io.to(`user_${m._id}`).emit('new_notification', payload);
+          });
+        } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
+          cleanTargetUserIds.forEach(uid => {
+            io.to(`user_${uid}`).emit('new_notification', payload);
+          });
+        } else {
+          io.to('broadcast').emit('new_notification', payload);
+        }
       }
-    } catch (err) {
-      console.error('[Async Notification Dispatch Error]:', err.message);
+    } catch (socketErr) {
+      console.warn('[Socket.IO Emit Warning]:', socketErr.message);
+    }
+
+    // 2. FCM Push Notification to Mobile Devices (isolated and awaited)
+    try {
+      if (notif.target_type === 'committee') {
+        const committeeMembers = await User.find({ is_committee: true }, '_id').lean();
+        const userIds = committeeMembers.map(m => m._id);
+        await sendNotificationToUsers(userIds, title, body, image, fcmExtra);
+      } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
+        await sendNotificationToUsers(cleanTargetUserIds, title, body, image, fcmExtra);
+      } else {
+        await sendNotificationToAll(title, body, image, fcmExtra);
+      }
+    } catch (fcmErr) {
+      console.error('[FCM Dispatch Error]:', fcmErr.message);
     }
   });
 
@@ -226,4 +242,3 @@ const getUnreadCount = async (req, res) => {
 };
 
 module.exports = { createAndBroadcast, getNotifications, markRead, markAllRead, getUnreadCount };
-

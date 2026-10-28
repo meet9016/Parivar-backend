@@ -68,6 +68,20 @@ const updatePrayerTimes = async (req, res) => {
       config.prayerTimes.notificationsEnabled = pt.notificationsEnabled;
       config.prayerTimes.notifications_enabled = pt.notifications_enabled;
     }
+        // Reset prayer alerts sent for today so modified times/offsets can trigger immediately
+    const kolkataFmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = kolkataFmt.formatToParts(new Date());
+    const partMap = {};
+    parts.forEach(p => { partMap[p.type] = p.value; });
+    const todayDateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+    // Preserved prayerAlertsSent tracking to prevent duplicate same-day alerts
+
     config.markModified('prayerTimes');
 
     await config.save();
