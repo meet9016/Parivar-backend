@@ -16,6 +16,23 @@ const createAndBroadcast = async ({
   target_users = [], 
   ...rest 
 }) => {
+  // If this is a prayer timetable notification and notifications are turned OFF, suppress completely
+  if (type === 'prayer_reminder' && !rest.is_test) {
+    try {
+      const Config = require('../models/configModel');
+      const cfg = await Config.findOne().lean();
+      const pt = cfg?.prayerTimes;
+      const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+      const isOff = !pt || isFalsy(pt.notificationsEnabled) || isFalsy(pt.notifications_enabled) || isFalsy(pt.enabled);
+      if (isOff) {
+        console.log('[createAndBroadcast] 🚫 Prayer reminder notification suppressed because prayerTimes.notificationsEnabled is OFF');
+        return null;
+      }
+    } catch (checkErr) {
+      console.warn('[createAndBroadcast] Warning checking prayer notification status:', checkErr.message);
+    }
+  }
+
   // Normalize target_users
   let cleanTargetUserIds = [];
   if (Array.isArray(target_users)) {

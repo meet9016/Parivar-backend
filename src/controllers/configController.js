@@ -41,7 +41,8 @@ const DEFAULT_PRAYER_TIMES = {
   azanOffsetMinutes: 25,
   jamatOffsetMinutes: 15,
   qazaOffsetMinutes: 15,
-  notificationsEnabled: true
+  notificationsEnabled: true,
+  notifications_enabled: true
 };
 
 const formatConfig = (req, config) => {
@@ -54,9 +55,14 @@ const formatConfig = (req, config) => {
 
   // Prayer Timetable formatting
   const rawPt = obj.prayerTimes ? (obj.prayerTimes.toObject ? obj.prayerTimes.toObject() : obj.prayerTimes) : {};
+  const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+  const isPtNotifEnabled = !isFalsy(rawPt.notificationsEnabled) && !isFalsy(rawPt.notifications_enabled) && !isFalsy(rawPt.enabled);
+
   obj.prayerTimes = {
     ...DEFAULT_PRAYER_TIMES,
     ...rawPt,
+    notificationsEnabled: isPtNotifEnabled,
+    notifications_enabled: isPtNotifEnabled,
     fajr: { ...DEFAULT_PRAYER_TIMES.fajr, ...(rawPt.fajr || {}) },
     zohr: { ...DEFAULT_PRAYER_TIMES.zohr, ...(rawPt.zohr || {}) },
     asr: { ...DEFAULT_PRAYER_TIMES.asr, ...(rawPt.asr || {}) },
@@ -233,10 +239,21 @@ const updateConfig = async (req, res) => {
       if (req.body.prayerLogo) {
         pt.logo = req.body.prayerLogo;
       }
+      if (pt.notificationsEnabled !== undefined || pt.notifications_enabled !== undefined) {
+        const val = pt.notificationsEnabled !== undefined ? pt.notificationsEnabled : pt.notifications_enabled;
+        const isFalsyVal = (v) => v === false || v === 'false' || v === 0 || v === '0';
+        const isEnabled = !isFalsyVal(val);
+        pt.notificationsEnabled = isEnabled;
+        pt.notifications_enabled = isEnabled;
+      }
       config.prayerTimes = {
-        ...(config.prayerTimes || {}),
+        ...(config.prayerTimes ? (config.prayerTimes.toObject ? config.prayerTimes.toObject() : config.prayerTimes) : {}),
         ...pt
       };
+      if (pt.notificationsEnabled !== undefined) {
+        config.prayerTimes.notificationsEnabled = pt.notificationsEnabled;
+        config.prayerTimes.notifications_enabled = pt.notifications_enabled;
+      }
       config.markModified('prayerTimes');
     } else if (req.body.prayerLogo) {
       if (!config.prayerTimes) config.prayerTimes = {};
@@ -285,7 +302,9 @@ const testScheduledPush = async (req, res) => {
         fridayPushTime: fridayTime
       });
     } else if (day === 'prayer' || prayer) {
-      if (config?.prayerTimes?.notificationsEnabled === false || config?.prayerTimes?.notifications_enabled === false) {
+      const pt = config?.prayerTimes ? (config.prayerTimes.toObject ? config.prayerTimes.toObject() : config.prayerTimes) : null;
+      const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+      if (!pt || isFalsy(pt.notificationsEnabled) || isFalsy(pt.notifications_enabled) || isFalsy(pt.enabled)) {
         return res.status(400).json({
           status: 400,
           message: 'Prayer Push Notifications are currently turned OFF. Turn ON the switch to send notifications.',

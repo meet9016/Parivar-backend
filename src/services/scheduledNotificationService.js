@@ -393,8 +393,10 @@ const checkAndSendScheduledNotifications = async () => {
           // 3. Daily Prayer Push Notifications (Azan -25m, Jamat -15m)
           // -------------------------------------------------------------
           try {
-            const pt = cfg.prayerTimes;
-            const isNotificationsOn = pt && pt.enabled !== false && pt.notificationsEnabled !== false && pt.notifications_enabled !== false;
+            const pt = cfg.prayerTimes ? (cfg.prayerTimes.toObject ? cfg.prayerTimes.toObject() : cfg.prayerTimes) : null;
+            const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+            const isNotificationsOff = !pt || isFalsy(pt.notificationsEnabled) || isFalsy(pt.notifications_enabled) || isFalsy(pt.enabled);
+            const isNotificationsOn = !isNotificationsOff;
             if (isNotificationsOn) {
               const currentHour = parseInt(partMap.hour, 10);
               const currentMinute = parseInt(partMap.minute, 10);

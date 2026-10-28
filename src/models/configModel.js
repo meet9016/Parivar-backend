@@ -258,6 +258,10 @@ const configSchema = new mongoose.Schema({
       type: Boolean,
       default: true,
     },
+    notifications_enabled: {
+      type: Boolean,
+      default: true,
+    },
   },
 
   // Tracks prayer push notification keys sent per date to prevent duplicates
