@@ -192,7 +192,7 @@ async function renderVafatCardHtml(member, options = {}) {
 
   // Base64 assets from public/uploads
   const topImgDataUri = getAssetDataUri('top_img.png');
-  const labelDataUri = getAssetDataUri('label_tall.png') || getAssetDataUri('label.png');
+  const labelDataUri = getAssetDataUri('label_tall.png');
   const bannerDataUri = getAssetDataUri('banner_tall.png') || labelDataUri;
   const mosqueIconDataUri = getAssetDataUri('gold_mosque_icon.png');
   const cornerDataUri = getAssetDataUri('mayyat_corner.png');

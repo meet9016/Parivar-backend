@@ -11,9 +11,6 @@ archive
 *.log
 dist
 
-# Uploaded files and media
-uploads/
-
 # Migration snapshots & backups
 scripts/backups/
 
