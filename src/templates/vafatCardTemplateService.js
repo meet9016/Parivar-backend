@@ -136,9 +136,14 @@ function getAutoIslamicDate(dateStr) {
  */
 function getAssetDataUri(filename, mimeType = 'image/png') {
   try {
-    const filepath = path.resolve(__dirname, '../../public/uploads', filename);
-    if (fs.existsSync(filepath)) {
-      const data = fs.readFileSync(filepath).toString('base64');
+    const uploadPath = path.resolve(__dirname, '../../public/uploads', filename);
+    if (fs.existsSync(uploadPath)) {
+      const data = fs.readFileSync(uploadPath).toString('base64');
+      return `data:${mimeType};base64,${data}`;
+    }
+    const assetPath = path.resolve(__dirname, '../assets', filename);
+    if (fs.existsSync(assetPath)) {
+      const data = fs.readFileSync(assetPath).toString('base64');
       return `data:${mimeType};base64,${data}`;
     }
   } catch (_) { }
@@ -156,22 +161,22 @@ async function renderVafatCardHtml(member, options = {}) {
   const isFemale = String(member?.gender || '').toLowerCase() === 'female';
   const nameLabel = isFemale ? 'મરહુમાનું નામ' : 'મરહુમનું નામ';
 
-  const memberName = options.name || options.memberName || [member?.first_name, member?.middle_name, member?.last_name]
+  const memberName = (options.name !== undefined && options.name !== '') ? options.name : (options.memberName || [member?.first_name, member?.middle_name, member?.last_name]
     .filter(Boolean)
     .join(' ')
-    .trim() || member?.name || member?.full_name || '';
+    .trim() || member?.name || member?.full_name || '');
 
   const communityName = options.communityNameGujarati || options.communityName || options.community_name || 'રાધનપુર મેમણ જમાત';
 
-  const rawDate = options.formattedDate !== undefined ? options.formattedDate : (options.date || formatDateDisplay(member?.death_date) || '');
-  const vaarText = options.vaar !== undefined ? options.vaar : (member?.vaar || (member?.death_date ? getGujaratiDay(member.death_date) : '') || '');
+  const rawDate = (options.formattedDate !== undefined && options.formattedDate !== '') ? options.formattedDate : ((options.date !== undefined && options.date !== '') ? options.date : (formatDateDisplay(member?.death_date) || ''));
+  const vaarText = (options.vaar !== undefined && options.vaar !== '') ? options.vaar : (member?.vaar || (member?.death_date ? getGujaratiDay(member.death_date) : '') || '');
   const villageText = options.village !== undefined ? options.village : (member?.village || member?.native_place || '');
   const addressText = options.address !== undefined ? options.address : (member?.address || member?.death_place || '');
-  const janazaTime = options.janaza_time !== undefined ? options.janaza_time : (options.janazaTime || member?.janaza_time || '');
-  const rawJanazaPlace = options.janaza_place !== undefined ? options.janaza_place : (options.janazaPlace || member?.janaza_place || '');
+  const janazaTime = (options.janaza_time !== undefined && options.janaza_time !== '') ? options.janaza_time : (options.janazaTime || member?.janaza_time || '');
+  const rawJanazaPlace = (options.janaza_place !== undefined && options.janaza_place !== '') ? options.janaza_place : (options.janazaPlace || member?.janaza_place || '');
   const janazaPlace = rawJanazaPlace ? (rawJanazaPlace.endsWith('માં') ? rawJanazaPlace : `${rawJanazaPlace} માં`) : '';
-  const kabrastanText = options.kabrastan !== undefined ? options.kabrastan : (member?.kabrastan || '');
-  const mobileNumber = options.number !== undefined ? options.number : (options.mobile || member?.number || member?.mobile || member?.phone || '');
+  const kabrastanText = (options.kabrastan !== undefined && options.kabrastan !== '') ? options.kabrastan : (member?.kabrastan || '');
+  const mobileNumber = (options.number !== undefined && options.number !== '') ? options.number : (options.mobile || member?.number || member?.mobile || member?.phone || '');
 
   let addressLine = '';
   if (addressText && villageText) {
@@ -191,7 +196,7 @@ async function renderVafatCardHtml(member, options = {}) {
   const bannerDataUri = getAssetDataUri('banner_tall.png') || labelDataUri;
   const mosqueIconDataUri = getAssetDataUri('gold_mosque_icon.png');
   const cornerDataUri = getAssetDataUri('mayyat_corner.png');
-  const sealDataUri = getAssetDataUri('jamatSeal.png');
+  const sealDataUri = getAssetDataUri('letterpad.png') || getAssetDataUri('jamatSeal.png');
 
   return `
     <div class="vafat-card-wrapper ${isPdf ? 'pdf-page' : ''}">
@@ -226,11 +231,11 @@ async function renderVafatCardHtml(member, options = {}) {
             <div class="date-day-row">
               <div class="date-group">
                 <span>તા.</span>
-                <span class="date-val">${escapeHtml(rawDate) || '___ / ___ / ___'}</span>
+                <span class="date-val" contenteditable="true" spellcheck="false" data-field="date">${escapeHtml(rawDate) || '___ / ___ / ___'}</span>
               </div>
               <div class="day-group">
                 <span>વાર.</span>
-                <span class="day-val">${escapeHtml(vaarText) || '________________'}</span>
+                <span class="day-val" contenteditable="true" spellcheck="false" data-field="vaar">${escapeHtml(vaarText) || '________________'}</span>
               </div>
             </div>
 
@@ -244,7 +249,7 @@ async function renderVafatCardHtml(member, options = {}) {
                   <span class="badge-text">${escapeHtml(nameLabel)}</span>
                 </div>
                 <div class="field-value-lines">
-                  <div class="line-text">${escapeHtml(memberName)}</div>
+                  <div class="line-text" contenteditable="true" spellcheck="false" data-field="name">${escapeHtml(memberName)}</div>
                 </div>
               </div>
 
@@ -255,7 +260,7 @@ async function renderVafatCardHtml(member, options = {}) {
                   <span class="badge-text">સરનામું</span>
                 </div>
                 <div class="field-value-lines">
-                  <div class="line-text">${escapeHtml(addressLine)}</div>
+                  <div class="line-text" contenteditable="true" spellcheck="false" data-field="address">${escapeHtml(addressLine)}</div>
                 </div>
               </div>
 
@@ -266,7 +271,7 @@ async function renderVafatCardHtml(member, options = {}) {
                   <span class="badge-text">જનાઝાનો સમય</span>
                 </div>
                 <div class="field-value-lines">
-                  <div class="line-text">${escapeHtml(janazaTime)}</div>
+                  <div class="line-text" contenteditable="true" spellcheck="false" data-field="janaza_time">${escapeHtml(janazaTime)}</div>
                 </div>
               </div>
 
@@ -277,7 +282,7 @@ async function renderVafatCardHtml(member, options = {}) {
                   <span class="badge-text">જનાઝાની નમાઝનું સ્થળ</span>
                 </div>
                 <div class="field-value-lines">
-                  <div class="line-text">${escapeHtml(janazaPlace)}</div>
+                  <div class="line-text" contenteditable="true" spellcheck="false" data-field="janaza_place">${escapeHtml(janazaPlace)}</div>
                 </div>
               </div>
 
@@ -288,7 +293,7 @@ async function renderVafatCardHtml(member, options = {}) {
                   <span class="badge-text">કબ્રસ્તાન</span>
                 </div>
                 <div class="field-value-lines">
-                  <div class="line-text">${escapeHtml(kabrastanText)}</div>
+                  <div class="line-text" contenteditable="true" spellcheck="false" data-field="kabrastan">${escapeHtml(kabrastanText)}</div>
                 </div>
               </div>
 
@@ -299,7 +304,7 @@ async function renderVafatCardHtml(member, options = {}) {
                   <span class="badge-text">મોબાઇલ નંબર</span>
                 </div>
                 <div class="field-value-lines">
-                  <div class="line-text">${escapeHtml(mobileNumber)}</div>
+                  <div class="line-text" contenteditable="true" spellcheck="false" data-field="number">${escapeHtml(mobileNumber)}</div>
                 </div>
               </div>
 
@@ -338,13 +343,14 @@ async function renderVafatCardHtml(member, options = {}) {
       }
 
       body {
-        background: #f1f5f9;
+        background: transparent;
         font-family: 'Noto Sans Gujarati', system-ui, -apple-system, sans-serif;
         display: flex;
         justify-content: center;
-        align-items: center;
+        align-items: flex-start;
         min-height: 100vh;
-        padding: 20px;
+        padding: 0;
+        margin: 0;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
@@ -424,7 +430,7 @@ async function renderVafatCardHtml(member, options = {}) {
       /* Content positioned inside the dark blue cartouche of top_img.png */
       .top-cartouche-content {
         position: absolute;
-        top: 115px;
+        top: 124px;
         left: 40px;
         right: 40px;
         height: 115px;
@@ -661,7 +667,82 @@ async function renderVafatCardHtml(member, options = {}) {
         color: #081a2e !important;
         letter-spacing: 0.5px;
       }
+
+      /* Editable fields interactive styling */
+      [contenteditable="true"] {
+        cursor: text !important;
+        user-select: text !important;
+        -webkit-user-select: text !important;
+      }
+      [contenteditable="true"]:focus {
+        outline: 2px solid rgba(202, 161, 86, 0.55) !important;
+        background: rgba(202, 161, 86, 0.08) !important;
+        border-radius: 3px !important;
+      }
+      [contenteditable="true"]:hover {
+        background: rgba(202, 161, 86, 0.04);
+      }
     </style>
+
+    <script>
+      (function() {
+        function getValues() {
+          function getVal(selector) {
+            var el = document.querySelector(selector);
+            return el ? (el.innerText || el.textContent || '').trim() : '';
+          }
+          return {
+            date: getVal('[data-field="date"]'),
+            vaar: getVal('[data-field="vaar"]'),
+            name: getVal('[data-field="name"]'),
+            address: getVal('[data-field="address"]'),
+            janaza_time: getVal('[data-field="janaza_time"]'),
+            janaza_place: getVal('[data-field="janaza_place"]'),
+            kabrastan: getVal('[data-field="kabrastan"]'),
+            number: getVal('[data-field="number"]')
+          };
+        }
+
+        function sendToParent() {
+          try {
+            var data = getValues();
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({ type: 'VAFAT_CARD_DATA_CHANGE', data: data }, '*');
+            }
+          } catch (_) {}
+        }
+
+        document.addEventListener('input', function(e) {
+          if (e.target && e.target.getAttribute('contenteditable') === 'true') {
+            sendToParent();
+          }
+        });
+
+        document.addEventListener('blur', function(e) {
+          if (e.target && e.target.getAttribute('contenteditable') === 'true') {
+            sendToParent();
+          }
+        }, true);
+
+        window.addEventListener('message', function(e) {
+          if (e.data && e.data.type === 'GET_VAFAT_CARD_DATA') {
+            try {
+              var data = getValues();
+              if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'VAFAT_CARD_DATA_RESPONSE', data: data, requestId: e.data.requestId }, '*');
+              }
+            } catch (_) {}
+          }
+        });
+
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+          sendToParent();
+        } else {
+          document.addEventListener('DOMContentLoaded', sendToParent);
+        }
+        setTimeout(sendToParent, 300);
+      })();
+    </script>
   `;
 }
 

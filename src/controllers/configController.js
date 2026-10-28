@@ -254,6 +254,20 @@ const updateConfig = async (req, res) => {
         config.prayerTimes.notificationsEnabled = pt.notificationsEnabled;
         config.prayerTimes.notifications_enabled = pt.notifications_enabled;
       }
+            // Reset prayer alerts sent for today so modified times/offsets can trigger immediately
+      const kolkataFmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const parts = kolkataFmt.formatToParts(new Date());
+      const partMap = {};
+      parts.forEach(p => { partMap[p.type] = p.value; });
+      const todayDateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
+
+// Preserved prayerAlertsSent tracking to prevent duplicate same-day alerts
+
       config.markModified('prayerTimes');
     } else if (req.body.prayerLogo) {
       if (!config.prayerTimes) config.prayerTimes = {};
@@ -302,7 +316,13 @@ const testScheduledPush = async (req, res) => {
         fridayPushTime: fridayTime
       });
     } else if (day === 'prayer' || prayer) {
-      const pt = config?.prayerTimes ? (config.prayerTimes.toObject ? config.prayerTimes.toObject() : config.prayerTimes) : null;
+      let reqPt = req.body.prayerTimes;
+      if (typeof reqPt === 'string') {
+        try { reqPt = JSON.parse(reqPt); } catch (_) { reqPt = null; }
+      }
+      const pt = (reqPt && typeof reqPt === 'object')
+        ? { ...(config?.prayerTimes ? (config.prayerTimes.toObject ? config.prayerTimes.toObject() : config.prayerTimes) : {}), ...reqPt }
+        : (config?.prayerTimes ? (config.prayerTimes.toObject ? config.prayerTimes.toObject() : config.prayerTimes) : null);
       const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
       if (!pt || isFalsy(pt.notificationsEnabled) || isFalsy(pt.notifications_enabled) || isFalsy(pt.enabled)) {
         return res.status(400).json({
@@ -320,32 +340,44 @@ const testScheduledPush = async (req, res) => {
         maghrib: 'મગરીબ',
         isha: 'ઈશા'
       };
-      const pName = config?.prayerTimes?.[pKey]?.name || prayerNames[pKey] || pKey;
+      const pName = pt?.[pKey]?.name || config?.prayerTimes?.[pKey]?.name || prayerNames[pKey] || pKey;
       let pTime = '05:26';
-      const azanOffset = parseInt(config?.prayerTimes?.azanOffsetMinutes || 25, 10);
-      const jamatOffset = parseInt(config?.prayerTimes?.jamatOffsetMinutes || 15, 10);
-      const qazaOffset = parseInt(config?.prayerTimes?.qazaOffsetMinutes || 15, 10);
+      const azanOffset = parseInt(pt?.azanOffsetMinutes ?? config?.prayerTimes?.azanOffsetMinutes ?? 25, 10);
+      const jamatOffset = parseInt(pt?.jamatOffsetMinutes ?? config?.prayerTimes?.jamatOffsetMinutes ?? 15, 10);
+      const qazaOffset = parseInt(pt?.qazaOffsetMinutes ?? config?.prayerTimes?.qazaOffsetMinutes ?? 15, 10);
 
       let leadMin = 25;
       let title = '';
       let body = '';
 
       if (aType === 'azan') {
-        pTime = config?.prayerTimes?.[pKey]?.azan || '05:26 AM';
+        pTime = pt?.[pKey]?.azan || config?.prayerTimes?.[pKey]?.azan || '05:26 AM';
         leadMin = azanOffset;
-        title = `${pName} અઝાન સમય - ${leadMin} મિનિટ બાકી`;
-        body = `${pName} નમાઝની અઝાનનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
+        title = leadMin === 0
+          ? `${pName} અઝાનનો સમય થયો છે`
+          : `${pName} અઝાન સમય - ${leadMin} મિનિટ બાકી`;
+        body = leadMin === 0
+          ? `${pName} નમાઝની અઝાનનો સમય ${pTime} થયો છે.`
+          : `${pName} નમાઝની અઝાનનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
       } else if (aType === 'jamat') {
-        pTime = config?.prayerTimes?.[pKey]?.jamat || '05:40 AM';
+        pTime = pt?.[pKey]?.jamat || config?.prayerTimes?.[pKey]?.jamat || '05:40 AM';
         leadMin = jamatOffset;
-        title = `${pName} જમાત સમય - ${leadMin} મિનિટ બાકી`;
-        body = `${pName} નમાઝની જમાતનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
+        title = leadMin === 0
+          ? `${pName} જમાતનો સમય થયો છે`
+          : `${pName} જમાત સમય - ${leadMin} મિનિટ બાકી`;
+        body = leadMin === 0
+          ? `${pName} નમાઝની જમાતનો સમય ${pTime} થયો છે.`
+          : `${pName} નમાઝની જમાતનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
       } else {
         // Qaza Alert
-        pTime = config?.prayerTimes?.[pKey]?.qaza || '06:42 AM';
+        pTime = pt?.[pKey]?.qaza || config?.prayerTimes?.[pKey]?.qaza || '06:42 AM';
         leadMin = qazaOffset;
-        title = `${pName} કઝા સમય - ${leadMin} મિનિટ બાકી`;
-        body = `${pName} નમાઝ કઝા થવામાં ${leadMin} મિનિટ બાકી છે (કઝા સમય: ${pTime}). જલદી નમાઝ અદા કરી લો.`;
+        title = leadMin === 0
+          ? `${pName} કઝાનો સમય થયો છે`
+          : `${pName} કઝા સમય - ${leadMin} મિનિટ બાકી`;
+        body = leadMin === 0
+          ? `${pName} નમાઝ કઝા થવાનો સમય ${pTime} થયો છે. જલદી નમાઝ અદા કરી લો.`
+          : `${pName} નમાઝ કઝા થવામાં ${leadMin} મિનિટ બાકી છે (કઝા સમય: ${pTime}). જલદી નમાઝ અદા કરી લો.`;
       }
 
       const alertKey = `${pKey}_${aType}`;

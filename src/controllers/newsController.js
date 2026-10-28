@@ -120,6 +120,9 @@ const addNews = async (req, res) => {
 
         // Send notification if requested
         if (req.body.send_notification !== 'false' && req.body.send_notification !== false) {
+            news.reminder_sent = true;
+            await news.save();
+
             const imageUrl = news.image ? publicUrl(req, news.image) : '';
             const newsDate = news.date || news.cdate || news.createdAt || '';
             const target_type = req.body.target_type || req.body.target_audience || 'all';

@@ -2,6 +2,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Config = require('../src/models/configModel');
 const { createAndBroadcast } = require('../src/controllers/notificationController');
+const { checkAndSendScheduledNotifications } = require('../src/services/scheduledNotificationService');
 
 async function main() {
   const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/parivar';
@@ -36,16 +37,16 @@ async function main() {
   const parts = kolkataFormatter.formatToParts(new Date());
   const partMap = {};
   parts.forEach(p => { partMap[p.type] = p.value; });
-  const currentHour = parseInt(partMap.hour, 10);
+  let currentHour = parseInt(partMap.hour, 10);
+  if (currentHour === 24) currentHour = 0;
   const currentMinute = parseInt(partMap.minute, 10);
-  const nowMinutes = currentHour * 60 + currentMinute;
-  const currentTimeStr = `${partMap.hour}:${partMap.minute}`;
+  const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
   const todayDateStr = `${partMap.year}-${partMap.month}-${partMap.day}`;
 
   const parsePrayerTimeToMinutes = (timeStr, defaultPeriod) => {
     if (!timeStr) return null;
-    const trimmed = String(timeStr).trim();
-    const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    const trimmed = String(timeStr).replace(/[\u00A0\s]+/g, ' ').trim();
+    const match = trimmed.match(/^(\d{1,2}):(\d{1,2})\s*(AM|PM)?$/i);
     if (!match) return null;
     let h = parseInt(match[1], 10);
     const m = parseInt(match[2], 10);
@@ -71,6 +72,7 @@ async function main() {
 
   console.log('\n========================================================================');
   console.log(`🕌 NAMAZ TIMETABLE CRON SCHEDULE CHECK (Current Time: ${currentTimeStr} IST | Date: ${todayDateStr})`);
+  console.log(`Push Notifications Enabled: ${pt.notificationsEnabled !== false}`);
   console.log('========================================================================');
 
   const azanOffset = Number.isInteger(parseInt(pt.azanOffsetMinutes, 10)) ? parseInt(pt.azanOffsetMinutes, 10) : 25;
@@ -88,29 +90,33 @@ async function main() {
     const jamatMin = parsePrayerTimeToMinutes(jamatRaw, prayer.period);
     const qazaMin = parsePrayerTimeToMinutes(qazaRaw, prayer.qazaPeriod || prayer.period);
 
-    const azanTriggerMin = azanMin !== null ? azanMin - azanOffset : null;
-    const jamatTriggerMin = jamatMin !== null ? jamatMin - jamatOffset : null;
-    const qazaTriggerMin = qazaMin !== null ? qazaMin - qazaOffset : null;
+    const azanTriggerMin = azanMin !== null ? (azanMin - azanOffset + 1440) % 1440 : null;
+    const jamatTriggerMin = jamatMin !== null ? (jamatMin - jamatOffset + 1440) % 1440 : null;
+    const qazaTriggerMin = qazaMin !== null ? (qazaMin - qazaOffset + 1440) % 1440 : null;
 
     tableData.push({
       Prayer: prayer.name,
       'Azan Time': azanRaw,
       [`Azan Alert (-${azanOffset}m)`]: formatMinutesToTime(azanTriggerMin),
-      'Azan Key': `${prayer.key}_azan`,
+      'Azan Key': `${prayer.key}_azan_${azanRaw}_${azanOffset}m`,
       'Jamat Time': jamatRaw,
       [`Jamat Alert (-${jamatOffset}m)`]: formatMinutesToTime(jamatTriggerMin),
-      'Jamat Key': `${prayer.key}_jamat`,
+      'Jamat Key': `${prayer.key}_jamat_${jamatRaw}_${jamatOffset}m`,
       'Qaza Until': qazaRaw,
       [`Qaza Alert (-${qazaOffset}m)`]: formatMinutesToTime(qazaTriggerMin),
-      'Qaza Key': `${prayer.key}_qaza`
+      'Qaza Key': `${prayer.key}_qaza_${qazaRaw}_${qazaOffset}m`
     });
   }
 
   console.table(tableData);
 
-  // Check if args requested immediate test trigger
+  // Check if args requested immediate test trigger or scheduler check
   const args = process.argv.slice(2);
-  if (args.length > 0) {
+  if (args[0] === 'cron' || args[0] === 'check') {
+    console.log('\n⏳ Running checkAndSendScheduledNotifications()...');
+    await checkAndSendScheduledNotifications();
+    console.log('✅ Cron execution completed.');
+  } else if (args.length > 0) {
     const prayerArg = (args[0] || 'fajr').toLowerCase();
     const typeArg = (args[1] || 'azan').toLowerCase(); // 'azan', 'jamat', or 'qaza'
 
@@ -125,18 +131,18 @@ async function main() {
     if (typeArg === 'azan') {
       pTime = pData.azan || targetPrayer.defaultAzan;
       leadMin = azanOffset;
-      title = `${pName} અઝાન સમય - ${leadMin} મિનિટ બાકી`;
-      body = `${pName} નમાઝની અઝાનનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
+      title = leadMin === 0 ? `${pName} અઝાનનો સમય થયો છે` : `${pName} અઝાન સમય - ${leadMin} મિનિટ બાકી`;
+      body = leadMin === 0 ? `${pName} નમાઝની અઝાનનો સમય ${pTime} થયો છે.` : `${pName} નમાઝની અઝાનનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
     } else if (typeArg === 'jamat') {
       pTime = pData.jamat || targetPrayer.defaultJamat;
       leadMin = jamatOffset;
-      title = `${pName} જમાત સમય - ${leadMin} મિનિટ બાકી`;
-      body = `${pName} નમાઝની જમાતનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
+      title = leadMin === 0 ? `${pName} જમાતનો સમય થયો છે` : `${pName} જમાત સમય - ${leadMin} મિનિટ બાકી`;
+      body = leadMin === 0 ? `${pName} નમાઝની જમાતનો સમય ${pTime} થયો છે.` : `${pName} નમાઝની જમાતનો સમય ${pTime} છે. (${leadMin} મિનિટ બાકી)`;
     } else {
       pTime = pData.qaza || targetPrayer.defaultQaza;
       leadMin = qazaOffset;
-      title = `${pName} કઝા સમય - ${leadMin} મિનિટ બાકી`;
-      body = `${pName} નમાઝ કઝા થવામાં ${leadMin} મિનિટ બાકી છે (કઝા સમય: ${pTime}). જલદી નમાઝ અદા કરી લો.`;
+      title = leadMin === 0 ? `${pName} નમાઝ કઝા થઈ ગઈ છે` : `${pName} કઝા સમય - ${leadMin} મિનિટ બાકી`;
+      body = leadMin === 0 ? `${pName} નમાઝનો સમય સમાપ્ત થયો છે (કઝા સમય: ${pTime}).` : `${pName} નમાઝ કઝા થવામાં ${leadMin} મિનિટ બાકી છે (કઝા સમય: ${pTime}). જલદી નમાઝ અદા કરી લો.`;
     }
 
     const alertKey = `${targetPrayer.key}_${typeArg}`;
@@ -165,15 +171,11 @@ async function main() {
     console.log(`   Key: ${alertKey}`);
     console.log(`   Title: ${title}`);
     console.log(`   Body: ${body}`);
-    console.log(`   Target: Broadcast to all active users via Socket.IO & Firebase FCM`);
   } else {
     console.log('\n💡 Hint: To test trigger a specific prayer key, run:');
     console.log('   node scripts/testPrayerCron.js fajr azan');
-    console.log('   node scripts/testPrayerCron.js fajr qaza');
-    console.log('   node scripts/testPrayerCron.js zohr jamat');
-    console.log('   node scripts/testPrayerCron.js zohr qaza');
     console.log('   node scripts/testPrayerCron.js asr azan');
-    console.log('   node scripts/testPrayerCron.js asr qaza\n');
+    console.log('   node scripts/testPrayerCron.js check');
   }
 
   process.exit(0);

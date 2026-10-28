@@ -136,6 +136,7 @@ const parseForm = (req, res, next) => {
     { name: 'appLogo', maxCount: 1 },
     { name: 'webLogo', maxCount: 1 },
     { name: 'favicon', maxCount: 1 },
+    { name: 'prayerLogo', maxCount: 1 },
 
   ])(req, res, async (error) => {
     if (error) return runWithTenant(req, () => next(error));
@@ -269,3 +270,4 @@ module.exports = {
   postUpload,
   parseForm
 };
+

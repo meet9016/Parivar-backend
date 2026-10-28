@@ -11,8 +11,10 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
       title: String(title || ''),
       body: String(body || ''),
       image: String(imageUrl || ''),
-      ...Object.entries(extraData).reduce((acc, [k, v]) => {
-        if (v !== undefined && v !== null) acc[k] = String(v);
+      ...Object.entries(extraData || {}).reduce((acc, [k, v]) => {
+        if (v !== undefined && v !== null) {
+          acc[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        }
         return acc;
       }, {})
     };
@@ -31,16 +33,64 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
           ...(imageUrl ? { imageUrl: String(imageUrl) } : {})
         },
         data: dataPayload,
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'default',
+            sound: 'default',
+            priority: 'max',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            ...(imageUrl ? { imageUrl: String(imageUrl) } : {})
+          }
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10',
+            'apns-push-type': 'alert'
+          },
+          payload: {
+            aps: {
+              alert: {
+                title: String(title || ''),
+                body: String(body || '')
+              },
+              sound: 'default',
+              badge: 1,
+              contentAvailable: true
+            }
+          }
+        },
         tokens: chunk
       };
       const response = await getMessaging().sendEachForMulticast(message);
       console.log(`[FCM Multicast] Success: ${response.successCount}, Failed: ${response.failureCount}`);
+
       if (response.failureCount > 0) {
+        const staleTokens = [];
         response.responses.forEach((resp, idx) => {
           if (!resp.success) {
-            console.warn(`[FCM Error Token #${idx}]: [${resp.error?.code}] ${resp.error?.message}`);
+            const errCode = resp.error?.code || '';
+            console.warn(`[FCM Error Token #${idx}]: [${errCode}] ${resp.error?.message}`);
+            if (
+              errCode === 'messaging/registration-token-not-registered' ||
+              errCode === 'messaging/invalid-registration-token' ||
+              errCode === 'messaging/mismatched-credential'
+            ) {
+              staleTokens.push(chunk[idx]);
+            }
           }
         });
+
+        if (staleTokens.length > 0) {
+          try {
+            await User.updateMany({ fcm_token: { $in: staleTokens } }, { $unset: { fcm_token: "" } });
+            console.log(`[FCM] Cleaned up ${staleTokens.length} invalid/stale token(s) from database.`);
+          } catch (cleanErr) {
+            console.warn('[FCM Cleanup Warning]:', cleanErr.message);
+          }
+        }
       }
     }
   } catch (err) {
@@ -73,4 +123,3 @@ const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '',
 };
 
 module.exports = { sendNotificationToAll, sendNotificationToUsers, sendNotificationToTokens };
-

@@ -390,7 +390,7 @@ const checkAndSendScheduledNotifications = async () => {
           }
 
           // -------------------------------------------------------------
-          // 3. Daily Prayer Push Notifications (Azan -25m, Jamat -15m)
+          // 3. Daily Prayer Push Notifications (Azan, Jamat, Qaza with Advance Reminder Timing)
           // -------------------------------------------------------------
           try {
             const pt = cfg.prayerTimes ? (cfg.prayerTimes.toObject ? cfg.prayerTimes.toObject() : cfg.prayerTimes) : null;
@@ -398,7 +398,8 @@ const checkAndSendScheduledNotifications = async () => {
             const isNotificationsOff = !pt || isFalsy(pt.notificationsEnabled) || isFalsy(pt.notifications_enabled) || isFalsy(pt.enabled);
             const isNotificationsOn = !isNotificationsOff;
             if (isNotificationsOn) {
-              const currentHour = parseInt(partMap.hour, 10);
+              let currentHour = parseInt(partMap.hour, 10);
+              if (currentHour === 24) currentHour = 0;
               const currentMinute = parseInt(partMap.minute, 10);
               const nowMinutes = currentHour * 60 + currentMinute;
 
@@ -412,8 +413,8 @@ const checkAndSendScheduledNotifications = async () => {
 
               const parsePrayerTimeToMinutes = (timeStr, defaultPeriod) => {
                 if (!timeStr) return null;
-                const trimmed = String(timeStr).trim();
-                const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+                const trimmed = String(timeStr).replace(/[\u00A0\s]+/g, ' ').trim();
+                const match = trimmed.match(/^(\d{1,2}):(\d{1,2})\s*(AM|PM)?$/i);
                 if (!match) return null;
                 let h = parseInt(match[1], 10);
                 const m = parseInt(match[2], 10);
@@ -421,6 +422,10 @@ const checkAndSendScheduledNotifications = async () => {
                 if (!p) {
                   if (h < 12) p = defaultPeriod;
                   else p = 'PM';
+                }
+                // Handle common 12:xx AM typo for afternoon prayer (e.g. Zohr 12:45)
+                if (h === 12 && p === 'AM' && defaultPeriod === 'PM') {
+                  p = 'PM';
                 }
                 if (p === 'PM' && h < 12) h += 12;
                 if (p === 'AM' && h === 12) h = 0;
@@ -451,11 +456,11 @@ const checkAndSendScheduledNotifications = async () => {
                 const azanRaw = pData.azan || prayer.defaultAzan;
                 const azanMinutes = parsePrayerTimeToMinutes(azanRaw, prayer.period);
                 if (azanMinutes !== null) {
-                  const azanTargetMinutes = azanMinutes - azanOffset;
-                  const azanSentKey = `${prayer.key}_azan`;
+                  const azanTargetMinutes = (azanMinutes - azanOffset + 1440) % 1440;
+                  const azanSentKey = `${prayer.key}_azan_${azanRaw}_${azanOffset}m`;
 
                   if (!todaySent[azanSentKey]) {
-                    const diff = nowMinutes - azanTargetMinutes;
+                    const diff = (nowMinutes - azanTargetMinutes + 1440) % 1440;
                     if (diff >= 0 && diff <= 15) {
                       const alertKey = `${prayer.key}_azan`;
                       console.log(`[Scheduler] 🕌 [${name}] Auto-triggering Azan notification for "${pName}" at ${currentTimeStr} (Azan: ${azanRaw}, Key: [${alertKey}], ${azanOffset}m prior)`);
@@ -463,9 +468,16 @@ const checkAndSendScheduledNotifications = async () => {
                       todaySent[azanSentKey] = true;
                       alertsUpdated = true;
 
+                      const azanTitle = azanOffset === 0
+                        ? `${pName} અઝાનનો સમય થયો છે`
+                        : `${pName} અઝાન સમય - ${azanOffset} મિનિટ બાકી`;
+                      const azanBody = azanOffset === 0
+                        ? `${pName} નમાઝની અઝાનનો સમય ${azanRaw} થયો છે.`
+                        : `${pName} નમાઝની અઝાનનો સમય ${azanRaw} છે. (${azanOffset} મિનિટ બાકી)`;
+
                       await createAndBroadcast({
-                        title: `${pName} અઝાન સમય - ${azanOffset} મિનિટ બાકી`,
-                        body: `${pName} નમાઝની અઝાનનો સમય ${azanRaw} છે. (${azanOffset} મિનિટ બાકી)`,
+                        title: azanTitle,
+                        body: azanBody,
                         type: 'prayer_reminder',
                         target_type: 'all',
                         target_users: [],
@@ -487,11 +499,11 @@ const checkAndSendScheduledNotifications = async () => {
                 const jamatRaw = pData.jamat || prayer.defaultJamat;
                 const jamatMinutes = parsePrayerTimeToMinutes(jamatRaw, prayer.period);
                 if (jamatMinutes !== null) {
-                  const jamatTargetMinutes = jamatMinutes - jamatOffset;
-                  const jamatSentKey = `${prayer.key}_jamat`;
+                  const jamatTargetMinutes = (jamatMinutes - jamatOffset + 1440) % 1440;
+                  const jamatSentKey = `${prayer.key}_jamat_${jamatRaw}_${jamatOffset}m`;
 
                   if (!todaySent[jamatSentKey]) {
-                    const diff = nowMinutes - jamatTargetMinutes;
+                    const diff = (nowMinutes - jamatTargetMinutes + 1440) % 1440;
                     if (diff >= 0 && diff <= 15) {
                       const alertKey = `${prayer.key}_jamat`;
                       console.log(`[Scheduler] 🕌 [${name}] Auto-triggering Jamat notification for "${pName}" at ${currentTimeStr} (Jamat: ${jamatRaw}, Key: [${alertKey}], ${jamatOffset}m prior)`);
@@ -499,9 +511,16 @@ const checkAndSendScheduledNotifications = async () => {
                       todaySent[jamatSentKey] = true;
                       alertsUpdated = true;
 
+                      const jamatTitle = jamatOffset === 0
+                        ? `${pName} જમાતનો સમય થયો છે`
+                        : `${pName} જમાત સમય - ${jamatOffset} મિનિટ બાકી`;
+                      const jamatBody = jamatOffset === 0
+                        ? `${pName} નમાઝની જમાતનો સમય ${jamatRaw} થયો છે.`
+                        : `${pName} નમાઝની જમાતનો સમય ${jamatRaw} છે. (${jamatOffset} મિનિટ બાકી)`;
+
                       await createAndBroadcast({
-                        title: `${pName} જમાત સમય - ${jamatOffset} મિનિટ બાકી`,
-                        body: `${pName} નમાઝની જમાતનો સમય ${jamatRaw} છે. (${jamatOffset} મિનિટ બાકી)`,
+                        title: jamatTitle,
+                        body: jamatBody,
                         type: 'prayer_reminder',
                         target_type: 'all',
                         target_users: [],
@@ -523,11 +542,11 @@ const checkAndSendScheduledNotifications = async () => {
                 const qazaRaw = pData.qaza || prayer.defaultQaza;
                 const qazaMinutes = parsePrayerTimeToMinutes(qazaRaw, prayer.qazaPeriod || prayer.period);
                 if (qazaMinutes !== null) {
-                  const qazaTargetMinutes = qazaMinutes - qazaOffset;
-                  const qazaSentKey = `${prayer.key}_qaza`;
+                  const qazaTargetMinutes = (qazaMinutes - qazaOffset + 1440) % 1440;
+                  const qazaSentKey = `${prayer.key}_qaza_${qazaRaw}_${qazaOffset}m`;
 
                   if (!todaySent[qazaSentKey]) {
-                    const diff = nowMinutes - qazaTargetMinutes;
+                    const diff = (nowMinutes - qazaTargetMinutes + 1440) % 1440;
                     if (diff >= 0 && diff <= 15) {
                       const alertKey = `${prayer.key}_qaza`;
                       console.log(`[Scheduler] 🕌 [${name}] Auto-triggering Qaza notification for "${pName}" at ${currentTimeStr} (Qaza: ${qazaRaw}, Key: [${alertKey}], ${qazaOffset}m prior)`);
@@ -535,9 +554,16 @@ const checkAndSendScheduledNotifications = async () => {
                       todaySent[qazaSentKey] = true;
                       alertsUpdated = true;
 
+                      const qazaTitle = qazaOffset === 0
+                        ? `${pName} નમાઝ કઝા થઈ ગઈ છે`
+                        : `${pName} કઝા સમય - ${qazaOffset} મિનિટ બાકી`;
+                      const qazaBody = qazaOffset === 0
+                        ? `${pName} નમાઝનો સમય સમાપ્ત થયો છે (કઝા સમય: ${qazaRaw}).`
+                        : `${pName} નમાઝ કઝા થવામાં ${qazaOffset} મિનિટ બાકી છે (કઝા સમય: ${qazaRaw}). જલદી નમાઝ અદા કરી લો.`;
+
                       await createAndBroadcast({
-                        title: `${pName} કઝા સમય - ${qazaOffset} મિનિટ બાકી`,
-                        body: `${pName} નમાઝ કઝા થવામાં ${qazaOffset} મિનિટ બાકી છે (કઝા સમય: ${qazaRaw}). જલદી નમાઝ અદા કરી લો.`,
+                        title: qazaTitle,
+                        body: qazaBody,
                         type: 'prayer_reminder',
                         target_type: 'all',
                         target_users: [],
