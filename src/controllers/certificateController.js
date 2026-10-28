@@ -42,16 +42,11 @@ function attachCertificateUrls(record, req) {
 
   recObj.downloadUrl = `${baseUrl}${prefix}/certificates/download/${recId}`;
   recObj.viewUrl = `${baseUrl}${prefix}/certificates/view/${recId}`;
+  recObj.pdfUrl = `${baseUrl}${prefix}/certificates/view/${recId}`;
 
-  if (recObj.pdfPath && !recObj.pdfUrl) {
-    recObj.pdfUrl = `${baseUrl}${recObj.pdfPath.startsWith('/') ? recObj.pdfPath : `/${recObj.pdfPath}`}`;
-  }
   return recObj;
 }
 
-/**
- * Helper to derive safe tenant slug from request
- */
 function getTenantSlugFromReq(req) {
   return req.tenantSlug || req.headers['x-tenant-id'] || 'default';
 }
@@ -80,6 +75,26 @@ function extractCommonFields(type, data = {}) {
   }
 
   return { certificateNumber, primaryName, secondaryName, issuedDate };
+}
+
+
+/**
+ * Convert Gujarati digits (૦-૯) to standard ASCII digits (0-9)
+ */
+function normalizeToEnglishDigits(str) {
+  if (!str) return '';
+  const gujaratiDigits = { '૦': '0', '૧': '1', '૨': '2', '૩': '3', '૪': '4', '૫': '5', '૬': '6', '૭': '7', '૮': '8', '૯': '9' };
+  return String(str).replace(/[૦-૯]/g, (d) => gujaratiDigits[d] || d);
+}
+
+/**
+ * Generate a safe, readable identifier for certificate filenames
+ */
+function makeSafeCertificateNumber(num, fallback = 'doc') {
+  if (!num) return fallback;
+  const eng = normalizeToEnglishDigits(num);
+  const cleaned = eng.replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned || fallback;
 }
 
 // ── 1. Get all certificates (with soft-delete filter & storage metadata) ──
@@ -132,48 +147,18 @@ exports.getCertificateRecordById = async (req, res) => {
 };
 
 // ── 3. Create a new certificate record & store PDF ──
+// ── 3. Create a new certificate record (Direct DB storage, no server disk storage) ──
 exports.createCertificateRecord = async (req, res) => {
   try {
-    const { type, data, html } = req.body;
+    const { type, data } = req.body;
     if (!type || !data) {
       return apiResponse(res, 400, 'Type and form data are required');
     }
 
-    const tenantSlug = getTenantSlugFromReq(req);
     const { certificateNumber, primaryName, secondaryName, issuedDate } = extractCommonFields(type, data);
 
-    // Build unique filename
-    const safeNum = (certificateNumber || 'new').replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const filename = `certificate-${type}-${safeNum}-${Date.now().toString(36)}`;
-
-    // Generate or receive PDF buffer
-    let pdfBuffer = null;
-    if (req.file && req.file.buffer) {
-      // Direct Multer multipart PDF upload
-      pdfBuffer = req.file.buffer;
-    } else if (html && typeof html === 'string' && html.trim().length > 50) {
-      // High-fidelity rendered HTML from Web Admin
-      pdfBuffer = await generatePdfFromHtml(html, {
-        filename,
-        pageRanges: type === 'letterhead' ? undefined : '1-2',
-      });
-    } else {
-      // Server-side fallback template for external API clients
-      const serverHtml = renderCertificateHtml(type, data);
-      pdfBuffer = await generatePdfFromHtml(serverHtml, {
-        filename,
-        pageRanges: type === 'letterhead' ? undefined : '1-2',
-      });
-    }
-
-    // Save to shared storage service
-    const storageMeta = await saveCertificatePdf({
-      buffer: pdfBuffer,
-      filename,
-      tenantSlug,
-      req,
-      type,
-    });
+    const safeNum = makeSafeCertificateNumber(certificateNumber, 'new');
+    const filename = `certificate-${type}-${safeNum}-${Date.now().toString(36)}.pdf`;
 
     const newRecord = await Certificate.create({
       type,
@@ -182,29 +167,23 @@ exports.createCertificateRecord = async (req, res) => {
       secondaryName,
       issuedDate,
       data,
-      pdfUrl: storageMeta.pdfUrl,
-      pdfPath: storageMeta.pdfPath,
-      fileName: storageMeta.fileName,
-      fileSize: storageMeta.fileSize,
-      mimeType: storageMeta.mimeType,
-      storageProvider: storageMeta.storageProvider,
-      generatedAt: storageMeta.generatedAt,
-      isGenerated: true,
+      fileName: filename,
+      isGenerated: false,
       isDeleted: false,
     });
 
-    return apiResponse(res, 201, 'Certificate record saved and PDF generated successfully', attachCertificateUrls(newRecord, req));
+    return apiResponse(res, 201, 'Certificate record saved successfully', attachCertificateUrls(newRecord, req));
   } catch (error) {
     console.error('Error in createCertificateRecord:', error);
-    return apiResponse(res, 500, error.message || 'Server error while generating and saving certificate');
+    return apiResponse(res, 500, error.message || 'Server error while saving certificate');
   }
 };
 
-// ── 4. Update an existing certificate record & atomically replace PDF ──
+// ── 4. Update an existing certificate record (Direct DB storage, no server disk storage) ──
 exports.updateCertificateRecord = async (req, res) => {
   try {
     const { id } = req.params;
-    const { data, type, html } = req.body;
+    const { data, type } = req.body;
 
     const existing = await Certificate.findOne({ _id: id, isDeleted: { $ne: true } });
     if (!existing) {
@@ -213,38 +192,10 @@ exports.updateCertificateRecord = async (req, res) => {
 
     const docType = type || existing.type;
     const docData = data || existing.data;
-    const tenantSlug = getTenantSlugFromReq(req);
     const { certificateNumber, primaryName, secondaryName, issuedDate } = extractCommonFields(docType, docData);
 
-    const safeNum = (certificateNumber || existing.certificateNumber || 'doc').replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const newFilename = `certificate-${docType}-${safeNum}-${Date.now().toString(36)}`;
-
-    // Generate or receive new PDF buffer
-    let newPdfBuffer = null;
-    if (req.file && req.file.buffer) {
-      newPdfBuffer = req.file.buffer;
-    } else if (html && typeof html === 'string' && html.trim().length > 50) {
-      newPdfBuffer = await generatePdfFromHtml(html, {
-        filename: newFilename,
-        pageRanges: docType === 'letterhead' ? undefined : '1-2',
-      });
-    } else {
-      const serverHtml = renderCertificateHtml(docType, docData);
-      newPdfBuffer = await generatePdfFromHtml(serverHtml, {
-        filename: newFilename,
-        pageRanges: docType === 'letterhead' ? undefined : '1-2',
-      });
-    }
-
-    // Atomic replace in storage: writes new file, verifies it, then safely deletes old file
-    const storageMeta = await replaceCertificatePdf({
-      oldPdfPath: existing.pdfPath,
-      newBuffer: newPdfBuffer,
-      newFilename,
-      tenantSlug,
-      req,
-      type: docType,
-    });
+    const safeNum = makeSafeCertificateNumber(certificateNumber || existing.certificateNumber, 'doc');
+    const newFilename = `certificate-${docType}-${safeNum}-${Date.now().toString(36)}.pdf`;
 
     const updated = await Certificate.findByIdAndUpdate(
       id,
@@ -256,27 +207,19 @@ exports.updateCertificateRecord = async (req, res) => {
           primaryName,
           secondaryName,
           issuedDate,
-          pdfUrl: storageMeta.pdfUrl,
-          pdfPath: storageMeta.pdfPath,
-          fileName: storageMeta.fileName,
-          fileSize: storageMeta.fileSize,
-          mimeType: storageMeta.mimeType,
-          storageProvider: storageMeta.storageProvider,
-          generatedAt: storageMeta.generatedAt,
-          isGenerated: true,
+          fileName: newFilename,
         }
       },
       { new: true }
     );
 
-    return apiResponse(res, 200, 'Certificate record and PDF updated successfully', attachCertificateUrls(updated, req));
+    return apiResponse(res, 200, 'Certificate record updated successfully', attachCertificateUrls(updated, req));
   } catch (error) {
     console.error('Error in updateCertificateRecord:', error);
     return apiResponse(res, 500, error.message || 'Server error while updating certificate');
   }
 };
 
-// ── 5. Recoverable Soft-Delete a certificate record ──
 exports.deleteCertificateRecord = async (req, res) => {
   try {
     const { id } = req.params;
@@ -328,6 +271,7 @@ exports.restoreCertificateRecord = async (req, res) => {
 };
 
 // ── 7. Authenticated View PDF (Inline stream for in-app browser view) ──
+// ── 7. Authenticated View PDF (In-memory stream for browser preview, no server disk storage) ──
 exports.viewCertificatePdf = async (req, res) => {
   try {
     const { id } = req.params;
@@ -336,53 +280,29 @@ exports.viewCertificatePdf = async (req, res) => {
       return res.status(404).send('Certificate not found');
     }
 
-    const tenantSlug = getTenantSlugFromReq(req);
-    let diskPath = resolveCertificateDiskPath(record.pdfPath, tenantSlug);
-    const fileExists = diskPath && (await certificatePdfExists(record.pdfPath, tenantSlug));
+    const safeNum = makeSafeCertificateNumber(record.certificateNumber, 'doc');
+    const filename = `certificate-${record.type}-${safeNum}-${id.toString().slice(-6)}`;
+    const html = renderCertificateHtml(record.type, record.data);
 
-    // Self-healing recovery: If file is missing on disk, regenerate on-demand
-    if (!fileExists) {
-      console.warn(`[Self-Healing] Missing PDF detected for certificate ${id}. Regenerating...`);
-      await synchronizedGeneratePdf(`regen_${id}`, async () => {
-        const safeNum = (record.certificateNumber || 'doc').replace(/[^a-zA-Z0-9_\-]/g, '_');
-        const filename = `certificate-${record.type}-${safeNum}-${id.toString().slice(-6)}`;
-        const html = renderCertificateHtml(record.type, record.data);
-        const buffer = await generatePdfFromHtml(html, {
-          filename,
-          pageRanges: record.type === 'letterhead' ? undefined : '1-2',
-        });
-        const meta = await saveCertificatePdf({
-          buffer,
-          filename,
-          tenantSlug,
-          req,
-          type: record.type,
-        });
-        record.pdfUrl = meta.pdfUrl;
-        record.pdfPath = meta.pdfPath;
-        record.fileName = meta.fileName;
-        record.fileSize = meta.fileSize;
-        record.isGenerated = true;
-        record.generatedAt = meta.generatedAt;
-        await record.save();
-        diskPath = resolveCertificateDiskPath(meta.pdfPath, tenantSlug);
-      });
-    }
+    // Generate PDF in memory directly and stream
+    const pdfBuffer = await generatePdfFromHtml(html, {
+      filename,
+      pageRanges: record.type === 'letterhead' ? undefined : '1-2',
+    });
 
-    const asciiFilename = (record.fileName || 'certificate.pdf').replace(/[^a-zA-Z0-9_\-.]/g, '_');
+    const asciiFilename = (record.fileName || `${filename}.pdf`).replace(/[^a-zA-Z0-9_\-.]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${asciiFilename}"`);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-    const fileStream = fs.createReadStream(diskPath);
-    return fileStream.pipe(res);
+    return res.status(200).send(pdfBuffer);
   } catch (error) {
     console.error('Error in viewCertificatePdf:', error);
     return res.status(500).send('Error viewing certificate PDF: ' + error.message);
   }
 };
 
-// ── 8. Authenticated Download PDF (Attachment stream for direct download) ──
+// ── 8. Authenticated Download PDF (In-memory stream for direct download, no server disk storage) ──
 exports.downloadCertificatePdf = async (req, res) => {
   try {
     const { id } = req.params;
@@ -395,47 +315,17 @@ exports.downloadCertificatePdf = async (req, res) => {
       });
     }
 
-    const tenantSlug = getTenantSlugFromReq(req);
-    let diskPath = resolveCertificateDiskPath(record.pdfPath, tenantSlug);
-    const fileExists = diskPath && (await certificatePdfExists(record.pdfPath, tenantSlug));
+    const safeNum = makeSafeCertificateNumber(record.certificateNumber, 'doc');
+    const filename = `certificate-${record.type}-${safeNum}-${id.toString().slice(-6)}`;
+    const html = renderCertificateHtml(record.type, record.data);
 
-    let pdfBuffer = null;
-    if (fileExists) {
-      try {
-        pdfBuffer = await fs.promises.readFile(diskPath);
-      } catch (readErr) {
-        console.warn('Could not read existing disk file, will regenerate:', readErr.message);
-      }
-    }
+    // Generate PDF in memory directly
+    const pdfBuffer = await generatePdfFromHtml(html, {
+      filename,
+      pageRanges: record.type === 'letterhead' ? undefined : '1-2',
+    });
 
-    if (!pdfBuffer || pdfBuffer.length === 0) {
-      const safeNum = (record.certificateNumber || 'doc').replace(/[^a-zA-Z0-9_\-]/g, '_');
-      const filename = `certificate-${record.type}-${safeNum}-${id.toString().slice(-6)}`;
-      const html = renderCertificateHtml(record.type, record.data);
-      pdfBuffer = await generatePdfFromHtml(html, {
-        filename,
-        pageRanges: record.type === 'letterhead' ? undefined : '1-2',
-      });
-
-      // Save asynchronously in background so next time it's on disk
-      saveCertificatePdf({
-        buffer: pdfBuffer,
-        filename,
-        tenantSlug,
-        req,
-        type: record.type,
-      }).then(async (meta) => {
-        record.pdfUrl = meta.pdfUrl;
-        record.pdfPath = meta.pdfPath;
-        record.fileName = meta.fileName;
-        record.fileSize = meta.fileSize;
-        record.isGenerated = true;
-        record.generatedAt = meta.generatedAt;
-        await record.save();
-      }).catch(err => console.warn('Background cache save error:', err.message));
-    }
-
-    const downloadName = (record.fileName || `${record.type}-certificate.pdf`).replace(/\.pdf$/i, '');
+    const downloadName = (record.fileName || `${filename}.pdf`).replace(/\.pdf$/i, '');
     const cleanFilename = downloadName.replace(/[^a-zA-Z0-9_\-]/g, '_');
     const isInline = req.query.view === 'true' || req.query.inline === 'true' || req.path.includes('/view');
 
@@ -456,7 +346,6 @@ exports.downloadCertificatePdf = async (req, res) => {
   }
 };
 
-// ── 8B. Generate Secure Download Link for Certificate (similar to donations) ──
 exports.getCertificateDownloadLink = async (req, res) => {
   try {
     const { id } = req.params;
@@ -487,6 +376,7 @@ exports.getCertificateDownloadLink = async (req, res) => {
 };
 
 // ── 9. Force Re-generate Stored PDF for an Existing Record ──
+// ── 9. Dynamic Download Link refresh for an Existing Record ──
 exports.regenerateCertificatePdf = async (req, res) => {
   try {
     const { id } = req.params;
@@ -495,41 +385,13 @@ exports.regenerateCertificatePdf = async (req, res) => {
       return apiResponse(res, 404, 'Certificate record not found');
     }
 
-    const tenantSlug = getTenantSlugFromReq(req);
-    const safeNum = (record.certificateNumber || 'doc').replace(/[^a-zA-Z0-9_\-]/g, '_');
-    const newFilename = `certificate-${record.type}-${safeNum}-${Date.now().toString(36)}`;
-
-    const html = renderCertificateHtml(record.type, record.data);
-    const buffer = await generatePdfFromHtml(html, {
-      filename: newFilename,
-      pageRanges: record.type === 'letterhead' ? undefined : '1-2',
-    });
-
-    const storageMeta = await replaceCertificatePdf({
-      oldPdfPath: record.pdfPath,
-      newBuffer: buffer,
-      newFilename,
-      tenantSlug,
-      req,
-      type: record.type,
-    });
-
-    record.pdfUrl = storageMeta.pdfUrl;
-    record.pdfPath = storageMeta.pdfPath;
-    record.fileName = storageMeta.fileName;
-    record.fileSize = storageMeta.fileSize;
-    record.isGenerated = true;
-    record.generatedAt = storageMeta.generatedAt;
-    await record.save();
-
-    return apiResponse(res, 200, 'Certificate PDF regenerated successfully', attachCertificateUrls(record, req));
+    return apiResponse(res, 200, 'Certificate download link ready', attachCertificateUrls(record, req));
   } catch (error) {
     console.error('Error in regenerateCertificatePdf:', error);
     return apiResponse(res, 500, error.message || 'Server error');
   }
 };
 
-// ── 10. Bounded Bulk Download URL resolution ──
 exports.bulkDownloadCertificates = async (req, res) => {
   try {
     const { ids } = req.body;
