@@ -40,6 +40,7 @@ router.use('/business-categories', require('./businessCategoryRoutes'));
 router.use('/bank-details', require('./bankDetailRoutes'));
 router.use('/content', require('./contentRoutes'));
 router.use('/masters', require('./masterRoutes'));
+router.use('/education', require('./educationRoutes'));
 router.use('/pricing', require('./pricingRoutes'));
 router.use('/mandal', require('./mandalRoutes'));
 router.use('/register-parivar', require('./tenantRoutes'));

@@ -3,6 +3,7 @@ const MandalContribution = require('../models/mandalContributionModel');
 const MandalExpense = require('../models/mandalExpenseModel');
 const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 const mongoose = require('mongoose');
 
 // Helper to resolve mandal by ID or fallback to default
@@ -638,3 +639,151 @@ exports.getMandalDashboard = async (req, res) => {
     return apiResponse(res, 500, error.message || 'Failed to fetch mandal dashboard');
   }
 };
+
+// 12. Export Monthly Contributions to Excel
+exports.exportContributions = async (req, res) => {
+  try {
+    const mandal = await resolveMandal(req.query.mandal_id);
+    const currentMonthStr = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+    const month = req.query.month || currentMonthStr;
+    const statusFilter = req.query.status || 'All'; // 'All', 'Paid', 'Pending'
+    const paymentMode = req.query.payment_mode || 'All';
+    const search = (req.query.search || '').trim();
+
+    const mandalMemberIds = mandal.members || [];
+
+    // Ensure all mandal members have a contribution record for this month if month specified
+    if (mandalMemberIds.length > 0 && month) {
+      const existingContribs = await MandalContribution.find({
+        mandal_id: mandal._id,
+        month: month
+      }).select('member_id').lean();
+
+      const existingMemberIdSet = new Set(existingContribs.map(c => c.member_id.toString()));
+      const missingMemberIds = mandalMemberIds.filter(id => !existingMemberIdSet.has(id.toString()));
+
+      if (missingMemberIds.length > 0) {
+        const missingUsers = await User.find({ _id: { $in: missingMemberIds } })
+          .select('first_name middle_name last_name number village image profile_image')
+          .lean();
+
+        const newRecords = missingUsers.map(user => ({
+          mandal_id: mandal._id,
+          member_id: user._id,
+          member_name: `${user.first_name || ''} ${user.middle_name || ''} ${user.last_name || ''}`.trim(),
+          member_number: user.number || '',
+          month: month,
+          amount: 0,
+          expected_amount: mandal.monthly_amount || 500,
+          status: 'Pending',
+          payment_mode: 'Cash'
+        }));
+
+        if (newRecords.length > 0) {
+          await MandalContribution.insertMany(newRecords, { ordered: false }).catch(() => { });
+        }
+      }
+    }
+
+    // Build query for export
+    let query = {
+      mandal_id: mandal._id,
+      member_id: { $in: mandalMemberIds }
+    };
+
+    if (month) {
+      query.month = month;
+    }
+
+    if (statusFilter && statusFilter !== 'All') {
+      query.status = statusFilter;
+    }
+
+    if (paymentMode && paymentMode !== 'All') {
+      query.payment_mode = paymentMode;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      query.$or = [
+        { member_name: searchRegex },
+        { member_number: searchRegex },
+        { receipt_number: searchRegex },
+        { transaction_id: searchRegex }
+      ];
+    }
+
+    const contributions = await MandalContribution.find(query)
+      .populate('member_id', 'first_name middle_name last_name number village address')
+      .sort({ month: -1, status: 1, member_name: 1 })
+      .lean();
+
+    const columns = [
+      { header: 'SR NO', key: 'sr_no', width: 8, align: 'center' },
+      { header: 'MEMBER NAME', key: 'member_name', width: 28, bold: true },
+      { header: 'CONTACT NUMBER', key: 'member_number', width: 16, align: 'center' },
+      { header: 'VILLAGE / ADDRESS', key: 'village', width: 22 },
+      { header: 'MONTH', key: 'month', width: 14, align: 'center' },
+      { header: 'AMOUNT (₹)', key: 'amount', width: 14, align: 'right' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' },
+      { header: 'PAYMENT MODE', key: 'payment_mode', width: 16, align: 'center' },
+      { header: 'PAYMENT DATE', key: 'payment_date', width: 16, align: 'center' },
+      { header: 'RECEIPT NO', key: 'receipt_number', width: 18, align: 'center' },
+      { header: 'TRANSACTION ID', key: 'transaction_id', width: 20 },
+      { header: 'RECORDED BY', key: 'recorded_by', width: 20 },
+      { header: 'NOTES', key: 'notes', width: 25 }
+    ];
+
+    const rows = contributions.map((c, idx) => {
+      let pDate = '-';
+      if (c.payment_date) {
+        const d = new Date(c.payment_date);
+        if (!isNaN(d.getTime())) pDate = d.toISOString().slice(0, 10);
+      }
+
+      const mName = c.member_name || (c.member_id ? `${c.member_id.first_name || ''} ${c.member_id.middle_name || ''} ${c.member_id.last_name || ''}`.replace(/\s+/g, ' ').trim() : 'Unknown Member');
+      const mNum = c.member_number || c.member_id?.number || '-';
+      const mVillage = c.member_id?.village || c.member_id?.address || '-';
+      const finalAmount = c.status === 'Paid' ? Number(c.amount || c.expected_amount || mandal.monthly_amount || 0) : Number(c.amount || 0);
+
+      return {
+        sr_no: idx + 1,
+        member_name: mName,
+        member_number: mNum,
+        village: mVillage,
+        month: c.month || month || '-',
+        amount: finalAmount,
+        status: c.status || 'Pending',
+        payment_mode: c.status === 'Paid' ? (c.payment_mode || 'Cash') : '-',
+        payment_date: pDate,
+        receipt_number: c.receipt_number || '-',
+        transaction_id: c.transaction_id || '-',
+        recorded_by: c.recorded_by_name || '-',
+        notes: c.notes || '-'
+      };
+    });
+
+    const fileMonth = month ? month.replace('-', '_') : 'all';
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: `Contributions_${fileMonth}`,
+      sheetName: 'Monthly Contributions',
+      columns,
+      rows
+    });
+
+    return apiResponse(res, 200, 'Contributions exported successfully', {
+      download_url,
+      filename,
+      total_records: rows.length
+    });
+  } catch (error) {
+    console.error('Error in exportContributions:', error);
+    return apiResponse(res, 500, error.message || 'Failed to export contributions');
+  }
+};
+
+exports.downloadExportedContributions = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
+

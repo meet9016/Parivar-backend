@@ -1,5 +1,13 @@
 const express = require('express');
-const { getMatrimonies, getMatrimonyById, addMatrimony, updateMatrimony, deleteMatrimony } = require('../controllers/matrimonyController');
+const { 
+    getMatrimonies, 
+    getMatrimonyById, 
+    addMatrimony, 
+    updateMatrimony, 
+    deleteMatrimony,
+    exportMatrimonies,
+    downloadExportedMatrimonies
+} = require('../controllers/matrimonyController');
 const { protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
 const { parseForm } = require('../middleware/upload');
 
@@ -18,6 +26,8 @@ const isAdminCall = (req) => {
 };
 
 router.get('/', optionalProtect, getMatrimonies);
+router.get('/export', protect, exportMatrimonies);
+router.get('/export/download/:filename', downloadExportedMatrimonies);
 
 router.get('/:id', optionalProtect, getMatrimonyById);
 

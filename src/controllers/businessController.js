@@ -8,6 +8,7 @@ const { getRolePermissions } = require('../middleware/auth');
 const { apiResponse, memberPublicId, publicUrl, fullName } = require('../utils/apiResponse');
 const queryHelper = require('../utils/queryHelper');
 const mongoose = require('mongoose');
+const { generateExcelExport, sendExportedExcelFile } = require('../utils/excelHelper');
 
 const createdBy = (req) => {
   const user = req.user || {};
@@ -434,10 +435,162 @@ const deleteBusiness = async (req, res) => {
   }
 };
 
+const exportBusinesses = async (req, res) => {
+  try {
+    let baseQuery = {};
+    const { is_own, search, status, business_category_id, city_id, state_id } = req.query;
+    const user = req.user;
+    const permissions = getRolePermissions(user);
+    const isAdmin = user?.committee_role === 'President' || permissions?.includes('businesses.edit') || !!user?.role_id;
+
+    if (user && is_own === 'true') {
+      const userIds = [
+        String(user._id || ''),
+        String(user.id || ''),
+        String(user.member_id || '')
+      ].filter(Boolean);
+      const objectIds = userIds.filter(id => mongoose.isValidObjectId(id)).map(id => new mongoose.Types.ObjectId(id));
+      baseQuery.$or = [{ member_id: { $in: userIds } }];
+      if (objectIds.length > 0) {
+        baseQuery.$or.push({ 'created_by.id': { $in: objectIds } });
+      }
+    }
+
+    if (status !== undefined && status !== null && status !== '') {
+      baseQuery.status = Number(status);
+    }
+    if (business_category_id) {
+      baseQuery.business_category_id = String(business_category_id);
+    }
+    if (city_id) {
+      baseQuery.city_id = String(city_id);
+    }
+    if (state_id) {
+      baseQuery.state_id = String(state_id);
+    }
+
+    if (search && String(search).trim()) {
+      const searchRegex = new RegExp(String(search).trim(), 'i');
+      baseQuery.$or = [
+        { business_name: searchRegex },
+        { number: searchRegex },
+        { whatsapp_number: searchRegex },
+        { GST_number: searchRegex },
+        { email: searchRegex },
+        { address: searchRegex },
+        { website: searchRegex }
+      ];
+    }
+
+    const [businesses, categories, countries, states, cities] = await Promise.all([
+      Business.find(baseQuery).sort({ createdAt: -1 }).lean(),
+      BusinessCategory.find({}).lean(),
+      Country.find({}).lean(),
+      State.find({}).lean(),
+      City.find({}).lean()
+    ]);
+
+    const memberIds = [...new Set(businesses.map(b => b.member_id).filter(Boolean))];
+    const owners = memberIds.length > 0 ? await User.find({
+      $or: [
+        { id: { $in: memberIds } },
+        { _id: { $in: memberIds.filter(id => mongoose.isValidObjectId(id)) } }
+      ]
+    }).lean() : [];
+
+    const ownerMap = new Map();
+    owners.forEach(u => {
+      const name = [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ') || u.name || '';
+      if (u._id) ownerMap.set(String(u._id), name);
+      if (u.id) ownerMap.set(String(u.id), name);
+    });
+
+    const categoryMap = new Map();
+    categories.forEach(c => {
+      const name = c.business || c.name || '';
+      if (c._id) categoryMap.set(String(c._id), name);
+      if (c.id) categoryMap.set(String(c.id), name);
+    });
+
+    const cityMap = new Map();
+    cities.forEach(c => {
+      const name = c.name || c.title || '';
+      if (c._id) cityMap.set(String(c._id), name);
+      if (c.id) cityMap.set(String(c.id), name);
+    });
+
+    const stateMap = new Map();
+    states.forEach(s => {
+      const name = s.name || s.title || '';
+      if (s._id) stateMap.set(String(s._id), name);
+      if (s.id) stateMap.set(String(s.id), name);
+    });
+
+    const columns = [
+      { header: 'BUSINESS NAME', key: 'business_name', width: 34, align: 'left', bold: true },
+      { header: 'CATEGORY', key: 'category', width: 24, align: 'left' },
+      { header: 'OWNER NAME', key: 'owner_name', width: 28, align: 'left' },
+      { header: 'PHONE', key: 'number', width: 18, align: 'center' },
+      { header: 'WHATSAPP', key: 'whatsapp_number', width: 18, align: 'center' },
+      { header: 'EMAIL', key: 'email', width: 28, align: 'left' },
+      { header: 'GST NUMBER', key: 'GST_number', width: 20, align: 'center' },
+      { header: 'CITY', key: 'city', width: 18, align: 'left' },
+      { header: 'STATE', key: 'state', width: 18, align: 'left' },
+      { header: 'ADDRESS', key: 'address', width: 36, align: 'left' },
+      { header: 'WEBSITE', key: 'website', width: 28, align: 'left' },
+      { header: 'STATUS', key: 'status', width: 14, align: 'center' }
+    ];
+
+    const rows = businesses.map(b => {
+      const catName = categoryMap.get(String(b.business_category_id)) || '-';
+      const ownerName = ownerMap.get(String(b.member_id)) || b.created_by?.name || '-';
+      const cityName = cityMap.get(String(b.city_id)) || '-';
+      const stateName = stateMap.get(String(b.state_id)) || '-';
+      const statusText = Number(b.status ?? 1) === 1 ? 'Active' : 'Inactive';
+
+      return {
+        business_name: b.business_name || '-',
+        category: catName,
+        owner_name: ownerName,
+        number: b.number ? String(b.number) : '',
+        whatsapp_number: b.whatsapp_number ? String(b.whatsapp_number) : '',
+        email: b.email || '',
+        GST_number: b.GST_number || '',
+        city: cityName,
+        state: stateName,
+        address: b.address || '',
+        website: b.website || '',
+        status: statusText
+      };
+    });
+
+    const { download_url, filename } = await generateExcelExport({
+      req,
+      filePrefix: 'Business_Directory',
+      sheetName: 'Businesses',
+      columns,
+      rows
+    });
+
+    return apiResponse(res, 200, 'Businesses exported successfully', {
+      download_url,
+      filename
+    });
+  } catch (error) {
+    return apiResponse(res, 500, 'Error exporting businesses', { error: error.message });
+  }
+};
+
+const downloadExportedBusinesses = (req, res) => {
+  return sendExportedExcelFile(req, res);
+};
+
 module.exports = {
   addBusinessDetails,
   getBusinesses,
   getBusinessById,
   getBusinessCategoryList,
   deleteBusiness,
+  exportBusinesses,
+  downloadExportedBusinesses
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const { protect, requirePermission } = require('../middleware/auth');
-const { getExpenses, adminSaveExpense, adminDeleteExpense, exportExpenses } = require('../controllers/ExpenseController');
+const { getExpenses, adminSaveExpense, adminDeleteExpense, exportExpenses, downloadExportedExpenses } = require('../controllers/ExpenseController');
 const { parseForm } = require('../middleware/upload');
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.get('/', protect, getExpenses);
 
 // Admin Excel Export
 router.get('/export', protect, requirePermission('expenses.list'), exportExpenses);
+router.get('/export/download/:filename', downloadExportedExpenses);
 
 // Admin CRUD
 router.post('/', protect, requirePermission('expenses.add'), parseForm, adminSaveExpense);
