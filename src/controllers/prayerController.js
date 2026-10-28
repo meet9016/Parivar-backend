@@ -52,10 +52,22 @@ const updatePrayerTimes = async (req, res) => {
       pt.logo = req.body.prayerLogo;
     }
 
+    if (pt.notificationsEnabled !== undefined || pt.notifications_enabled !== undefined) {
+      const val = pt.notificationsEnabled !== undefined ? pt.notificationsEnabled : pt.notifications_enabled;
+      const isFalsyVal = (v) => v === false || v === 'false' || v === 0 || v === '0';
+      const isEnabled = !isFalsyVal(val);
+      pt.notificationsEnabled = isEnabled;
+      pt.notifications_enabled = isEnabled;
+    }
+
     config.prayerTimes = {
-      ...(config.prayerTimes || {}),
+      ...(config.prayerTimes ? (config.prayerTimes.toObject ? config.prayerTimes.toObject() : config.prayerTimes) : {}),
       ...pt
     };
+    if (pt.notificationsEnabled !== undefined) {
+      config.prayerTimes.notificationsEnabled = pt.notificationsEnabled;
+      config.prayerTimes.notifications_enabled = pt.notifications_enabled;
+    }
     config.markModified('prayerTimes');
 
     await config.save();
