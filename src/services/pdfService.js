@@ -347,10 +347,90 @@ async function generateImageFromHtml(htmlContent, options = {}) {
   }
 }
 
+/**
+ * Generate a single-page vector PDF for Vafat Card matching exact dimensions (665x980)
+ * Ultra-fast (under 2s), lightweight and guaranteed single-page
+ */
+async function generateVafatCardPdf(htmlContent, options = {}) {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+
+  try {
+    await page.setViewport({
+      width: 665,
+      height: 980,
+      deviceScaleFactor: 2,
+    });
+
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html lang="gu">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${options.filename || 'Vafat Card'}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@700&family=Noto+Sans+Gujarati:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+        <style>
+          @page {
+            size: 665px 980px;
+            margin: 0;
+          }
+          html, body {
+            margin: 0;
+            padding: 0;
+            width: 665px;
+            height: 980px;
+            background: #06182c;
+            overflow: hidden;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .vafat-card-wrapper {
+            width: 665px;
+            height: 980px;
+            margin: 0;
+            padding: 0;
+          }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+      </html>
+    `;
+
+    await page.setContent(fullHtml, {
+      waitUntil: 'domcontentloaded',
+      timeout: 10000,
+    });
+
+    await Promise.race([
+      page.evaluateHandle('document.fonts.ready'),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]).catch(() => {});
+
+    const pdfBuffer = await page.pdf({
+      width: '665px',
+      height: '980px',
+      printBackground: true,
+      margin: { top: 0, right: 0, bottom: 0, left: 0 }
+    });
+
+    return Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+  } finally {
+    try {
+      await page.close();
+    } catch (_) {}
+  }
+}
+
 module.exports = {
   getBrowser,
   generatePdfFromHtml,
   generateImageFromHtml,
+  generateVafatCardPdf,
   synchronizedGeneratePdf,
   closeBrowser,
 };

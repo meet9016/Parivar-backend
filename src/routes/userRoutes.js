@@ -99,9 +99,15 @@ router.post('/bulk-import', protect, requirePermission('members.add'), upload.si
 
 // Death / Vafat Card Download & Link Endpoints (for Mobile App & Web)
 router.get('/death/:id/download', optionalProtect, userController.downloadDeathCard);
+router.post('/death/:id/download', optionalProtect, userController.downloadDeathCard);
 router.get('/death/:id/download-link', optionalProtect, userController.getDeathCardLink);
+router.get('/death/:id/html', optionalProtect, userController.getDeathCardHtml);
+router.post('/death/:id/html', optionalProtect, userController.getDeathCardHtml);
 router.get('/vafat/:id/download', optionalProtect, userController.downloadDeathCard);
+router.post('/vafat/:id/download', optionalProtect, userController.downloadDeathCard);
 router.get('/vafat/:id/download-link', optionalProtect, userController.getDeathCardLink);
+router.get('/vafat/:id/html', optionalProtect, userController.getDeathCardHtml);
+router.post('/vafat/:id/html', optionalProtect, userController.getDeathCardHtml);
 
 router.get('/:id', protect, (req, res, next) => {
     return userController.getUserById(req, res, next);
