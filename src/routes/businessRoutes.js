@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
+const { protect, optionalProtect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
 const { parseForm } = require('../middleware/upload');
 const { 
     getBusinesses, 
@@ -12,14 +12,6 @@ const {
 } = require('../controllers/businessController');
 
 const router = express.Router();
-
-const optionalProtect = async (req, res, next) => {
-    const token = getTokenFromRequest(req);
-    if (token) {
-        return protect(req, res, next);
-    }
-    return next();
-};
 
 router.get('/', optionalProtect, getBusinesses);
 router.get('/export', protect, exportBusinesses);

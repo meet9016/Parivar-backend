@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
+const { protect, optionalProtect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
 const { parseForm } = require('../middleware/upload');
 const { 
   getStudents, 
@@ -11,14 +11,6 @@ const {
 } = require('../controllers/studentController');
 
 const router = express.Router();
-
-const optionalProtect = async (req, res, next) => {
-    const token = getTokenFromRequest(req);
-    if (token) {
-        return protect(req, res, next);
-    }
-    return next();
-};
 
 const isAdminCall = (req) => {
     return req.user && (req.user.is_committee || req.user.role_id || req.user.role === 'admin');

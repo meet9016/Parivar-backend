@@ -1,6 +1,6 @@
 const express = require('express');
 const userController = require('../controllers/userController');
-const { authorizeUserUpdate, protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
+const { authorizeUserUpdate, protect, optionalProtect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
 const { parseForm, upload } = require('../middleware/upload');
 const User = require('../models/userModels');
 const { apiResponse } = require('../utils/apiResponse');
@@ -42,8 +42,8 @@ router.post('/fcm-token', protect, async (req, res) => {
 });
 
 router.get('/', (req, res, next) => {
-    if (req.query.familyHead === 'true') {
-        return next();
+    if (req.query.familyHead === 'true' || req.query.limit === '1') {
+        return optionalProtect(req, res, next);
     }
     return protect(req, res, next);
 }, userController.getUsers);

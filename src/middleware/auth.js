@@ -179,6 +179,7 @@ const protect = async (req, res, next) => {
 };
 
 const getRolePermissions = (user = {}) => {
+  if (!user) return [];
   const roleName = user.role_id?.name?.toLowerCase() || user.role_id?.roleName?.toLowerCase() || String(user.role || '').toLowerCase();
   if (roleName === 'admin' || roleName === 'super admin' || user.role === 'superadmin' || user.committee_role === 'President' || user.is_super_admin === true || (user.is_committee === true && (!user.role_id || user.committee_role === 'Admin'))) {
     return ALL_PERMISSION_KEYS;
@@ -203,6 +204,7 @@ const ADMIN_CONTROLLED_USER_FIELDS = [
 ];
 
 const isSameUser = (user = {}, id = '') => {
+  if (!user) return false;
   const normalizedId = String(id || '');
 
   return [
@@ -213,6 +215,7 @@ const isSameUser = (user = {}, id = '') => {
 };
 
 const isAdminUser = (user = {}) => {
+  if (!user) return false;
   const roleName = user?.role_id?.name?.toLowerCase() || user?.role_id?.roleName?.toLowerCase() || String(user?.role || '').toLowerCase();
   return (
     user.role === 'admin'
@@ -322,4 +325,27 @@ const requirePermission = (permission) => async (req, res, next) => {
   });
 };
 
-module.exports = { authorizeUserUpdate, getRolePermissions, protect, getTokenFromRequest, requirePermission };
+const optionalProtect = async (req, res, next) => {
+  const token = getTokenFromRequest(req);
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  if (token.split('.').length !== 3) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'supersecretfamilykey');
+    req.user = await findUserFromToken(decoded, req);
+  } catch (error) {
+    // If token is expired or invalid, treat as guest for optional auth rather than failing with 401
+    req.user = null;
+  }
+  return next();
+};
+
+module.exports = { authorizeUserUpdate, getRolePermissions, protect, optionalProtect, getTokenFromRequest, requirePermission };

@@ -1,17 +1,9 @@
 const express = require('express');
-const { protect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
+const { protect, optionalProtect, requirePermission, getTokenFromRequest } = require('../middleware/auth');
 const { postUpload } = require('../middleware/upload');
 const { getNewsList, getNewsById, addNews, updateNews, deleteNews } = require('../controllers/newsController');
 
 const router = express.Router();
-
-const optionalProtect = async (req, res, next) => {
-    const token = getTokenFromRequest(req);
-    if (token) {
-        return protect(req, res, next);
-    }
-    return next();
-};
 
 const isAdminCall = (req) => {
     return req.user && (req.user.is_committee || req.user.role_id || req.user.role === 'admin');
