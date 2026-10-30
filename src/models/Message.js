@@ -37,6 +37,8 @@ const messageSchema = new mongoose.Schema({
 
 messageSchema.index({ conversationId: 1, createdAt: -1 });
 messageSchema.index({ senderId: 1 });
+// Automatically remove messages older than 30 days (30 * 24 * 60 * 60 = 2,592,000 seconds)
+messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
 const { createTenantProxy } = require('../utils/tenantContext');
 module.exports = createTenantProxy('Message', messageSchema);

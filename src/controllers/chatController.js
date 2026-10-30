@@ -25,7 +25,8 @@ exports.getChatUsers = async (req, res) => {
     const regex = search ? new RegExp(search, 'i') : null;
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 50));
+    const returnAll = req.query.all === 'true' || req.query.limit === 'all' || req.query.limit === '-1';
+    const limit = returnAll ? 1000000 : Math.max(1, parseInt(req.query.limit, 10) || 50);
 
     // 1. Fetch Committee Members
     const cmQuery = { status: { $ne: 0 } };
@@ -219,7 +220,8 @@ exports.getConversations = async (req, res) => {
       const conv = membership.conversationId;
       if (!conv) return null;
 
-      // Calculate unread count (messages not sent by current user and not yet read by current user)
+      // Calculate unread count within last 30 days
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const unreadCount = await Message.countDocuments({
         conversationId: conv._id,
         senderId: { $nin: myIdObjs },
@@ -247,13 +249,22 @@ exports.getConversations = async (req, res) => {
         }
       }
 
+      let lastMessage = conv.lastMessage;
+      let lastMessageAt = conv.lastMessageAt || conv.updatedAt || conv.createdAt;
+      if (lastMessage && lastMessage.createdAt && new Date(lastMessage.createdAt) < thirtyDaysAgo) {
+        lastMessage = null;
+      }
+      if (lastMessageAt && new Date(lastMessageAt) < thirtyDaysAgo) {
+        lastMessageAt = null;
+      }
+
       return {
         _id: conv._id,
         type: conv.type,
         name: conv.name,
         image: conv.image,
-        lastMessage: conv.lastMessage,
-        lastMessageAt: conv.lastMessageAt || conv.updatedAt || conv.createdAt,
+        lastMessage,
+        lastMessageAt,
         unreadCount,
         otherUser
       };
@@ -290,7 +301,13 @@ exports.getMessages = async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    const rawMessages = await Message.find({ conversationId })
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const messageFilter = {
+      conversationId,
+      createdAt: { $gte: thirtyDaysAgo }
+    };
+
+    const rawMessages = await Message.find(messageFilter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -320,7 +337,7 @@ exports.getMessages = async (req, res) => {
       };
     });
 
-    const total = await Message.countDocuments({ conversationId });
+    const total = await Message.countDocuments(messageFilter);
 
     // Reverse to chronological order (oldest to newest) for messaging UI display
     const orderedMessages = messages.reverse();

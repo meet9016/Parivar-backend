@@ -78,6 +78,10 @@ server.listen(PORT, '0.0.0.0', () => {
   // Start the automated scheduled notification service
   const scheduledNotificationService = require('./src/services/scheduledNotificationService');
   scheduledNotificationService.startScheduler();
+
+  // Start the automated 30-day chat cleanup service
+  const chatCleanupService = require('./src/services/chatCleanupService');
+  chatCleanupService.startScheduler();
 });
 
 
