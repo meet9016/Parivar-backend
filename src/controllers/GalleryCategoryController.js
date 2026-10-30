@@ -38,10 +38,15 @@ const formatCategory = (item) => ({
 
 const getCategories = async (req, res) => {
   try {
-    const { data, pagination } = await queryHelper(GalleryCategory, req.query, {
+    const isAll = req.query.all === 'true' || req.query.all === '1' || req.query.limit === 'all';
+    const requestedLimit = parseInt(req.query.limit, 10);
+    const limit = isAll ? 5000 : (Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 100);
+
+    const { data, pagination } = await queryHelper(GalleryCategory, { ...req.query, limit }, {
       searchFields: ['category'],
       filterFields: ['category', 'status'],
-      defaultSort: { category: 1 }
+      defaultSort: { category: 1 },
+      defaultLimit: 100
     });
     return apiResponse(res, 200, 'Gallery categories retrieved successfully', data.map(formatCategory), pagination);
   } catch (error) {

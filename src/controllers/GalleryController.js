@@ -123,11 +123,45 @@ const formatGallery = (req, item) => {
 };
 
 const getGallery = async (req, res) => {
-
   try {
-    const { data, pagination } = await queryHelper(Gallery, req.query, {
+    const isAll = req.query.all === 'true' || req.query.all === '1' || req.query.limit === 'all';
+    const requestedLimit = parseInt(req.query.limit, 10);
+    const limit = isAll ? 5000 : (Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 20);
+
+    const query = { ...req.query, limit };
+    if (query.gallery_category_id === 'all' || !query.gallery_category_id) {
+      delete query.gallery_category_id;
+    }
+    if (query.category === 'all' || !query.category) {
+      delete query.category;
+    }
+
+    let baseQuery = {};
+    if (query.gallery_category_id && !query.category) {
+      const catId = query.gallery_category_id;
+      delete query.gallery_category_id;
+      baseQuery = {
+        $or: [
+          { gallery_category_id: catId },
+          { category: catId }
+        ]
+      };
+    } else if (query.category && !query.gallery_category_id) {
+      const catName = query.category;
+      delete query.category;
+      baseQuery = {
+        $or: [
+          { category: catName },
+          { gallery_category_id: catName }
+        ]
+      };
+    }
+
+    const { data, pagination } = await queryHelper(Gallery, query, {
+      baseQuery,
       searchFields: ['category', 'year', 'month'],
-      filterFields: ['category', 'year', 'month', 'gallery_category_id', 'status']
+      filterFields: ['category', 'year', 'month', 'gallery_category_id', 'status'],
+      defaultLimit: 20
     });
     return apiResponse(res, 200, 'Gallery retrieved successfully', data.map((row) => formatGallery(req, row)), pagination);
   } catch (error) {
