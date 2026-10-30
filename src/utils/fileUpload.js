@@ -12,19 +12,28 @@ const BASE_URL = 'https://service.digitalks.co.in';
  */
 const uploadToExternalService = async (file, folderName = 'general') => {
   try {
-    const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_IMAGE_SIZE = 15 * 1024 * 1024; // 15MB
     const MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25MB
+    const MAX_DOC_SIZE = 25 * 1024 * 1024; // 25MB
+    const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
 
     const mime = (file.mimetype || 'image/jpeg').toLowerCase();
     const isVideo = mime.startsWith('video/');
     const isImage = mime.startsWith('image/');
+    const isAudio = mime.startsWith('audio/');
+    const isDoc = mime.includes('pdf') || mime.includes('document') || mime.includes('sheet') || mime.includes('text') || mime === 'application/octet-stream';
 
     if (isVideo && file.size > MAX_VIDEO_SIZE) {
       throw new Error('File size is too large. Please upload a smaller video (max 25MB).');
     }
-
     if (isImage && file.size > MAX_IMAGE_SIZE) {
-      throw new Error('File size is too large. Please upload a smaller image (max 10MB).');
+      throw new Error('File size is too large. Please upload a smaller image (max 15MB).');
+    }
+    if (isAudio && file.size > MAX_AUDIO_SIZE) {
+      throw new Error('File size is too large. Please upload a smaller audio file (max 25MB).');
+    }
+    if (isDoc && file.size > MAX_DOC_SIZE) {
+      throw new Error('File size is too large. Please upload a smaller document (max 25MB).');
     }
 
     const formData = new FormData();

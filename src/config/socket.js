@@ -106,11 +106,14 @@ module.exports = {
       // Send Message
       socket.on('send_message', async (data, callback) => {
         try {
-          const { conversationId, message, messageType = 'text', attachments = [] } = data || {};
+          const { conversationId, message = '', messageType = 'text', attachments = [] } = data || {};
 
-          if (!message || !conversationId) {
+          const hasText = Boolean(message && String(message).trim());
+          const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+          if ((!hasText && !hasAttachments) || !conversationId) {
             if (typeof callback === 'function') {
-              callback({ success: false, error: 'Message and conversationId are required' });
+              callback({ success: false, error: 'Message content or attachment, and conversationId are required' });
             }
             return;
           }
@@ -121,9 +124,9 @@ module.exports = {
           const newMessage = await Message.create({
             conversationId,
             senderId: userObj,
-            message: String(message).trim(),
-            messageType: messageType || 'text',
-            attachments: Array.isArray(attachments) ? attachments : [],
+            message: hasText ? String(message).trim() : '',
+            messageType: messageType || (hasAttachments ? 'image' : 'text'),
+            attachments: hasAttachments ? attachments : [],
             deliveredTo: [],
             readBy: [{ userId: userObj, readAt: new Date() }]
           });

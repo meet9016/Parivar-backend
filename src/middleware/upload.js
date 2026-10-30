@@ -19,11 +19,12 @@ const fileFilter = (req, file, cb) => {
     return cb(null, true);
   }
   const ext = path.extname(file.originalname || '').toLowerCase();
-  const allowedExtensions = /\.(jpe?g|png|webp|gif|svg|avif|heic|heif|bmp|ico|tiff?|pdf|docx?|xlsx?|pptx?|mp4|webm|mov|avi|jfif)$/i;
+  const allowedExtensions = /\.(jpe?g|png|webp|gif|svg|avif|heic|heif|bmp|ico|tiff?|pdf|docx?|xlsx?|pptx?|mp4|webm|mov|avi|jfif|mp3|wav|m4a|aac|ogg|weba)$/i;
   const mime = (file.mimetype || '').toLowerCase();
   const isAllowedMime = 
     mime.startsWith('image/') || 
     mime.startsWith('video/') || 
+    mime.startsWith('audio/') || 
     mime.includes('pdf') || 
     mime.includes('document') || 
     mime.includes('sheet') || 

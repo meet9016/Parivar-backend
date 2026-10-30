@@ -357,11 +357,14 @@ exports.getMessages = async (req, res) => {
 exports.sendMessage = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { message, messageType = 'text', attachments = [] } = req.body;
+    const { message = '', messageType = 'text', attachments = [] } = req.body;
     const userId = getReqUserId(req);
 
-    if (!message || !conversationId) {
-      return apiResponse(res, 400, 'Message and conversationId are required');
+    const hasText = Boolean(message && String(message).trim());
+    const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
+
+    if ((!hasText && !hasAttachments) || !conversationId) {
+      return apiResponse(res, 400, 'Message content or attachment, and conversationId are required');
     }
 
     const { allIds: myIds, primaryId: myPrimaryId } = await getLinkedUserIds(userId);
@@ -371,9 +374,9 @@ exports.sendMessage = async (req, res) => {
     const newMessage = await Message.create({
       conversationId,
       senderId: userObj,
-      message: String(message).trim(),
-      messageType,
-      attachments: attachments || [],
+      message: hasText ? String(message).trim() : '',
+      messageType: messageType || (hasAttachments ? 'image' : 'text'),
+      attachments: hasAttachments ? attachments : [],
       deliveredTo: [],
       readBy: [{ userId: userObj, readAt: new Date() }]
     });
