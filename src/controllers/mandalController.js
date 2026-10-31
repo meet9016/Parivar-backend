@@ -40,7 +40,7 @@ function buildContributionDownloadUrl(recId, req) {
   return `${baseUrl}${prefix}/mandal/contributions/receipt/${recId}/download${tokenQuery}`;
 }
 
-// Helper to resolve mandal by ID or fallback to default
+// Helper to resolve mandal by ID or fallback to first available
 async function resolveMandal(mandalId) {
   if (mandalId && mongoose.isValidObjectId(mandalId)) {
     const found = await Mandal.findById(mandalId);
@@ -50,16 +50,7 @@ async function resolveMandal(mandalId) {
   if (!mandal) {
     mandal = await Mandal.findOne();
   }
-  if (!mandal) {
-    mandal = await Mandal.create({
-      name: 'Shree Parivar Yuvak Mandal',
-      monthly_amount: 500,
-      start_date: new Date(),
-      status: 1,
-      members: []
-    });
-  }
-  return mandal;
+  return mandal || null;
 }
 
 // Helper to determine if the logged-in user is an admin / superadmin
@@ -99,12 +90,7 @@ exports.getMandalsList = async (req, res) => {
       if (!isFullAdmin) {
         return apiResponse(res, 200, 'User is not enrolled in any Mandal', []);
       }
-      const def = await resolveMandal();
-      return apiResponse(res, 200, 'Mandals list retrieved successfully', [{
-        ...def.toObject(),
-        id: def._id,
-        members_count: (def.members || []).length
-      }]);
+      return apiResponse(res, 200, 'Mandals list retrieved successfully', []);
     }
 
     const formatted = mandals.map(m => {
@@ -176,6 +162,9 @@ exports.getMandalSetup = async (req, res) => {
   try {
     const mandalId = req.query.mandal_id || req.params.id;
     const mandal = await resolveMandal(mandalId);
+    if (!mandal) {
+      return apiResponse(res, 200, 'No mandal found', null);
+    }
     await mandal.populate([
       { path: 'mandal_head_id', select: 'first_name middle_name last_name number profile_image image' }
     ]);
@@ -194,6 +183,9 @@ exports.updateMandalSetup = async (req, res) => {
     }
     const mandalId = req.query.mandal_id || req.params.id || req.body.mandal_id;
     const mandal = await resolveMandal(mandalId);
+    if (!mandal) {
+      return apiResponse(res, 404, 'Mandal not found');
+    }
     const { name, type, monthly_amount, due_day, start_date, mandal_head_id, status, description, rules } = req.body;
 
     if (name !== undefined) mandal.name = name;
@@ -235,12 +227,11 @@ exports.deleteMandal = async (req, res) => {
       return apiResponse(res, 400, 'Mandal ID is required');
     }
 
-    const count = await Mandal.countDocuments();
-    if (count <= 1) {
-      return apiResponse(res, 400, 'Cannot delete the only remaining Mandal. Create another Mandal first.');
+    const mandal = await Mandal.findByIdAndDelete(mandalId);
+    if (!mandal) {
+      return apiResponse(res, 404, 'Mandal not found');
     }
 
-    await Mandal.findByIdAndDelete(mandalId);
     await MandalContribution.deleteMany({ mandal_id: mandalId });
     await MandalExpense.deleteMany({ mandal_id: mandalId });
 
@@ -261,6 +252,19 @@ exports.getMandalMembers = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 15;
     const search = (req.query.search || '').trim();
     const filterType = req.query.filter_type || 'all'; // 'all', 'mandal_only', 'non_mandal'
+
+    if (!mandal) {
+      return apiResponse(res, 200, 'No mandal found', {
+        data: [],
+        total_mandal_members: 0,
+        pagination: {
+          page: 1,
+          limit,
+          total: 0,
+          totalPages: 1
+        }
+      });
+    }
 
     const mandalMemberIds = (mandal.members || []).map(id => id.toString());
 
@@ -344,6 +348,9 @@ exports.toggleMandalMember = async (req, res) => {
     }
 
     const mandal = await resolveMandal(mandal_id);
+    if (!mandal) {
+      return apiResponse(res, 404, 'Mandal not found');
+    }
     const memberObjId = new mongoose.Types.ObjectId(member_id);
     const existingIndex = (mandal.members || []).findIndex(id => id.toString() === member_id.toString());
 
@@ -376,6 +383,9 @@ exports.bulkUpdateMandalMembers = async (req, res) => {
     const { member_ids, action, mandal_id } = req.body; // action: 'add', 'remove', or 'enroll_all'
 
     const mandal = await resolveMandal(mandal_id);
+    if (!mandal) {
+      return apiResponse(res, 404, 'Mandal not found');
+    }
 
     if (action === 'enroll_all') {
       const allUsers = await User.find({}).select('_id').lean();
@@ -422,6 +432,34 @@ exports.getMonthlyContributions = async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 15;
     const statusFilter = req.query.status || 'All'; // 'All', 'Paid', 'Pending'
     const search = (req.query.search || '').trim();
+
+    if (!mandal) {
+      return apiResponse(res, 200, 'No mandal found', {
+        data: [],
+        summary: {
+          month,
+          mandal_monthly_amount: 0,
+          total_members: 0,
+          paid_members: 0,
+          pending_members: 0,
+          expected_amount: 0,
+          collected_amount: 0,
+          pending_amount: 0,
+          cash_collected: 0,
+          bank_online_collected: 0,
+          grand_total_collected: 0,
+          grand_cash_collected: 0,
+          grand_bank_online_collected: 0,
+          mandals_breakdown: []
+        },
+        pagination: {
+          page: 1,
+          limit,
+          total: 0,
+          totalPages: 1
+        }
+      });
+    }
 
     const mandalMemberIds = mandal.members || [];
 
@@ -687,6 +725,9 @@ exports.exportMonthlyContributions = async (req, res) => {
     const isFullAdmin = isMandalAdminUser(req.user);
     const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
+    if (!mandal) {
+      return res.status(404).json({ status: 404, message: 'Mandal not found' });
+    }
     const currentMonthStr = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
     const month = req.query.month || currentMonthStr;
     const statusFilter = req.query.status || 'All';
@@ -1008,6 +1049,9 @@ exports.bulkMarkPaid = async (req, res) => {
     const targetMonth = month || currentMonthStr;
 
     const mandal = await resolveMandal(mandal_id);
+    if (!mandal) {
+      return apiResponse(res, 404, 'Mandal not found');
+    }
     const mandalMemberIds = mandal.members || [];
 
     if (mandalMemberIds.length === 0) {
@@ -1066,6 +1110,19 @@ exports.getPaymentHistory = async (req, res) => {
     const search = (req.query.search || '').trim();
     const paymentMode = req.query.payment_mode || 'All';
     const month = req.query.month || '';
+
+    if (!mandal) {
+      return apiResponse(res, 200, 'Payment history fetched successfully', {
+        data: [],
+        total_amount: 0,
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 1
+        }
+      });
+    }
 
     let query = {
       mandal_id: mandal._id,
@@ -1128,6 +1185,9 @@ exports.getMandalDashboard = async (req, res) => {
     const isFullAdmin = isMandalAdminUser(req.user);
     const userId = req.user ? (req.user._id || req.user.id) : null;
     const mandal = await resolveMandal(req.query.mandal_id);
+    if (!mandal) {
+      return apiResponse(res, 200, 'No mandal found', null);
+    }
     const currentMonthStr = new Date().toISOString().slice(0, 7);
 
     const mandalMemberIds = mandal.members || [];
