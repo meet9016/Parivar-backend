@@ -103,9 +103,49 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
   return result;
 };
 
+const areInSameFamily = (userA, userB, userAFamilyHeadId = null) => {
+  if (!userA || !userB) return false;
+  const idA = String(userA._id || userA.id || '');
+  const idB = String(userB._id || userB.id || '');
+  if (idA && idB && idA === idB) return true;
+
+  const extractHeadId = (u, overrideHeadId) => {
+    if (overrideHeadId) return String(overrideHeadId);
+    if (!u) return '';
+    let headRef = u.family_head?.id || u.family_head?._id;
+    if (!headRef && u.family_head && mongoose.isValidObjectId(u.family_head)) {
+      headRef = u.family_head;
+    }
+    if (headRef && typeof headRef === 'object' && headRef._id) {
+      headRef = headRef._id;
+    }
+    const uId = String(u._id || u.id || '');
+    if (headRef && String(headRef) !== uId) {
+      return String(headRef);
+    }
+    if (u.familyHead || u.relation === 'Self') {
+      return uId;
+    }
+    return headRef ? String(headRef) : uId;
+  };
+
+  const headA = extractHeadId(userA, userAFamilyHeadId);
+  const headB = extractHeadId(userB);
+
+  if (headA && headB && headA === headB) return true;
+
+  // Also check parent_member_id / member_id linkage if present
+  if (userA.member_id && userB.parent_member_id && String(userB.parent_member_id) === String(userA.member_id)) return true;
+  if (userB.member_id && userA.parent_member_id && String(userA.parent_member_id) === String(userB.member_id)) return true;
+  if (userA.parent_member_id && userB.parent_member_id && String(userA.parent_member_id) === String(userB.parent_member_id)) return true;
+
+  return false;
+};
+
 module.exports = {
   fullName,
   findUserByIdOrMemberId,
   resolveFamilyHead,
-  prepareFamilyFields
+  prepareFamilyFields,
+  areInSameFamily
 };

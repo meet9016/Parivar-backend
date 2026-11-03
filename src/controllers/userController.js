@@ -8,7 +8,7 @@ const familyUtil = require('../utils/familyHelper');
 const jwt = require('jsonwebtoken');
 const { deleteFileFromExternalService } = require('../utils/fileUpload');
 const queryHelper = require('../utils/queryHelper');
-const { prepareFamilyFields, fullName } = require('../utils/familyHelper');
+const { prepareFamilyFields, fullName, areInSameFamily } = require('../utils/familyHelper');
 const XLSX = require('xlsx');
 const ExcelJS = require('exceljs');
 const { renderVafatCardHtml } = require('../templates/vafatCardTemplateService');
@@ -216,13 +216,23 @@ const register = async (req, res) => {
 
     // Check if email is already registered in DB
     if (trimmedEmail) {
-      const existingUserByEmail = await User.findOne({ email: trimmedEmail });
-      if (existingUserByEmail) {
-        return res.status(400).json({
-          status: 400,
-          message: `Email ${trimmedEmail} is already registered with member "${existingUserByEmail.first_name} ${existingUserByEmail.last_name || ''}". Duplicate registration is not allowed.`,
-          error: 'Email already registered'
-        });
+      const existingUsersWithEmail = await User.find({ email: trimmedEmail });
+      if (existingUsersWithEmail.length > 0) {
+        let isSameFam = false;
+        if (family_head_id) {
+          const headUser = await User.findById(family_head_id);
+          if (headUser && existingUsersWithEmail.every(u => areInSameFamily(headUser, u))) {
+            isSameFam = true;
+          }
+        }
+        if (!isSameFam) {
+          const firstConflict = existingUsersWithEmail[0];
+          return res.status(400).json({
+            status: 400,
+            message: `Email ${trimmedEmail} is already registered with member "${firstConflict.first_name} ${firstConflict.last_name || ''}". Duplicate registration is not allowed.`,
+            error: 'Email already registered'
+          });
+        }
       }
     }
 
@@ -241,7 +251,7 @@ const register = async (req, res) => {
 
     if (Array.isArray(membersList) && membersList.length > 0) {
       const seenNumbers = new Set(trimmedNumber ? getNumberVariations(trimmedNumber) : []);
-      const seenEmails = new Set(trimmedEmail ? [trimmedEmail] : []);
+      const seenEmails = new Set(); // Members can share head's email
 
       for (const m of membersList) {
         if (!m.first_name || !m.first_name.trim()) continue;
@@ -272,22 +282,27 @@ const register = async (req, res) => {
         }
 
         if (mEmail) {
-          if (seenEmails.has(mEmail)) {
-            return res.status(400).json({
-              status: 400,
-              message: `Email ${mEmail} for member "${m.first_name}" is duplicated in this form submission.`,
-              error: 'Duplicate email in form'
-            });
-          }
-          seenEmails.add(mEmail);
+          const isHeadEmail = trimmedEmail && mEmail === trimmedEmail;
 
-          const existingMemberEmail = await User.findOne({ email: mEmail });
-          if (existingMemberEmail) {
-            return res.status(400).json({
-              status: 400,
-              message: `Email ${mEmail} for member "${m.first_name}" is already registered with member "${existingMemberEmail.first_name} ${existingMemberEmail.last_name || ''}". Duplicate registration is not allowed.`,
-              error: 'Email already registered'
-            });
+          // If NOT head's email, check for duplicate emails in this submission
+          if (!isHeadEmail) {
+            if (seenEmails.has(mEmail)) {
+              return res.status(400).json({
+                status: 400,
+                message: `Email ${mEmail} for member "${m.first_name}" is duplicated in this form submission.`,
+                error: 'Duplicate email in form'
+              });
+            }
+            seenEmails.add(mEmail);
+
+            const existingUsersWithEmail = await User.find({ email: mEmail });
+            if (existingUsersWithEmail.length > 0) {
+              return res.status(400).json({
+                status: 400,
+                message: `Email ${mEmail} for member "${m.first_name}" is already registered with member "${existingUsersWithEmail[0].first_name} ${existingUsersWithEmail[0].last_name || ''}". Duplicate registration is not allowed.`,
+                error: 'Email already registered'
+              });
+            }
           }
         }
       }
@@ -1237,13 +1252,16 @@ const updateUser = async (req, res) => {
     if (first_name) user.first_name = first_name;
     if (middle_name !== undefined) user.middle_name = middle_name;
     if (last_name !== undefined) user.last_name = last_name;
+    const emailLower = email !== undefined ? (email ? email.toLowerCase().trim() : '') : (user.email ? user.email.toLowerCase().trim() : '');
     if (email !== undefined) {
-      const emailLower = email ? email.toLowerCase().trim() : '';
       if (emailLower && emailLower !== (user.email || '')) {
-        const existingEmail = await User.findOne({ email: emailLower, _id: { $ne: user._id } });
-        if (existingEmail) {
+        const existingUsers = await User.find({ email: emailLower, _id: { $ne: user._id } });
+        const conflictingUser = existingUsers.find(
+          otherUser => !areInSameFamily(user, otherUser, req.body.family_head_id)
+        );
+        if (conflictingUser) {
           return res.status(400).json({
-            message: `Email ${emailLower} is already registered with member "${existingEmail.first_name} ${existingEmail.last_name || ''}".`
+            message: `Email ${emailLower} is already registered with member "${conflictingUser.first_name} ${conflictingUser.last_name || ''}".`
           });
         }
       }
@@ -1376,6 +1394,30 @@ const updateUser = async (req, res) => {
     }
 
     if (Array.isArray(membersList) && membersList.length > 0) {
+      // Validate membersList emails against external users (allow sharing Head's email or emails within same family)
+      for (const m of membersList) {
+        if (!m.first_name || !m.first_name.trim()) continue;
+        const mEmail = m.email ? String(m.email).trim().toLowerCase() : '';
+        if (mEmail) {
+          const isCurrentHeadEmail = (emailLower && mEmail === emailLower) || (user.email && mEmail === user.email.toLowerCase().trim());
+          if (!isCurrentHeadEmail) {
+            const memberId = m._id || m.id;
+            const existingUsers = await User.find({
+              email: mEmail,
+              ...(memberId && mongoose.isValidObjectId(memberId) ? { _id: { $ne: memberId } } : {})
+            });
+            const conflictingUser = existingUsers.find(
+              otherUser => !areInSameFamily(user, otherUser, req.body.family_head_id)
+            );
+            if (conflictingUser) {
+              return res.status(400).json({
+                message: `Email ${mEmail} for member "${m.first_name}" is already registered with member "${conflictingUser.first_name} ${conflictingUser.last_name || ''}".`
+              });
+            }
+          }
+        }
+      }
+
       const latestUserWithId = await User.findOne({ member_id: /^\d+$/ })
         .sort({ createdAt: -1, _id: -1 })
         .select('member_id')
