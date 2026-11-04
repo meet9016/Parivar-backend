@@ -101,6 +101,8 @@ router.post('/bulk-import', protect, requirePermission('members.add'), upload.si
 router.get('/death/:id/download', optionalProtect, userController.downloadDeathCard);
 router.post('/death/:id/download', optionalProtect, userController.downloadDeathCard);
 router.get('/death/:id/download-link', optionalProtect, userController.getDeathCardLink);
+router.get('/death/:id/notification-recipients', optionalProtect, userController.getDeathNotificationRecipients);
+router.get('/vafat/:id/notification-recipients', optionalProtect, userController.getDeathNotificationRecipients);
 router.get('/death/:id/html', optionalProtect, userController.getDeathCardHtml);
 router.post('/death/:id/html', optionalProtect, userController.getDeathCardHtml);
 router.get('/vafat/:id/download', optionalProtect, userController.downloadDeathCard);

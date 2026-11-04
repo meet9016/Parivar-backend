@@ -100,8 +100,22 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
 
 const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {}) => {
   try {
-    const users = await User.find({ fcm_token: { $exists: true, $ne: '' } }, 'fcm_token').lean();
-    const tokens = [...new Set(users.map(u => u.fcm_token && String(u.fcm_token).trim()).filter(Boolean))];
+    const users = await User.find({
+      $or: [
+        { fcm_token: { $exists: true, $ne: '' } },
+        { 'fcm_tokens.0': { $exists: true } }
+      ]
+    }, 'fcm_token fcm_tokens').lean();
+    const tokenList = [];
+    users.forEach(u => {
+      if (u.fcm_token && String(u.fcm_token).trim()) tokenList.push(String(u.fcm_token).trim());
+      if (Array.isArray(u.fcm_tokens)) {
+        u.fcm_tokens.forEach(t => {
+          if (t && String(t).trim()) tokenList.push(String(t).trim());
+        });
+      }
+    });
+    const tokens = [...new Set(tokenList)];
     await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
   } catch (err) {
     console.error('[FCM Broadcast Error]:', err.message);
@@ -112,10 +126,25 @@ const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '',
   try {
     if (!userIds || !userIds.length) return;
     const users = await User.find(
-      { _id: { $in: userIds }, fcm_token: { $exists: true, $ne: '' } },
-      'fcm_token'
+      {
+        _id: { $in: userIds },
+        $or: [
+          { fcm_token: { $exists: true, $ne: '' } },
+          { 'fcm_tokens.0': { $exists: true } }
+        ]
+      },
+      'fcm_token fcm_tokens'
     ).lean();
-    const tokens = [...new Set(users.map(u => u.fcm_token && String(u.fcm_token).trim()).filter(Boolean))];
+    const tokenList = [];
+    users.forEach(u => {
+      if (u.fcm_token && String(u.fcm_token).trim()) tokenList.push(String(u.fcm_token).trim());
+      if (Array.isArray(u.fcm_tokens)) {
+        u.fcm_tokens.forEach(t => {
+          if (t && String(t).trim()) tokenList.push(String(t).trim());
+        });
+      }
+    });
+    const tokens = [...new Set(tokenList)];
     await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
   } catch (err) {
     console.error('[FCM Targeted Error]:', err.message);

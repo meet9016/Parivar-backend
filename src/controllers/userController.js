@@ -408,8 +408,60 @@ const register = async (req, res) => {
       if (req.body.status === undefined) {
         newUser.status = 1;
       }
+      if (newUser.is_deceased) {
+        newUser.death_notification_active = true;
+        if (req.body.send_notification === true || req.body.send_notification === 'true') {
+          newUser.death_notification_last_sent = new Date();
+          newUser.death_notification_count = 1;
+          const regTargetType = req.body.target_type || req.body.target_audience || 'all';
+          let regTargetUsers = [];
+          const rawRegUsers = req.body.target_user_ids || req.body.target_users;
+          if (Array.isArray(rawRegUsers)) regTargetUsers = rawRegUsers.map(u => typeof u === 'object' ? (u.id || u._id || u) : u).filter(Boolean);
+          newUser.death_notification_target_type = regTargetType;
+          newUser.death_notification_target_users = regTargetUsers;
+        }
+      }
       await newUser.save();
     }
+
+    // Send Death / Vafat Push Notification if requested
+    if (newUser.is_deceased && (req.body.send_notification === true || req.body.send_notification === 'true')) {
+      try {
+        const isFemale = String(newUser.gender || '').toLowerCase() === 'female';
+        const titlePrefix = isFemale ? 'Marhuma' : 'Marhum';
+        const memberName = fullName(newUser) || `${newUser.first_name || ''} ${newUser.last_name || ''}`.trim() || 'Member';
+
+        const notifTitle = req.body.notification_title || `Vafat Samachar: ${titlePrefix} ${memberName}`;
+        let notifBody = req.body.notification_body || '';
+        if (!notifBody) {
+          notifBody = `${titlePrefix} ${memberName}${newUser.village ? ` (${newUser.village})` : ''} નું ઇન્તેકાલ થયેલ છે.`;
+          if (newUser.janaza_time || newUser.janaza_place) {
+            const janazaInfo = [newUser.janaza_time, newUser.janaza_place].filter(Boolean).join(' - ');
+            notifBody += ` જનાઝા નમાઝ: ${janazaInfo}.`;
+          }
+          notifBody += ` અલ્લાહ પાક મગફીરત ફરમાવે.`;
+        }
+
+        const target_type = req.body.target_type || req.body.target_audience || 'all';
+        const target_users = req.body.target_user_ids || req.body.target_users || [];
+        const imageUrl = newUser.image || newUser.profile_image ? publicUrl(req, newUser.image || newUser.profile_image) : '';
+
+        const { createAndBroadcast } = require('./notificationController');
+        createAndBroadcast({
+          title: notifTitle,
+          body: notifBody,
+          image: imageUrl,
+          type: 'death',
+          ref_id: String(newUser._id),
+          date: newUser.death_date || new Date(),
+          target_type,
+          target_users
+        }).catch(err => console.error('[Death Notification Error]:', err.message));
+      } catch (notifErr) {
+        console.error('[Death Notification Trigger Error]:', notifErr.message);
+      }
+    }
+
     if (typeof membersList === 'string') {
       try {
         membersList = JSON.parse(membersList);
@@ -911,7 +963,7 @@ const getUsers = async (req, res) => {
       baseQuery: query,
       searchFields: ['first_name', 'middle_name', 'last_name', 'number', 'email', 'village', 'family_head.name'],
       filterFields: ['gender', 'blood_group', 'is_committee', 'committee_role', 'role_id', 'status', 'familyHead'],
-      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : death ? '_id member_id first_name middle_name last_name number email dob gender village address profile_image image is_deceased death_date death_time death_place death_note janaza_date janaza_time janaza_place kabrastan islamic_date vaar ziyarat_date ziyarat_time ziyarat_place besnu_date besnu_time besnu_place relation familyHead family_head status' : '-password',
+      select: (birthday || anniversary) ? '_id first_name middle_name last_name number dob anniversary' : death ? '_id member_id first_name middle_name last_name number email dob gender village address profile_image image is_deceased death_date death_time death_place death_note janaza_date janaza_time janaza_place kabrastan islamic_date vaar ziyarat_date ziyarat_time ziyarat_place besnu_date besnu_time besnu_place relation familyHead family_head status death_notification_target_type death_notification_target_users death_notification_last_sent death_notification_active death_notification_count' : '-password',
       populate: (birthday || anniversary || death) ? '' : 'role_id',
       defaultSort: { createdAt: -1 },
       lean: false
@@ -1000,6 +1052,11 @@ const getUsers = async (req, res) => {
           relation: u.relation || '',
           familyHead: Boolean(u.familyHead),
           family_head: u.family_head || null,
+          death_notification_target_type: u.death_notification_target_type || 'all',
+          death_notification_target_users: (u.death_notification_target_users || []).map(String),
+          death_notification_last_sent: u.death_notification_last_sent || null,
+          death_notification_active: Boolean(u.death_notification_active),
+          death_notification_count: Number(u.death_notification_count || 0),
           download_url: buildDeathDownloadUrl(u.id || String(u._id), req, 'png'),
           png_url: buildDeathDownloadUrl(u.id || String(u._id), req, 'png'),
           pdf_url: buildDeathDownloadUrl(u.id || String(u._id), req, 'pdf')
@@ -1326,7 +1383,28 @@ const updateUser = async (req, res) => {
       user.image = `/uploads/${req.file.filename}`;
     }
 
-    if (req.body.is_deceased !== undefined) user.is_deceased = req.body.is_deceased === true || req.body.is_deceased === 'true';
+    if (req.body.is_deceased !== undefined) {
+      const isDec = req.body.is_deceased === true || req.body.is_deceased === 'true';
+      user.is_deceased = isDec;
+      if (isDec) {
+        user.death_notification_active = true;
+        if (req.body.send_notification === true || req.body.send_notification === 'true') {
+          user.death_notification_last_sent = new Date();
+          user.death_notification_count = (user.death_notification_count || 0) + 1;
+          const upTargetType = req.body.target_type || req.body.target_audience || 'all';
+          let upTargetUsers = [];
+          const rawUpUsers = req.body.target_user_ids || req.body.target_users;
+          if (Array.isArray(rawUpUsers)) upTargetUsers = rawUpUsers.map(u => typeof u === 'object' ? (u.id || u._id || u) : u).filter(Boolean);
+          user.death_notification_target_type = upTargetType;
+          user.death_notification_target_users = upTargetUsers;
+        }
+      } else {
+        user.death_notification_active = false;
+      }
+    }
+    if (req.body.death_notification_active !== undefined) {
+      user.death_notification_active = req.body.death_notification_active === true || req.body.death_notification_active === 'true';
+    }
     if (req.body.death_date !== undefined) user.death_date = req.body.death_date ? new Date(req.body.death_date) : null;
     if (req.body.death_time !== undefined) user.death_time = req.body.death_time;
     if (req.body.death_place !== undefined) user.death_place = req.body.death_place;
@@ -1360,6 +1438,44 @@ const updateUser = async (req, res) => {
     }
 
     await user.save();
+
+    // Send Death / Vafat Push Notification if requested
+    if (user.is_deceased && (req.body.send_notification === true || req.body.send_notification === 'true')) {
+      try {
+        const isFemale = String(user.gender || '').toLowerCase() === 'female';
+        const titlePrefix = isFemale ? 'Marhuma' : 'Marhum';
+        const memberName = fullName(user) || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Member';
+
+        const notifTitle = req.body.notification_title || `Vafat Samachar: ${titlePrefix} ${memberName}`;
+        let notifBody = req.body.notification_body || '';
+        if (!notifBody) {
+          notifBody = `${titlePrefix} ${memberName}${user.village ? ` (${user.village})` : ''} નું ઇન્તેકાલ થયેલ છે.`;
+          if (user.janaza_time || user.janaza_place) {
+            const janazaInfo = [user.janaza_time, user.janaza_place].filter(Boolean).join(' - ');
+            notifBody += ` જનાઝા નમાઝ: ${janazaInfo}.`;
+          }
+          notifBody += ` અલ્લાહ પાક મગફીરત ફરમાવે.`;
+        }
+
+        const target_type = req.body.target_type || req.body.target_audience || 'all';
+        const target_users = req.body.target_user_ids || req.body.target_users || [];
+        const imageUrl = user.image || user.profile_image ? publicUrl(req, user.image || user.profile_image) : '';
+
+        const { createAndBroadcast } = require('./notificationController');
+        createAndBroadcast({
+          title: notifTitle,
+          body: notifBody,
+          image: imageUrl,
+          type: 'death',
+          ref_id: String(user._id),
+          date: user.death_date || new Date(),
+          target_type,
+          target_users
+        }).catch(err => console.error('[Death Notification Error]:', err.message));
+      } catch (notifErr) {
+        console.error('[Death Notification Trigger Error]:', notifErr.message);
+      }
+    }
 
     // Handle updating/creating/deleting child family members if passed
     let membersList = req.body.members;
@@ -2401,6 +2517,20 @@ const getDeathCardLink = async (req, res) => {
     const pdfUrl = buildDeathDownloadUrl(memberId, req, 'pdf');
     const downloadUrl = reqFormat === 'pdf' ? pdfUrl : pngUrl;
 
+    const Notification = require('../models/notificationModel');
+    const notif = await Notification.findOne({
+      type: 'death',
+      ref_id: String(user._id)
+    }).sort({ createdAt: -1 }).lean();
+
+    const targetType = notif?.target_type || user.death_notification_target_type || 'all';
+    let targetUserIds = [];
+    if (notif?.target_users && notif.target_users.length > 0) {
+      targetUserIds = notif.target_users;
+    } else if (user.death_notification_target_users && user.death_notification_target_users.length > 0) {
+      targetUserIds = user.death_notification_target_users;
+    }
+
     return res.status(200).json({
       status: 200,
       message: 'Death card download link generated successfully',
@@ -2420,7 +2550,15 @@ const getDeathCardLink = async (req, res) => {
         islamic_date: user.islamic_date || '',
         vaar: user.vaar || '',
         address: user.address || '',
-        village: user.village || ''
+        village: user.village || '',
+        notification_info: {
+          sent: Boolean(notif || user.death_notification_last_sent),
+          sent_at: notif?.createdAt || user.death_notification_last_sent || null,
+          title: notif?.title || '',
+          body: notif?.body || '',
+          target_type: targetType,
+          target_user_ids: targetUserIds.map(String)
+        }
       }
     });
   } catch (error) {
@@ -2468,6 +2606,98 @@ const checkNumberAvailability = async (req, res) => {
   }
 };
 
+
+// Get List of Recipients for a Specific Death Notification
+const getDeathNotificationRecipients = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const orConditions = [{ member_id: id }];
+    if (mongoose.isValidObjectId(id)) {
+      orConditions.unshift({ _id: id });
+    }
+
+    const user = await User.findOne({ $or: orConditions }).lean();
+    if (!user) {
+      return apiResponse(res, 404, 'Deceased member not found');
+    }
+
+    const Notification = require('../models/notificationModel');
+    const notif = await Notification.findOne({
+      type: 'death',
+      ref_id: String(user._id)
+    }).sort({ createdAt: -1 }).lean();
+
+    const targetType = notif?.target_type || user.death_notification_target_type || 'all';
+    let targetUserIds = [];
+    if (notif?.target_users && notif.target_users.length > 0) {
+      targetUserIds = notif.target_users;
+    } else if (user.death_notification_target_users && user.death_notification_target_users.length > 0) {
+      targetUserIds = user.death_notification_target_users;
+    }
+
+    let recipients = [];
+    if (targetType === 'specific') {
+      if (targetUserIds.length > 0) {
+        recipients = await User.find(
+          { _id: { $in: targetUserIds } },
+          'first_name middle_name last_name name number phone village city profile_image image is_committee committee_role'
+        ).lean();
+      }
+    } else if (targetType === 'committee') {
+      recipients = await User.find(
+        {
+          _id: { $ne: user._id },
+          is_deceased: { $ne: true },
+          $or: [{ is_committee: true }, { committee_role: { $exists: true, $ne: '' } }]
+        },
+        'first_name middle_name last_name name number phone village city profile_image image is_committee committee_role'
+      ).lean();
+    } else {
+      recipients = await User.find(
+        {
+          _id: { $ne: user._id },
+          is_deceased: { $ne: true }
+        },
+        'first_name middle_name last_name name number phone village city profile_image image is_committee committee_role'
+      ).lean();
+    }
+
+    const formattedRecipients = recipients.map(u => ({
+      id: String(u._id),
+      _id: u._id,
+      name: [u.first_name, u.middle_name, u.last_name].filter(Boolean).join(' ') || u.name || 'Member',
+      first_name: u.first_name || '',
+      last_name: u.last_name || '',
+      number: u.number || u.phone || '',
+      village: u.village || u.city || '',
+      image: publicUrl(req, u.image || u.profile_image || ''),
+      role: u.committee_role || (u.is_committee ? 'Committee' : '')
+    }));
+
+    return apiResponse(res, 200, 'Death notification recipients retrieved successfully', {
+      member: {
+        id: String(user._id),
+        name: [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ') || user.name || 'Member',
+        death_date: user.death_date,
+        village: user.village
+      },
+      notification: {
+        sent: Boolean(notif || user.death_notification_last_sent),
+        sent_at: notif?.createdAt || user.death_notification_last_sent || null,
+        title: notif?.title || '',
+        body: notif?.body || '',
+        target_type: targetType,
+        target_user_ids: targetUserIds.map(String),
+        recipients_count: formattedRecipients.length,
+        recipients: formattedRecipients
+      }
+    });
+  } catch (err) {
+    console.error('getDeathNotificationRecipients error:', err);
+    return apiResponse(res, 500, err.message || 'Failed to get notification recipients');
+  }
+};
+
 module.exports = {
   register,
   // login,
@@ -2485,6 +2715,7 @@ module.exports = {
   downloadExportFile,
   downloadDeathCard,
   getDeathCardLink,
+  getDeathNotificationRecipients,
   getDeathCardHtml
 };
 

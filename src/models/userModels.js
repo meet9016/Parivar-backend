@@ -268,7 +268,15 @@ const userSchema = new mongoose.Schema({
   session_id: { type: String, default: null, index: true },
   session_ids: { type: [String], default: [], index: true },
   birthday_notification_year: { type: Number, default: null, index: true },
-  anniversary_notification_year: { type: Number, default: null, index: true }
+  anniversary_notification_year: { type: Number, default: null, index: true },
+  death_notification_active: { type: Boolean, default: false, index: true },
+  death_notification_last_sent: { type: Date, default: null },
+  death_notification_count: { type: Number, default: 0 },
+  death_notification_target_type: { type: String, enum: ['all', 'committee', 'specific'], default: 'all' },
+  death_notification_target_users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  last_death_friday_date: { type: String, default: null },
+  last_death_monthly_month: { type: String, default: null },
+  last_death_barsi_year: { type: Number, default: null }
 
 }, {
   timestamps: true,

@@ -10,6 +10,29 @@ let schedulerInterval = null;
 let isRunning = false;
 
 /**
+ * Returns year, month (1-12), day (1-31), weekday ('Mon'..'Sun'), dateStr, monthStr in Asia/Kolkata
+ */
+const getKolkataDateParts = (d = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short'
+  }).formatToParts(d);
+  const map = {};
+  parts.forEach(p => { map[p.type] = p.value; });
+  return {
+    year: parseInt(map.year, 10),
+    month: parseInt(map.month, 10),
+    day: parseInt(map.day, 10),
+    weekday: map.weekday,
+    dateStr: `${map.year}-${String(map.month).padStart(2, '0')}-${String(map.day).padStart(2, '0')}`,
+    monthStr: `${map.year}-${String(map.month).padStart(2, '0')}`
+  };
+};
+
+/**
  * Checks all active database connections (default + tenants)
  * for events and news whose date/start_time has arrived and sends reminder notifications.
  */
@@ -292,6 +315,175 @@ const checkAndSendScheduledNotifications = async () => {
           }
         } catch (mandalErr) {
           console.error(`[Scheduler Mandal Overdue Error in ${name}]:`, mandalErr.message);
+        }
+
+        // 4. Process Scheduled Death Remembrance Notifications to Family Head & Living Family Members
+        // Schedule:
+        // - Every Friday: Jummah Dua / Isaal-e-Sawab reminder (for first 1 year)
+        // - Monthly on same date: Masik Barsi reminder (e.g. 04/12, 04/01... for first 1 year)
+        // - Yearly on death anniversary: Annual Barsi reminder (e.g. 04/11/2027, 04/11/2028...)
+        // - Target audience: ONLY the living family members and the family head of the deceased person!
+        try {
+          const nowParts = getKolkataDateParts(now);
+
+          // Find all deceased members who have a valid death_date
+          const deceasedMembers = await User.find({
+            status: { $ne: 0 },
+            is_deceased: true,
+            death_date: { $exists: true, $ne: null }
+          }).lean();
+
+          for (const deceased of deceasedMembers) {
+            const deathDateObj = new Date(deceased.death_date);
+            if (isNaN(deathDateObj.getTime())) continue;
+
+            const deathParts = getKolkataDateParts(deathDateObj);
+
+            // Calculate days elapsed since death
+            const diffMs = now.getTime() - deathDateObj.getTime();
+            const daysSinceDeath = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+
+            // Don't send recurring reminders on the exact day of death (day 0), as initial announcement was already broadcast
+            if (daysSinceDeath < 1) continue;
+
+            // Determine if today qualifies for any of the 3 notification types:
+            let notificationType = null; // 'barsi' | 'monthly' | 'friday'
+            let notifTitle = '';
+            let notifBody = '';
+            let updateField = {};
+
+            const isFemale = String(deceased.gender || '').toLowerCase() === 'female';
+            const titlePrefix = isFemale ? 'Marhuma (મરહૂમા)' : 'Marhum (મરહૂમ)';
+            const memberName = [deceased.first_name, deceased.middle_name, deceased.last_name].filter(Boolean).join(' ') || deceased.name || 'Family Member';
+
+            // Check 1: Annual Barsi (Same month & day, year > death year)
+            const isAnnualBarsi =
+              nowParts.month === deathParts.month &&
+              nowParts.day === deathParts.day &&
+              nowParts.year > deathParts.year;
+
+            if (isAnnualBarsi && deceased.last_death_barsi_year !== nowParts.year) {
+              const yearsCompleted = nowParts.year - deathParts.year;
+              notificationType = 'barsi';
+              notifTitle = `🕯️ વાર્ષિક બરસી (${yearsCompleted} Year Barsi) - ${titlePrefix} ${memberName}`;
+              notifBody = `આજે ${titlePrefix} ${memberName} ની ${yearsCompleted}મી વાર્ષિક વફાત તારીખ (Barsi) છે. અલ્લાહ પાક મરહૂમની મગફિરત ફરમાવે અને જન્નતુલ ફિરદોસમાં આલા મકામ આપે. આમીન.`;
+              updateField = { last_death_barsi_year: nowParts.year, death_notification_last_sent: now };
+            }
+
+            // Check 2: Monthly same date (Masik Barsi) within 1st year
+            // Runs from month 1 to month 11 (daysSinceDeath >= 25 && daysSinceDeath < 360)
+            if (!notificationType && daysSinceDeath >= 25 && daysSinceDeath < 360) {
+              const daysInMonth = new Date(nowParts.year, nowParts.month, 0).getDate();
+              const effectiveDeathDay = Math.min(deathParts.day, daysInMonth);
+
+              if (nowParts.day === effectiveDeathDay && deceased.last_death_monthly_month !== nowParts.monthStr) {
+                let monthsPassed = (nowParts.year - deathParts.year) * 12 + (nowParts.month - deathParts.month);
+                if (monthsPassed > 0 && monthsPassed < 12) {
+                  notificationType = 'monthly';
+                  notifTitle = `🕊️ માસિક વફાત સ્મરણ (${monthsPassed} મહિનો) - ${titlePrefix} ${memberName}`;
+                  notifBody = `આજે ${titlePrefix} ${memberName} ની માસિક વફાત તારીખ (Masik Barsi) છે. અલ્લાહ પાક મરહૂમની મગફિરત ફરમાવે અને તમામ ઘરવાળાઓને સબર આપે. ખાસ દુઆ કરશો.`;
+                  updateField = { last_death_monthly_month: nowParts.monthStr, death_notification_last_sent: now };
+                }
+              }
+            }
+
+            // Check 3: Every Friday (Jummah Isaal-e-Sawab reminder) within 1st year
+            if (!notificationType && daysSinceDeath >= 1 && daysSinceDeath < 365) {
+              if (nowParts.weekday === 'Fri' && deceased.last_death_friday_date !== nowParts.dateStr) {
+                notificationType = 'friday';
+                notifTitle = `🕊️ શુક્રવાર દુઆ - ${titlePrefix} ${memberName}`;
+                notifBody = `આજે પવિત્ર શુક્રવાર (Jummah) છે. મરહૂમ ${memberName} ની મગફિરત અને ઇસાલે સવાબ માટે ખાસ દુઆ-એ-મગફિરત કરશો.`;
+                updateField = { last_death_friday_date: nowParts.dateStr, death_notification_last_sent: now };
+              }
+            }
+
+            // If none of the 3 conditions are met today, skip
+            if (!notificationType) continue;
+
+            // Determine Family Head ID and living family members
+            const isHead = deceased.familyHead === true || deceased.relation === 'Self' || !deceased.family_head?.id;
+            const headId = isHead
+              ? deceased._id
+              : (deceased.family_head?.id || deceased.family_head?._id || deceased.parent_id);
+
+            if (!headId) continue;
+
+            const headIdStr = String(headId);
+            const headObjectId = mongoose.Types.ObjectId.isValid(headId) ? new mongoose.Types.ObjectId(headIdStr) : null;
+
+            const orConditions = [
+              { _id: headIdStr },
+              { 'family_head.id': headIdStr },
+              { 'family_head._id': headIdStr },
+              { parent_id: headIdStr }
+            ];
+            if (headObjectId) {
+              orConditions.push(
+                { _id: headObjectId },
+                { 'family_head.id': headObjectId },
+                { 'family_head._id': headObjectId },
+                { parent_id: headObjectId }
+              );
+            }
+            if (deceased.member_id) {
+              orConditions.push({ parent_member_id: deceased.member_id });
+            }
+            if (deceased.parent_member_id) {
+              orConditions.push(
+                { member_id: deceased.parent_member_id },
+                { parent_member_id: deceased.parent_member_id }
+              );
+            }
+
+            // Find ONLY living Family Head and living family members
+            const recipients = await User.find({
+              _id: { $ne: deceased._id },
+              status: { $ne: 0 },
+              is_deceased: { $ne: true },
+              $or: orConditions
+            }).select('_id first_name last_name gender village fcm_token fcm_tokens').lean();
+
+            if (!recipients || recipients.length === 0) continue;
+
+            // Atomic update to mark notification sent and prevent duplicate dispatch
+            const updateFilter = { _id: deceased._id };
+            if (updateField.last_death_barsi_year) updateFilter.last_death_barsi_year = { $ne: updateField.last_death_barsi_year };
+            if (updateField.last_death_monthly_month) updateFilter.last_death_monthly_month = { $ne: updateField.last_death_monthly_month };
+            if (updateField.last_death_friday_date) updateFilter.last_death_friday_date = { $ne: updateField.last_death_friday_date };
+
+            const updated = await User.findOneAndUpdate(
+              updateFilter,
+              {
+                $set: updateField,
+                $inc: { death_notification_count: 1 }
+              }
+            );
+
+            if (!updated) continue;
+
+            const recipientIds = recipients.map(r => String(r._id));
+            console.log(`[Scheduler] 🕊️ Auto-sending ${notificationType} death remembrance for "${memberName}" to ${recipientIds.length} family recipients in DB [${name}]`);
+
+            const fakeReq = {
+              protocol: 'http',
+              get: (header) => (header === 'host' ? 'localhost:5000' : ''),
+              tenantConn: conn
+            };
+            const userImage = deceased.image || deceased.profile_image ? publicUrl(fakeReq, deceased.image || deceased.profile_image) : '';
+
+            await createAndBroadcast({
+              title: notifTitle,
+              body: notifBody,
+              image: userImage,
+              type: 'death',
+              ref_id: String(deceased._id),
+              date: now,
+              target_type: 'specific',
+              target_users: recipientIds
+            });
+          }
+        } catch (deathErr) {
+          console.error(`[Scheduler Death Scheduled Error in ${name}]:`, deathErr.message);
         }
       }
 
@@ -615,7 +807,7 @@ const checkAndSendScheduledNotifications = async () => {
 /**
  * Starts the recurring scheduler interval (e.g. checks every 1 minute)
  */
-const startScheduler = (intervalMs = 60 * 1000) => {
+const startScheduler = (intervalMs = 30 * 1000) => {
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
   }

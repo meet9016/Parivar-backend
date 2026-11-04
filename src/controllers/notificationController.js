@@ -50,6 +50,21 @@ const createAndBroadcast = async ({
     }
   }
 
+  // If target_type is committee and cleanTargetUserIds is empty, populate from User model
+  if (target_type === 'committee' && cleanTargetUserIds.length === 0) {
+    try {
+      const committeeDocs = await User.find({
+        $or: [
+          { is_committee: true },
+          { committee_role: { $exists: true, $ne: '' } }
+        ]
+      }, '_id').lean();
+      cleanTargetUserIds = committeeDocs.map(m => m._id);
+    } catch (committeeErr) {
+      console.warn('[Notification committee target query warning]:', committeeErr.message);
+    }
+  }
+
   const notifData = {
     title,
     body,
@@ -57,7 +72,7 @@ const createAndBroadcast = async ({
     type,
     ref_id,
     target_type: ['all', 'committee', 'specific'].includes(target_type) ? target_type : 'all',
-    target_users: target_type === 'specific' ? cleanTargetUserIds : [],
+    target_users: target_type === 'all' ? [] : cleanTargetUserIds,
     date: date ? new Date(date) : new Date(),
     expires_at: rest.expires_at ? new Date(rest.expires_at) : null,
     key: rest.key || rest.push_key || '',
@@ -95,41 +110,53 @@ const createAndBroadcast = async ({
   };
 
   // Dispatch Socket.IO and FCM asynchronously in background (Non-blocking for fast API response)
+  const currentTenantStore = require('../utils/tenantContext').tenantContext.getStore();
   setImmediate(async () => {
-    // 1. Socket.IO Broadcast (isolated)
-    try {
-      const io = socketManager.getIO();
-      if (io) {
-        if (notif.target_type === 'committee') {
-          const committeeMembers = await User.find({ is_committee: true }, '_id').lean();
-          committeeMembers.forEach(m => {
-            io.to(`user_${m._id}`).emit('new_notification', payload);
-          });
-        } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
-          cleanTargetUserIds.forEach(uid => {
-            io.to(`user_${uid}`).emit('new_notification', payload);
-          });
-        } else {
-          io.to('broadcast').emit('new_notification', payload);
+    const runDispatch = async () => {
+      // 1. Socket.IO Broadcast (isolated)
+      try {
+        const io = socketManager.getIO();
+        if (io) {
+          if (notif.target_type === 'committee') {
+            const recipientIds = cleanTargetUserIds.length > 0
+              ? cleanTargetUserIds
+              : (await User.find({ $or: [{ is_committee: true }, { committee_role: { $exists: true, $ne: '' } }] }, '_id').lean()).map(m => m._id);
+            recipientIds.forEach(uid => {
+              io.to(`user_${uid}`).emit('new_notification', payload);
+            });
+          } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
+            cleanTargetUserIds.forEach(uid => {
+              io.to(`user_${uid}`).emit('new_notification', payload);
+            });
+          } else {
+            io.to('broadcast').emit('new_notification', payload);
+          }
         }
+      } catch (socketErr) {
+        console.warn('[Socket.IO Emit Warning]:', socketErr.message);
       }
-    } catch (socketErr) {
-      console.warn('[Socket.IO Emit Warning]:', socketErr.message);
-    }
 
-    // 2. FCM Push Notification to Mobile Devices (isolated and awaited)
-    try {
-      if (notif.target_type === 'committee') {
-        const committeeMembers = await User.find({ is_committee: true }, '_id').lean();
-        const userIds = committeeMembers.map(m => m._id);
-        await sendNotificationToUsers(userIds, title, body, image, fcmExtra);
-      } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
-        await sendNotificationToUsers(cleanTargetUserIds, title, body, image, fcmExtra);
-      } else {
-        await sendNotificationToAll(title, body, image, fcmExtra);
+      // 2. FCM Push Notification to Mobile Devices (isolated and awaited)
+      try {
+        if (notif.target_type === 'committee') {
+          const recipientIds = cleanTargetUserIds.length > 0
+            ? cleanTargetUserIds
+            : (await User.find({ $or: [{ is_committee: true }, { committee_role: { $exists: true, $ne: '' } }] }, '_id').lean()).map(m => m._id);
+          await sendNotificationToUsers(recipientIds, title, body, image, fcmExtra);
+        } else if (notif.target_type === 'specific' && cleanTargetUserIds.length > 0) {
+          await sendNotificationToUsers(cleanTargetUserIds, title, body, image, fcmExtra);
+        } else {
+          await sendNotificationToAll(title, body, image, fcmExtra);
+        }
+      } catch (fcmErr) {
+        console.error('[FCM Dispatch Error]:', fcmErr.message);
       }
-    } catch (fcmErr) {
-      console.error('[FCM Dispatch Error]:', fcmErr.message);
+    };
+
+    if (currentTenantStore) {
+      await require('../utils/tenantContext').tenantContext.run(currentTenantStore, runDispatch);
+    } else {
+      await runDispatch();
     }
   });
 
