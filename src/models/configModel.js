@@ -105,6 +105,16 @@ const configSchema = new mongoose.Schema({
     default: "",
   },
 
+  // Global Notification Switch (Master switch for all push notifications across the platform)
+  notificationsEnabled: {
+    type: Boolean,
+    default: true,
+  },
+  notifications_enabled: {
+    type: Boolean,
+    default: true,
+  },
+
   // Monday Scheduled Push Notification
   mondayPushEnabled: {
     type: Boolean,

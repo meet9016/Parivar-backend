@@ -1333,6 +1333,14 @@ exports.sendPendingReminders = async (req, res) => {
     if (!isMandalAdminUser(req.user)) {
       return apiResponse(res, 403, 'Permission denied');
     }
+
+    const Config = require('../models/configModel');
+    const cfg = await Config.findOne().lean();
+    const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+    if (cfg && (isFalsy(cfg.notificationsEnabled) || isFalsy(cfg.notifications_enabled))) {
+      return apiResponse(res, 400, 'Push Notifications are currently turned OFF in Branding & Info. Turn ON the switch in Settings to send notifications.');
+    }
+
     const { month, mandal_id } = req.body || {};
     const targetMonth = month || new Date().toISOString().slice(0, 7);
 

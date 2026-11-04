@@ -16,6 +16,19 @@ const createAndBroadcast = async ({
   target_users = [], 
   ...rest 
 }) => {
+  // Check Global Notification Master Switch (configured under Branding & Info)
+  try {
+    const Config = require('../models/configModel');
+    const cfg = await Config.findOne().lean();
+    const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+    if (cfg && (isFalsy(cfg.notificationsEnabled) || isFalsy(cfg.notifications_enabled))) {
+      console.log(`[createAndBroadcast] 🚫 All notifications suppressed because notificationsEnabled is OFF in Branding & Info (type: ${type}, title: "${title}")`);
+      return null;
+    }
+  } catch (cfgErr) {
+    console.warn('[createAndBroadcast] Warning checking global notifications status:', cfgErr.message);
+  }
+
   // If this is a prayer timetable notification and notifications are turned OFF, suppress completely
   if (type === 'prayer_reminder' && !rest.is_test) {
     try {

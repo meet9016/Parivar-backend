@@ -116,6 +116,10 @@ const formatConfig = (req, config) => {
   delete obj.friday_push_enabled;
   delete obj.lastFridayPushDate;
 
+  const isGlobalNotifEnabled = !isFalsy(obj.notificationsEnabled) && !isFalsy(obj.notifications_enabled);
+  obj.notificationsEnabled = isGlobalNotifEnabled;
+  obj.notifications_enabled = isGlobalNotifEnabled;
+
   return obj;
 };
 
@@ -186,6 +190,14 @@ const updateConfig = async (req, res) => {
       config = new Config(updateData);
     } else {
       config.set(updateData);
+    }
+
+    if (req.body.notificationsEnabled !== undefined || req.body.notifications_enabled !== undefined) {
+      const rawVal = req.body.notificationsEnabled !== undefined ? req.body.notificationsEnabled : req.body.notifications_enabled;
+      const isFalsyVal = (v) => v === false || v === 'false' || v === 0 || v === '0';
+      const isEnabled = !isFalsyVal(rawVal);
+      config.notificationsEnabled = isEnabled;
+      config.notifications_enabled = isEnabled;
     }
 
     if (req.body.android_app_link !== undefined || req.body.playstore_url !== undefined) {
@@ -293,6 +305,15 @@ const testScheduledPush = async (req, res) => {
     const config = await Config.findOne();
     const { createAndBroadcast } = require('./notificationController');
     const now = new Date();
+
+    const isGlobalFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+    if (config && (isGlobalFalsy(config.notificationsEnabled) || isGlobalFalsy(config.notifications_enabled))) {
+      return res.status(400).json({
+        status: 400,
+        message: 'Push Notifications are currently turned OFF in Branding & Info. Turn ON the switch to send notifications.',
+        error: 'notifications_disabled'
+      });
+    }
 
     if (day === 'friday') {
       const fridayKey = (config?.fridayPushKey || 'jummah_mubarak').trim();

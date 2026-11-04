@@ -71,6 +71,15 @@ const checkAndSendScheduledNotifications = async () => {
       if (!conn || conn.readyState !== 1) continue;
 
       await tenantContext.run({ tenantConn: conn }, async () => {
+        // Check if global notifications are enabled
+        try {
+          const cfg = await Config.findOne().lean();
+          const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+          if (cfg && (isFalsy(cfg.notificationsEnabled) || isFalsy(cfg.notifications_enabled))) {
+            return; // Skip all scheduled notifications when switch is OFF
+          }
+        } catch (_) {}
+
         const Event = conn.models.Event;
         const News = conn.models.News;
 

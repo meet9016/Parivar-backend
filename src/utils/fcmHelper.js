@@ -4,6 +4,17 @@ const User = require('../models/userModels');
 
 const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '', extraData = {}) => {
   try {
+    // Safety check: Global notifications switch
+    try {
+      const Config = require('../models/configModel');
+      const cfg = await Config.findOne().lean();
+      const isFalsy = (v) => v === false || v === 'false' || v === 0 || v === '0';
+      if (cfg && (isFalsy(cfg.notificationsEnabled) || isFalsy(cfg.notifications_enabled))) {
+        console.log('[FCM] Notification dispatch aborted: Global notifications are turned OFF in Branding & Info');
+        return;
+      }
+    } catch (_) {}
+
     const uniqueTokens = [...new Set(tokens.filter(Boolean))];
     if (!uniqueTokens.length) return;
 
