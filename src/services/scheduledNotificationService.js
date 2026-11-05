@@ -3,6 +3,7 @@ const { getRegistryConnection, getTenantConnection } = require('../config/regist
 const tenantSchema = require('../models/tenantSchema');
 const { createAndBroadcast } = require('../controllers/notificationController');
 const { publicUrl } = require('../utils/apiResponse');
+const Suvichar = require('../models/suvicharModel');
 
 let schedulerInterval = null;
 let isRunning = false;
@@ -128,6 +129,66 @@ const checkAndSendScheduledNotifications = async () => {
           }
         } catch (newsErr) {
           console.error(`[Scheduler News Error in ${name}]:`, newsErr.message);
+        }
+      }
+
+      // Process Suvichar (Daily Thought Notification to ALL members on current date)
+      const SuvicharModel = conn.models.Suvichar || Suvichar;
+      if (SuvicharModel) {
+        try {
+          const kolkataParts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          }).formatToParts(now);
+          const kMap = {};
+          kolkataParts.forEach(p => { kMap[p.type] = p.value; });
+          const todayDateStr = `${kMap.year}-${kMap.month}-${kMap.day}`;
+
+          const endOfToday = new Date(`${todayDateStr}T23:59:59.999Z`);
+
+          const dueSuvichars = await SuvicharModel.find({
+            status: 1,
+            send_notification: { $ne: false },
+            notification_sent: { $ne: true },
+            reminder_sent: { $ne: true },
+            date: { $exists: true, $ne: null, $lte: endOfToday, $gte: gracePastWindow }
+          }).lean();
+
+          for (const suv of dueSuvichars) {
+            console.log(`[Scheduler] ✨ Auto-sending Daily Suvichar notification for "${suv.title || 'આજનો સુવિચાર'}" in DB [${name}] to ALL members`);
+
+            await SuvicharModel.updateOne(
+              { _id: suv._id },
+              { $set: { notification_sent: true, reminder_sent: true, notified_date: todayDateStr } }
+            );
+
+            const fakeReq = {
+              protocol: 'http',
+              get: (header) => (header === 'host' ? 'localhost:5000' : ''),
+              tenantConn: conn
+            };
+
+            const imageUrl = suv.image ? publicUrl(fakeReq, suv.image) : '';
+            const thoughtText = suv.suvichar || suv.description || '';
+            const authorText = suv.author ? ` - ${suv.author}` : '';
+            const varVal = suv.var || suv.vaar || '';
+            const vaarText = varVal ? ` (${varVal})` : '';
+
+            await createAndBroadcast({
+              title: `✨ આજનો સુવિચાર${vaarText}`,
+              body: `${thoughtText}${authorText}`.slice(0, 200),
+              image: imageUrl,
+              type: 'suvichar',
+              ref_id: String(suv._id || suv.id),
+              date: suv.date || now,
+              target_type: 'all',
+              target_users: []
+            });
+          }
+        } catch (suvErr) {
+          console.error(`[Scheduler Suvichar Error in ${name}]:`, suvErr.message);
         }
       }
 

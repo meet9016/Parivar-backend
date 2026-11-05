@@ -1,3 +1,4 @@
+require('../config/firebase');
 const { getMessaging } = require('firebase-admin/messaging');
 const User = require('../models/userModels');
 
@@ -30,6 +31,29 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
           ...(imageUrl ? { imageUrl: String(imageUrl) } : {})
         },
         data: dataPayload,
+        android: {
+          priority: 'high',
+          notification: {
+            priority: 'max',
+            sound: 'default',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+            visibility: 'public',
+            ...(imageUrl ? { imageUrl: String(imageUrl) } : {})
+          }
+        },
+        apns: {
+          headers: {
+            'apns-priority': '10'
+          },
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+              contentAvailable: true
+            }
+          }
+        },
         tokens: chunk
       };
       const response = await getMessaging().sendEachForMulticast(message);
@@ -47,24 +71,56 @@ const sendNotificationToTokens = async (tokens = [], title, body, imageUrl = '',
   }
 };
 
-const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {}) => {
+const sendNotificationToAll = async (title, body, imageUrl = '', extraData = {}, tenantConn = null) => {
   try {
-    const users = await User.find({ fcm_token: { $exists: true, $ne: '' } }, 'fcm_token').lean();
-    const tokens = users.map(u => u.fcm_token).filter(Boolean);
+    const UserModel = (tenantConn && tenantConn.models && tenantConn.models.User) ? tenantConn.models.User : User;
+    const users = await UserModel.find(
+      {
+        $or: [
+          { fcm_token: { $exists: true, $ne: '' } },
+          { fcm_tokens: { $exists: true, $ne: [] } }
+        ]
+      },
+      'fcm_token fcm_tokens'
+    ).lean();
+
+    const tokenSet = new Set();
+    (users || []).forEach(u => {
+      if (u.fcm_token && String(u.fcm_token).trim()) tokenSet.add(String(u.fcm_token).trim());
+      if (Array.isArray(u.fcm_tokens)) {
+        u.fcm_tokens.forEach(t => {
+          if (t && String(t).trim()) tokenSet.add(String(t).trim());
+        });
+      }
+    });
+
+    const tokens = [...tokenSet];
     await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
   } catch (err) {
     console.error('[FCM Broadcast Error]:', err.message);
   }
 };
 
-const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '', extraData = {}) => {
+const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '', extraData = {}, tenantConn = null) => {
   try {
     if (!userIds || !userIds.length) return;
-    const users = await User.find(
-      { _id: { $in: userIds }, fcm_token: { $exists: true, $ne: '' } },
-      'fcm_token'
+    const UserModel = (tenantConn && tenantConn.models && tenantConn.models.User) ? tenantConn.models.User : User;
+    const users = await UserModel.find(
+      { _id: { $in: userIds } },
+      'fcm_token fcm_tokens'
     ).lean();
-    const tokens = users.map(u => u.fcm_token).filter(Boolean);
+
+    const tokenSet = new Set();
+    (users || []).forEach(u => {
+      if (u.fcm_token && String(u.fcm_token).trim()) tokenSet.add(String(u.fcm_token).trim());
+      if (Array.isArray(u.fcm_tokens)) {
+        u.fcm_tokens.forEach(t => {
+          if (t && String(t).trim()) tokenSet.add(String(t).trim());
+        });
+      }
+    });
+
+    const tokens = [...tokenSet];
     await sendNotificationToTokens(tokens, title, body, imageUrl, extraData);
   } catch (err) {
     console.error('[FCM Targeted Error]:', err.message);
@@ -72,4 +128,3 @@ const sendNotificationToUsers = async (userIds = [], title, body, imageUrl = '',
 };
 
 module.exports = { sendNotificationToAll, sendNotificationToUsers, sendNotificationToTokens };
-

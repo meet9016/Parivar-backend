@@ -16,6 +16,8 @@ router.use('/notifications', require('./notificationRoutes'));
 router.use('/students', require('./studentRoutes'));
 router.use('/matrimonies', require('./matrimonyRoutes'));
 router.use('/festivals', require('./festivalRoutes'));
+router.use('/suvichar', require('./suvicharRoutes'));
+router.use('/suvichars', require('./suvicharRoutes'));
 router.use('/donations', require('./donationRoutes'));
 router.use('/posts', require('./postRoutes'));
 router.use('/news', require('./newsRoutes'));

@@ -338,6 +338,7 @@ const legacyPermissionFor = (permission) => {
     'committee.': 'committee.manage',
     'roles.': 'roles.manage',
     'festivals.': 'festivals.manage',
+    'suvichar.': 'suvichar.manage',
     'events.': 'events.manage',
     'gallery.': 'gallery.manage',
     'banners.': 'banners.manage',

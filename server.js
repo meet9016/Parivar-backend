@@ -12,6 +12,7 @@ const app = express();
 const server = http.createServer(app);
 
 socketManager.init(server);
+require('./src/config/firebase');
 
 const PORT = process.env.PORT || 5000;
 
