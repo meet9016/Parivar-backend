@@ -43,8 +43,8 @@ const userSchema = new mongoose.Schema({
   },
   gender: {
     type: String,
-    enum: ['Male', 'Female', 'Other', ''],
-    default: ''
+    default: '',
+    trim: true
   },
   dob: {
     type: Date
@@ -63,7 +63,6 @@ const userSchema = new mongoose.Schema({
   },
   marital_status: {
     type: String,
-    enum: ['Married', 'Unmarried', 'Divorce', 'Divorced', 'Widowed', ''],
     default: '',
     trim: true
   },

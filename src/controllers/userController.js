@@ -764,7 +764,7 @@ const updateUser = async (req, res) => {
     if (first_name) user.first_name = first_name;
     if (middle_name !== undefined) user.middle_name = middle_name;
     if (last_name !== undefined) user.last_name = last_name;
-    if (email !== undefined) user.email = email.toLowerCase();
+    if (email !== undefined) user.email = email ? String(email).toLowerCase().trim() : '';
     if (number !== undefined) user.number = number;
     if (gender !== undefined) user.gender = gender;
     if (dob !== undefined) user.dob = dob;
@@ -935,6 +935,7 @@ const updateUser = async (req, res) => {
 
     });
   } catch (error) {
+    console.error('Error updating user:', error);
     return apiResponse(res, 500, 'Error updating user', { error: error.message });
   }
 };

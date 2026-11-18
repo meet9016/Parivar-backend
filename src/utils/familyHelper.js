@@ -61,8 +61,10 @@ const prepareFamilyFields = async (payload = {}, existing = {}) => {
     ? (payload.familyHead === true || payload.familyHead === 'true')
     : (existing.familyHead === true || isSelf);
 
+  const cleanHeadId = payload.family_head_id && String(payload.family_head_id).trim() !== '' && String(payload.family_head_id) !== 'null' && String(payload.family_head_id) !== 'undefined' ? payload.family_head_id : null;
+
   if (isHead) {
-    if (payload.family_head_id) {
+    if (cleanHeadId) {
       throw new Error('Family head cannot have a family head reference');
     }
 
